@@ -83,7 +83,6 @@ class CardScanScreen(BaseScreen):
         # Timeout - no card detected
         Clock.schedule_once(lambda dt: self.handle_card_result(None), 0)
     
-
     def handle_card_result(self, card_no):
         """Handle card read result (runs on main thread)"""
         if card_no is not None and str(card_no).strip():
@@ -93,8 +92,8 @@ class CardScanScreen(BaseScreen):
             card_info = check_card_exists(card_no)
             
             if card_info["exists"]:
-                print(f"✓ Card found: {card_info['employee_name']}")
-                self.instruction_text = f"Welcome {card_info['employee_name']}"
+                print(f"✓ Card found: {card_info['name']}")
+                self.instruction_text = f"Welcome {card_info['name']}"
                 self.manager.card_number = str(card_no)
                 self.manager.card_info = card_info  # Store full card info
                 self.progress = 100
@@ -107,21 +106,6 @@ class CardScanScreen(BaseScreen):
                 print(f"✗ Card {card_no} not found in database")
                 self.instruction_text = "INVALID CARD!"
                 self.progress = 0
-                
-                if hasattr(self, "_event"):
-                    self._event.cancel()
-                
-                Clock.schedule_once(lambda dt: self.go_back(), 2)
-        else:
-            # Timeout
-            print("✗ Card read timeout")
-            self.instruction_text = "TIMEOUT!!!"
-            self.progress = 0
-            
-            if hasattr(self, "_event"):
-                self._event.cancel()
-            
-            Clock.schedule_once(lambda dt: self.go_back(), 2)
 
     def update_progress(self, dt):
         """Animate progress while waiting"""

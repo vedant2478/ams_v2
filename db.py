@@ -16,16 +16,16 @@ def get_site_name():
     return row[0] if row else "SITE"
 
 def check_card_exists(card_number):
-    """Check if card exists in database and return card details"""
+    """Check if card exists in database and return user details"""
     try:
         conn = sqlite3.connect(DB_PATH)
         cur = conn.cursor()
         
-        # Query to check card existence
+        # Query to check card existence in users table
         cur.execute("""
-            SELECT id, card_number, employee_name, employee_id, pin_required 
-            FROM cards 
-            WHERE card_number = ?
+            SELECT id, name, email, mobileNumber, cardNo, pinCode, roleId, isActive
+            FROM users 
+            WHERE cardNo = ? AND deletedAt IS NULL
         """, (str(card_number),))
         
         row = cur.fetchone()
@@ -35,10 +35,14 @@ def check_card_exists(card_number):
             return {
                 "exists": True,
                 "id": row[0],
-                "card_number": row[1],
-                "employee_name": row[2],
-                "employee_id": row[3],
-                "pin_required": bool(row[4])
+                "name": row[1],
+                "email": row[2],
+                "mobile": row[3],
+                "card_number": row[4],
+                "pin_code": row[5],
+                "role_id": row[6],
+                "is_active": row[7],
+                "pin_required": bool(row[5])  # PIN required if pinCode is set
             }
         else:
             return {"exists": False}
@@ -55,9 +59,9 @@ def verify_card_pin(card_number, pin):
         cur = conn.cursor()
         
         cur.execute("""
-            SELECT pin 
-            FROM cards 
-            WHERE card_number = ?
+            SELECT pinCode 
+            FROM users 
+            WHERE cardNo = ? AND deletedAt IS NULL
         """, (str(card_number),))
         
         row = cur.fetchone()
@@ -70,3 +74,24 @@ def verify_card_pin(card_number, pin):
     except Exception as e:
         print(f"Error verifying PIN: {e}")
         return False
+
+
+def get_user_by_card(card_number):
+    """Get complete user info by card number"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cur = conn.cursor()
+        
+        cur.execute("""
+            SELECT * FROM users 
+            WHERE cardNo = ? AND deletedAt IS NULL
+        """, (str(card_number),))
+        
+        row = cur.fetchone()
+        conn.close()
+        
+        return row
+        
+    except Exception as e:
+        print(f"Error getting user: {e}")
+        return None
