@@ -95,3 +95,112 @@ def get_user_by_card(card_number):
     except Exception as e:
         print(f"Error getting user: {e}")
         return None
+
+
+def get_user_activities(user_id):
+    """Get all activities assigned to a user"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cur = conn.cursor()
+        
+        cur.execute("""
+            SELECT id, activityName, activityCode, timeLimit, keys, keyNames, users
+            FROM activities 
+            WHERE deletedAt IS NULL
+        """)
+        
+        all_activities = cur.fetchall()
+        conn.close()
+        
+        # Filter activities where user is assigned
+        user_activities = []
+        for activity in all_activities:
+            users_list = activity[6]  # users column
+            if users_list and str(user_id) in users_list.split(','):
+                user_activities.append({
+                    'id': activity[0],
+                    'name': activity[1],
+                    'code': activity[2],
+                    'time_limit': activity[3],
+                    'keys': activity[4],
+                    'key_names': activity[5]
+                })
+        
+        return user_activities
+        
+    except Exception as e:
+        print(f"Error getting user activities: {e}")
+        return []
+
+
+def verify_activity_code(user_id, activity_code):
+    """Verify if activity code is valid for the user"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cur = conn.cursor()
+        
+        cur.execute("""
+            SELECT id, activityName, activityCode, timeLimit, keys, keyNames, users
+            FROM activities 
+            WHERE activityCode = ? AND deletedAt IS NULL
+        """, (str(activity_code),))
+        
+        activity = cur.fetchone()
+        conn.close()
+        
+        if not activity:
+            return {"valid": False, "message": "Activity code not found"}
+        
+        # Check if user is assigned to this activity
+        users_list = activity[6]
+        if users_list and str(user_id) in users_list.split(','):
+            return {
+                "valid": True,
+                "id": activity[0],
+                "name": activity[1],
+                "code": activity[2],
+                "time_limit": activity[3],
+                "keys": activity[4],
+                "key_names": activity[5]
+            }
+        else:
+            return {"valid": False, "message": "You are not assigned to this activity"}
+        
+    except Exception as e:
+        print(f"Error verifying activity code: {e}")
+        return {"valid": False, "message": str(e)}
+
+
+def get_activity_keys(activity_id):
+    """Get list of keys for an activity"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cur = conn.cursor()
+        
+        cur.execute("""
+            SELECT keys, keyNames
+            FROM activities 
+            WHERE id = ? AND deletedAt IS NULL
+        """, (activity_id,))
+        
+        result = cur.fetchone()
+        conn.close()
+        
+        if result and result[0]:
+            key_ids = result[0].split(',')
+            key_names = result[1].split(',') if result[1] else []
+            
+            keys = []
+            for i, key_id in enumerate(key_ids):
+                keys.append({
+                    'id': key_id.strip(),
+                    'name': key_names[i].strip() if i < len(key_names) else f"Key {key_id}"
+                })
+            
+            return keys
+        
+        return []
+        
+    except Exception as e:
+        print(f"Error getting activity keys: {e}")
+        return []
