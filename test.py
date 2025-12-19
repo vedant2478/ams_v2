@@ -6,12 +6,12 @@ cur = conn.cursor()
 # Update PIN to 5 digits
 cur.execute("""
 UPDATE users 
-SET pinCode = '12345'
+SET pinCode = '99999'
 WHERE cardNo = '3663674'
 """)
 
 conn.commit()
-print("✓ Updated PIN to: 12345")
+print("✓ Updated PIN to: 99999")
 
 # Verify
 cur.execute("SELECT name, cardNo, pinCode FROM users WHERE cardNo = ?", ('3663674',))
