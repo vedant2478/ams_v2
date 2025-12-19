@@ -82,6 +82,7 @@ class CardScanScreen(BaseScreen):
         
         # Timeout - no card detected
         Clock.schedule_once(lambda dt: self.handle_card_result(None), 0)
+        
     
     def handle_card_result(self, card_no):
         """Handle card read result (runs on main thread)"""

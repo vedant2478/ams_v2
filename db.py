@@ -204,3 +204,71 @@ def get_activity_keys(activity_id):
     except Exception as e:
         print(f"Error getting activity keys: {e}")
         return []
+
+def get_keys_for_activity(activity_id):
+    """Get detailed key information for an activity"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cur = conn.cursor()
+        
+        # Get activity keys
+        cur.execute("""
+            SELECT keys, keyNames
+            FROM activities 
+            WHERE id = ? AND deletedAt IS NULL
+        """, (activity_id,))
+        
+        activity = cur.fetchone()
+        
+        if not activity or not activity[0]:
+            conn.close()
+            return []
+        
+        key_ids = [k.strip() for k in activity[0].split(',')]
+        key_names_from_activity = [k.strip() for k in activity[1].split(',')] if activity[1] else []
+        
+        # Get detailed key info from keys table
+        keys_list = []
+        for i, key_id in enumerate(key_ids):
+            cur.execute("""
+                SELECT id, keyName, description, color, keyLocation, keyStatus, 
+                       keyAtDoor, keyStrip, keyPosition
+                FROM keys 
+                WHERE id = ? AND deletedAt IS NULL
+            """, (key_id,))
+            
+            key_row = cur.fetchone()
+            
+            if key_row:
+                keys_list.append({
+                    'id': key_row[0],
+                    'name': key_row[1],
+                    'description': key_row[2],
+                    'color': key_row[3],
+                    'location': key_row[4],
+                    'status': key_row[5],  # 0=available, 1=taken
+                    'door': key_row[6],
+                    'strip': key_row[7],
+                    'position': key_row[8]
+                })
+            else:
+                # Key not found in keys table, use name from activity
+                key_name = key_names_from_activity[i] if i < len(key_names_from_activity) else f"Key {key_id}"
+                keys_list.append({
+                    'id': key_id,
+                    'name': key_name,
+                    'description': '',
+                    'color': '',
+                    'location': '',
+                    'status': 0,
+                    'door': None,
+                    'strip': None,
+                    'position': None
+                })
+        
+        conn.close()
+        return keys_list
+        
+    except Exception as e:
+        print(f"Error getting keys for activity: {e}")
+        return []
