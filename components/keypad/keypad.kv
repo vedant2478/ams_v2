@@ -1,0 +1,111 @@
+<Keypad>:
+    orientation: "vertical"
+    spacing: "22dp"
+    size_hint: None, None
+    size: "520dp", "460dp"
+
+    GridLayout:
+        cols: 3
+        rows: 4
+        spacing: "22dp"
+
+        # ===== ROW 1 =====
+        Button:
+            text: "1"
+            background_normal: ""
+            background_color: 0.18, 0.32, 0.46, 0.45
+            font_size: "22sp"
+            radius : [40]
+            color: 1, 1, 1, 1
+            on_release: root.key_pressed("1")
+
+        Button:
+            text: "2"
+            background_normal: ""
+            background_color: 0.18, 0.32, 0.46, 0.45
+            font_size: "22sp"
+            color: 1, 1, 1, 1
+            on_release: root.key_pressed("2")
+
+        Button:
+            text: "3"
+            background_normal: ""
+            background_color: 0.18, 0.32, 0.46, 0.45
+            font_size: "22sp"
+            color: 1, 1, 1, 1
+            on_release: root.key_pressed("3")
+
+        # ===== ROW 2 =====
+        Button:
+            text: "4"
+            background_normal: ""
+            background_color: 0.18, 0.32, 0.46, 0.45
+            font_size: "22sp"
+            color: 1, 1, 1, 1
+            on_release: root.key_pressed("4")
+
+        Button:
+            text: "5"
+            background_normal: ""
+            background_color: 0.18, 0.32, 0.46, 0.45
+            font_size: "22sp"
+            color: 1, 1, 1, 1
+            on_release: root.key_pressed("5")
+
+        Button:
+            text: "6"
+            background_normal: ""
+            background_color: 0.18, 0.32, 0.46, 0.45
+            font_size: "22sp"
+            color: 1, 1, 1, 1
+            on_release: root.key_pressed("6")
+
+        # ===== ROW 3 =====
+        Button:
+            text: "7"
+            background_normal: ""
+            background_color: 0.18, 0.32, 0.46, 0.45
+            font_size: "22sp"
+            color: 1, 1, 1, 1
+            on_release: root.key_pressed("7")
+
+        Button:
+            text: "8"
+            background_normal: ""
+            background_color: 0.18, 0.32, 0.46, 0.45
+            font_size: "22sp"
+            color: 1, 1, 1, 1
+            on_release: root.key_pressed("8")
+
+        Button:
+            text: "9"
+            background_normal: ""
+            background_color: 0.18, 0.32, 0.46, 0.45
+            font_size: "22sp"
+            color: 1, 1, 1, 1
+            on_release: root.key_pressed("9")
+
+        # ===== ROW 4 =====
+        Button:
+            text: "ENTER"
+            background_normal: ""
+            background_color: 0.18, 0.32, 0.46, 0.45
+            font_size: "20sp"
+            color: 1, 1, 1, 1
+            on_release: root.key_pressed("ENTER")
+
+        Button:
+            text: "0"
+            background_normal: ""
+            background_color: 0.18, 0.32, 0.46, 0.45
+            font_size: "22sp"
+            color: 1, 1, 1, 1
+            on_release: root.key_pressed("0")
+
+        Button:
+            text: "CLEAR"
+            background_normal: ""
+            background_color: 0.18, 0.32, 0.46, 0.45
+            font_size: "20sp"
+            color: 1, 1, 1, 1
+            on_release: root.key_pressed("BACK")

@@ -1,0 +1,9 @@
+[Unit]
+Description=Enable AMS apps
+
+[Service]
+ExecStart=/bin/Linux_armhf/Activation/run_pgd.sh start
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

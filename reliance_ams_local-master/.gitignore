@@ -1,0 +1,9 @@
+csiams.dev.sqlite
+.idea/
+__pycache__/
+Firmware-Update/packages
+*.zip
+*.html
+*.so
+*.js
+test.py

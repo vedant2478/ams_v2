@@ -1,0 +1,9 @@
+[Unit]
+Description=Enable AMS apps
+
+[Service]
+ExecStart=/home/ams-core/ams-start.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual Environment
+myenv/
+venv/
+env/
+ENV/
+
+# Database (don't commit if it has sensitive data)
+*.sqlite
+*.db
+
+# Kivy
+*.pyc
+.buildozer/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+npm-debug.log
+
+# Temporary files
+*.tmp
+*.bak
+*.dat
+frame_Ex.bmp
+user_template
+reference_file
+prompted_keys.txt
+ack.cnt
+bms.dat
+
+# Hardware specific (backend executables - optional)
+# reliance_ams_local-master/ftrScanAPI_Ex
+# reliance_ams_local-master/FCEnrollFingerFromImageCPP
+# reliance_ams_local-master/FCIdentifyFingerCPP

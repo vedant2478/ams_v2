@@ -1,0 +1,9 @@
+[Unit]
+Description=Enable AMS NODE API
+
+[Service]
+ExecStart=/home/ams-core/ams-node-start.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

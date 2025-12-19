@@ -1,0 +1,133 @@
+<HomeScreen>:
+    BoxLayout:
+        orientation: "vertical"
+
+        # ================= HEADER =================
+        Header:
+            pos_hint: {"top": 1}
+            
+        # ================= BODY =================
+        FloatLayout:
+            size_hint_y: 1
+            
+            # -------- SMOOTH GRADIENT BACKGROUND --------
+            GradientBackground:
+                pos: self.parent.pos
+                size: self.parent.size
+
+            # -------- Center Content --------
+            BoxLayout:
+                orientation: "vertical"
+                spacing: "25dp"
+                size_hint: None, None
+                size: "600dp", "600dp"
+                pos_hint: {"center_x": 0.5, "center_y": 0.50}
+
+                Widget:
+                    size_hint_y: 0.12
+
+                # -------- TIME LABEL --------
+                Label:
+                    text: root.time_text
+                    font_size: "130sp"
+                    color: 0.92, 0.96, 0.99, 1
+                    size_hint_y: None
+                    height: "160dp"
+                    bold: False
+
+                Widget:
+                    size_hint_y: None
+                    height: "20dp"
+
+                # -------- SITE NAME --------
+                Label:
+                    text: root.site_name
+                    font_size: "38sp"
+                    color: 0.65, 0.78, 0.88, 1
+                    size_hint_y: None
+                    height: "55dp"
+                    bold: False
+                    letter_spacing: "3sp"
+
+                Widget:
+                    size_hint_y: None
+                    height: "12dp"
+
+                # -------- STATUS --------
+                Label:
+                    text: "READY" if root.status_text == "SYSTEM READY" else root.status_text
+                    font_size: "24sp"
+                    bold: False
+                    color: 0.55, 0.68, 0.80, 1
+                    size_hint_y: None
+                    height: "40dp"
+                    letter_spacing: "4sp"
+
+                Widget:
+                    size_hint_y: None
+                    height: "55dp"
+
+                # -------- START Button --------
+                Button:
+                    text: "START"
+                    size_hint: None, None
+                    size: "155dp", "155dp"
+                    pos_hint: {"center_x": 0.5}
+                    background_normal: ""
+                    background_color: 0, 0, 0, 0
+                    color: 0.70, 0.82, 0.92, 1
+                    font_size: "21sp"
+                    bold: False
+                    letter_spacing: "2sp"
+                    on_release: root.on_start_pressed()
+
+                    canvas.before:
+                        # Outer glow/shadow (very subtle)
+                        Color:
+                            rgba: 0.02, 0.08, 0.15, 0.8
+                        Ellipse:
+                            pos: self.x - 12, self.y - 15
+                            size: self.width + 24, self.height + 30
+                        
+                        # Main button body - very dark blue
+                        Color:
+                            rgba: 0.05, 0.12, 0.20, 1
+                        Ellipse:
+                            pos: self.pos
+                            size: self.size
+                        
+                        # Subtle top highlight
+                        Color:
+                            rgba: 0.12, 0.25, 0.38, 0.6
+                        Ellipse:
+                            pos: self.x + 8, self.y + self.height * 0.50
+                            size: self.width - 16, self.height * 0.45
+                        
+                        # Very subtle inner glow
+                        Color:
+                            rgba: 0.08, 0.18, 0.30, 0.4
+                        Ellipse:
+                            pos: self.x + 20, self.y + 20
+                            size: self.width - 40, self.height - 40
+
+                    canvas.after:
+                        # Border outline
+                        Color:
+                            rgba: 0.20, 0.35, 0.50, 0.9
+                        Line:
+                            circle: (self.center_x, self.center_y, self.width/2)
+                            width: 2.5
+                        
+                        # Inner border for depth
+                        Color:
+                            rgba: 0.15, 0.28, 0.42, 0.5
+                        Line:
+                            circle: (self.center_x, self.center_y, self.width/2 - 3)
+                            width: 1
+
+                Widget:
+                    size_hint_y: 0.12
+
+        # ================= FOOTER =================
+        Footer:
+            version: "12.9.3"

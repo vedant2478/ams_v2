@@ -1,0 +1,186 @@
+#:kivy 2.1.0
+
+<KeyDashboardScreen>:
+    BoxLayout:
+        orientation: "vertical"
+
+        # HEADER
+        Header:
+            pos_hint: {"top": 1}
+        BoxLayout:
+            orientation: "horizontal"
+            size_hint_y: None
+            height: "48dp"
+            padding: "16dp", 0
+            pos_hint: {"top": .95}
+
+            Button:
+                text: "Back"
+                size_hint_x: None
+                width: "100dp"
+                background_normal: ""
+                background_color: 0, 0, 0, 0   # fully transparent
+                color: 0.90, 0.95, 1, 1
+                font_size: "16sp"
+                on_release: root.go_back()
+
+            Widget:
+        # BODY
+        FloatLayout:
+            size_hint_y: 1
+
+            GradientBackground:
+                pos: self.parent.pos
+                size: self.parent.size
+
+            BoxLayout:
+                orientation: "vertical"
+                size_hint: None, None
+                size: "720dp", "620dp"
+                pos_hint: {"center_x": 0.5, "center_y": 0.50}
+                padding: "20dp"
+                spacing: "15dp"
+
+                # TITLE
+                Label:
+                    text: "KEY AUTHORIZATION\nDASHBOARD"
+                    font_size: "26sp"
+                    bold: True
+                    color: 0.92, 0.96, 0.99, 1
+                    halign: "center"
+                    valign: "middle"
+                    text_size: self.size
+                    size_hint_y: None
+                    height: "80dp"
+
+                # ACTIVITY CODE + TIMER
+                BoxLayout:
+                    size_hint_y: None
+                    height: "60dp"
+                    spacing: "15dp"
+
+                    BoxLayout:
+                        padding: "10dp"
+                        canvas.before:
+                            Color:
+                                rgba: 0.18, 0.65, 0.31, 1
+                            RoundedRectangle:
+                                radius: [20,]
+                                pos: self.pos
+                                size: self.size
+                        Label:
+                            text: "ACTIVITY CODE: " + root.activity_code
+                            bold: True
+                            color: 1, 1, 1, 1
+                            font_size: "18sp"
+
+                    Label:
+                        text: "Time Remaining: " + root.time_remaining + " sec"
+                        font_size: "18sp"
+                        color: 0.80, 0.90, 0.98, 1
+                        size_hint_x: None
+                        width: "260dp"
+                        halign: "right"
+                        valign: "middle"
+                        text_size: self.size
+
+                # PROGRESS BAR
+                BoxLayout:
+                    size_hint_y: None
+                    height: "14dp"
+                    padding: "2dp"
+                    canvas.before:
+                        Color:
+                            rgba: 0.12, 0.20, 0.30, 1
+                        RoundedRectangle:
+                            radius: [7,]
+                            pos: self.pos
+                            size: self.size
+                    BoxLayout:
+                        size_hint_x: 0.6
+                        canvas.before:
+                            Color:
+                                rgba: 0.95, 0.45, 0.05, 1
+                            RoundedRectangle:
+                                radius: [7,]
+                                pos: self.pos
+                                size: self.size
+
+                # LIST PANEL
+                BoxLayout:
+                    orientation: "vertical"
+                    padding: "12dp"
+                    spacing: "10dp"
+                    canvas.before:
+                        Color:
+                            rgba: 0.02, 0.08, 0.16, 1
+                        RoundedRectangle:
+                            radius: [18,]
+                            pos: self.pos
+                            size: self.size
+                    # inside LIST PANEL -> ScrollView
+                    ScrollView:
+                        do_scroll_x: False
+                        bar_width: "6dp"
+
+                        GridLayout:
+                            id: key_grid
+                            cols: 1
+                            size_hint_y: None
+                            row_default_height: "56dp"
+                            row_force_default: True
+                            padding: "10dp", "8dp"
+                            spacing: "8dp"
+                            height: self.minimum_height
+
+
+        # FOOTER
+        Footer:
+            version: "12.9.3"
+
+<KeyItem>:
+    size_hint_y: None
+    height: "56dp"
+    padding: "18dp", 0
+    spacing: "10dp"
+    canvas.before:
+        Color:
+            rgba: 0.05, 0.12, 0.24, 1
+        RoundedRectangle:
+            radius: [14,]
+            pos: self.pos
+            size: self.size
+
+
+    # left side: key name
+    Label:
+        text: root.key_name
+        color: 0.90, 0.95, 1, 1
+        font_size: "16sp"
+        halign: "left"
+        valign: "middle"
+        text_size: self.size
+
+    # right side: circle + IN/OUT
+    BoxLayout:
+        size_hint_x: None
+        width: "120dp"
+        spacing: "10dp"
+
+        Widget:
+            size_hint_x: None
+            width: "22dp"
+            canvas:
+                Color:
+                    rgba: root.status_color
+                Ellipse:
+                    pos: self.center_x - dp(9), self.center_y - dp(9)
+                    size: dp(18), dp(18)
+
+        Label:
+            text: root.status.upper()
+            color: root.status_color
+            font_size: "15sp"
+            halign: "left"
+            valign: "middle"
+            text_size: self.size

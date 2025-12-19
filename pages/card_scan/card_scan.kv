@@ -1,0 +1,87 @@
+<CardScanScreen>:
+    FloatLayout:
+
+        # ===== Header =====
+        Header:
+            pos_hint: {"top": 1}
+            status_text: "BUSY"
+            site_text: app.site_name if hasattr(app, 'site_name') else "SITE"
+            time_text: root.time_text
+    
+        BoxLayout:
+            orientation: "horizontal"
+            size_hint_y: None
+            height: "48dp"
+            padding: "16dp", 0
+            pos_hint: {"top": .95}
+
+            Button:
+                text: "Back"
+                size_hint_x: None
+                width: "100dp"
+                background_normal: ""
+                background_color: 0, 0, 0, 0   # fully transparent
+                color: 0.90, 0.95, 1, 1
+                font_size: "16sp"
+                on_release: root.go_back()
+
+            Widget:
+        
+        # ===== Main Content =====
+        BoxLayout:
+            orientation: "vertical"
+            spacing: "26dp"
+            size_hint: None, None
+            size: "500dp", "520dp"
+            pos_hint: {"center_x": 0.5, "center_y": 0.55}
+
+            Label:
+                text: "Card Authentication"
+                font_size: "24sp"
+                color: 0.9, 0.95, 1, 1
+                size_hint_y: None
+                height: "40dp"
+                halign: "center"
+                valign: "middle"
+                text_size: self.size
+
+            Image:
+                source: "assets/icons/card_scan_frame.png"
+                size_hint: None, None
+                size: "260dp", "180dp"
+                fit_mode: "contain"
+                pos_hint: {"center_x": 0.5}
+
+            # ===== Progress Bar (transparent, blended) =====
+            BoxLayout:
+                size_hint: None, None
+                size: "260dp", "14dp"
+                pos_hint: {"center_x": 0.5}
+
+                Widget:
+                    size_hint_x: root.progress / 100.0
+                    size_hint_y: 1
+                    canvas:
+                        Color:
+                            rgba: 0.18, 0.36, 0.52, 1   # matches theme
+                        RoundedRectangle:
+                            pos: self.pos
+                            size: self.size
+                            radius: [7]
+
+            # ===== Dynamic Instruction Text =====
+            Label:
+                text: root.instruction_text
+                font_size: "16sp"
+                color: (0.29, 0.87, 0.5, 1) if "detected" in root.instruction_text.lower() else (1, 0.3, 0.3, 1) if "timeout" in root.instruction_text.lower() else (0.85, 0.92, 1, 1)
+                bold: "timeout" in root.instruction_text.lower() or "detected" in root.instruction_text.lower()
+                size_hint_y: None
+                height: "30dp"
+                halign: "center"
+                valign: "middle"
+                text_size: self.size
+
+        # ===== Footer =====
+        Footer:
+            pos_hint: {"y": 0}
+            version_text: "Version: V1.1"
