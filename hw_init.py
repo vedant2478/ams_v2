@@ -1,6 +1,7 @@
 # hw_init.py
 import sys
 import os
+import platform
 
 # Add backend to path
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -8,45 +9,63 @@ BACKEND_DIR = os.path.join(BASE_DIR, "reliance_ams_local-master")
 if BACKEND_DIR not in sys.path:
     sys.path.append(BACKEND_DIR)
 
-# Try to import hardware (will fail on Windows without hardware)
-try:
-    from amsbms import amsbms
-    from consts import KEY_DICT, AUTH_MODE_CARD_PIN, AUTH_MODE_BIO
-    print("✓ Real hardware loaded")
-    MOCK_MODE = False
-except Exception as e:
-    print(f"⚠ Hardware not available, using INTERACTIVE mock mode: {e}")
+# Detect if running on actual hardware (Linux with serial port)
+IS_HARDWARE = (
+    platform.system() == "Linux" and 
+    (os.path.exists("/dev/ttyAML1") or os.path.exists("/dev/ttymxc2"))
+)
+
+if IS_HARDWARE:
+    print("✓ Running on HARDWARE - using real devices")
+    try:
+        from amsbms import AMSBMS
+        from consts import KEY_DICT, AUTH_MODE_CARD_PIN, AUTH_MODE_BIO
+        
+        # Initialize hardware with correct port
+        amsbms = AMSBMS(port="/dev/ttyAML1", baud=9600)
+        
+        MOCK_MODE = False
+        print("✓ Real hardware loaded successfully")
+    except Exception as e:
+        print(f"✗ Error loading hardware: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+else:
+    print(f"⚠ Running on DEVELOPMENT machine ({platform.system()}) - using mock mode")
     
-    # Mock hardware for development with user input
+    # Mock hardware for development
     class MockAMSBMS:
         def __init__(self):
-            self._cardNo = 0
+            self._cardNo = None
             self._asked = False
         
         @property
         def cardNo(self):
-            # Ask user only once per session
             if not self._asked:
                 self._asked = True
                 print("\n" + "="*50)
                 print("🎮 MOCK CARD READER - TESTING MODE")
                 print("="*50)
-                response = input("Do you want to simulate card scan? (y/n): ").strip().lower()
+                response = input("Simulate card scan? (y/n): ").strip().lower()
                 
                 if response == 'y':
-                    card_input = input("Enter card number (or press Enter for default 12345678): ").strip()
-                    self._cardNo = int(card_input) if card_input else 12345678
-                    print(f"✓ Mock card will be detected: {self._cardNo}")
+                    card_input = input("Enter card number (default 12345678): ").strip()
+                    self._cardNo = card_input if card_input else "12345678"
+                    print(f"✓ Mock card: {self._cardNo}")
                 else:
-                    self._cardNo = 0
-                    print("✗ Mock card scan will TIMEOUT")
+                    self._cardNo = None
+                    print("✗ Mock timeout")
                 print("="*50 + "\n")
             
             return self._cardNo
+        
+        def get_cardNo(self):
+            """Compatibility with AMSBMS interface"""
+            return self.cardNo
     
     amsbms = MockAMSBMS()
     
-    # Mock constants
     KEY_DICT = {
         '0': '0', '1': '1', '2': '2', '3': '3', '4': '4',
         '5': '5', '6': '6', '7': '7', '8': '8', '9': '9',
@@ -57,5 +76,4 @@ except Exception as e:
     AUTH_MODE_BIO = 2
     MOCK_MODE = True
 
-# Export
-__all__ = ['amsbms', 'KEY_DICT', 'AUTH_MODE_CARD_PIN', 'AUTH_MODE_BIO', 'MOCK_MODE']
+__all__ = ['amsbms', 'KEY_DICT', 'AUTH_MODE_CARD_PIN', 'AUTH_MODE_BIO', 'MOCK_MODE', 'IS_HARDWARE']

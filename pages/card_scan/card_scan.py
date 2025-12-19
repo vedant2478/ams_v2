@@ -4,15 +4,23 @@ from kivy.properties import NumericProperty, StringProperty
 from kivy.clock import Clock
 from threading import Thread
 from datetime import datetime
+import time
 from components.base_screen import BaseScreen
-from card_reader_helper import read_card_from_hardware
+from amsbms import AMSBMS
+
 
 class CardScanScreen(BaseScreen):
     progress = NumericProperty(0)
     instruction_text = StringProperty("Show your card")
-    time_text = StringProperty("")  # <-- ADD THIS LINE
+    time_text = StringProperty("")
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.bms = None
+        self.card_reading = False
 
     def go_back(self):
+        self.stop_card_reading()
         self.manager.transition.direction = "right"
         self.manager.current = "auth"
     
@@ -23,33 +31,65 @@ class CardScanScreen(BaseScreen):
         # Update time display
         Clock.schedule_interval(self.update_time, 1)
         
+        # Initialize BMS
+        self.bms = AMSBMS(port="/dev/ttyAML1", baud=9600)
+        
         # Start card reading in background
+        self.card_reading = True
         Thread(target=self.poll_card, daemon=True).start()
         
         # Animate progress bar
         self._event = Clock.schedule_interval(self.update_progress, 0.5)
 
     def on_leave(self):
+        self.stop_card_reading()
         if hasattr(self, "_event"):
             self._event.cancel()
         Clock.unschedule(self.update_time)
+    
+    def stop_card_reading(self):
+        """Stop card reading and cleanup"""
+        self.card_reading = False
+        if self.bms:
+            self.bms.stop()
+            self.bms = None
     
     def update_time(self, dt):
         """Update time display"""
         self.time_text = datetime.now().strftime("%I:%M %p")
 
     def poll_card(self):
-        """Poll hardware for card (15 seconds timeout)"""
-        card_no = read_card_from_hardware(timeout_seconds=15)
-        Clock.schedule_once(lambda dt: self.handle_card_result(card_no), 0)
+        """Background thread to continuously poll for cards"""
+        timeout = 15  # 15 seconds timeout
+        start_time = time.time()
+        
+        while self.card_reading and (time.time() - start_time) < timeout:
+            try:
+                # Get card number from BMS
+                card_no = self.bms.get_cardNo()
+                
+                if card_no:
+                    # Card detected! Schedule UI update on main thread
+                    Clock.schedule_once(lambda dt: self.handle_card_result(card_no), 0)
+                    return
+                
+                time.sleep(0.2)  # Poll every 200ms
+                
+            except Exception as e:
+                print(f"Error polling card: {e}")
+                time.sleep(0.5)
+        
+        # Timeout - no card detected
+        Clock.schedule_once(lambda dt: self.handle_card_result(None), 0)
     
     def handle_card_result(self, card_no):
-        """Handle card read result"""
-        if card_no > 0:
+        """Handle card read result (runs on main thread)"""
+        # Check if card_no is valid (not None, not empty string)
+        if card_no is not None and str(card_no).strip():
             # Card detected
             print(f"✓ Card {card_no} detected")
             self.instruction_text = f"Card detected: {card_no}"
-            self.manager.card_number = card_no
+            self.manager.card_number = str(card_no)  # Store as string
             self.progress = 100
             
             if hasattr(self, "_event"):
@@ -75,5 +115,6 @@ class CardScanScreen(BaseScreen):
         self.progress += 100 / 30  # 15 seconds total
 
     def go_to_pin(self, dt):
+        self.stop_card_reading()
         self.manager.transition.direction = "left"
         self.manager.current = "pin"
