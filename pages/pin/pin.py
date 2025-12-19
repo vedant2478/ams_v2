@@ -10,7 +10,7 @@ class PinScreen(BaseScreen):
     
 
     MAX_PIN = 5
-
+    
     def go_back(self):
         self.manager.current = "home"
 

@@ -3,6 +3,7 @@ from kivy.uix.screenmanager import Screen
 from kivy.properties import NumericProperty, StringProperty
 from kivy.clock import Clock
 from threading import Thread
+from db import check_card_exists
 from datetime import datetime
 import time
 from components.base_screen import BaseScreen
@@ -82,22 +83,37 @@ class CardScanScreen(BaseScreen):
         # Timeout - no card detected
         Clock.schedule_once(lambda dt: self.handle_card_result(None), 0)
     
+
     def handle_card_result(self, card_no):
         """Handle card read result (runs on main thread)"""
-        # Check if card_no is valid (not None, not empty string)
         if card_no is not None and str(card_no).strip():
-            # Card detected
             print(f"✓ Card {card_no} detected")
-            self.instruction_text = f"Card detected: {card_no}"
-            self.manager.card_number = str(card_no)  # Store as string
-            self.progress = 100
             
-            if hasattr(self, "_event"):
-                self._event.cancel()
+            # Check if card exists in database
+            card_info = check_card_exists(card_no)
             
-            Clock.schedule_once(self.go_to_pin, 0.5)
+            if card_info["exists"]:
+                print(f"✓ Card found: {card_info['employee_name']}")
+                self.instruction_text = f"Welcome {card_info['employee_name']}"
+                self.manager.card_number = str(card_no)
+                self.manager.card_info = card_info  # Store full card info
+                self.progress = 100
+                
+                if hasattr(self, "_event"):
+                    self._event.cancel()
+                
+                Clock.schedule_once(self.go_to_pin, 0.5)
+            else:
+                print(f"✗ Card {card_no} not found in database")
+                self.instruction_text = "INVALID CARD!"
+                self.progress = 0
+                
+                if hasattr(self, "_event"):
+                    self._event.cancel()
+                
+                Clock.schedule_once(lambda dt: self.go_back(), 2)
         else:
-            # Timeout - no card detected
+            # Timeout
             print("✗ Card read timeout")
             self.instruction_text = "TIMEOUT!!!"
             self.progress = 0
@@ -105,7 +121,6 @@ class CardScanScreen(BaseScreen):
             if hasattr(self, "_event"):
                 self._event.cancel()
             
-            # Show error for 2 seconds, then go back
             Clock.schedule_once(lambda dt: self.go_back(), 2)
 
     def update_progress(self, dt):
