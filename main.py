@@ -55,12 +55,7 @@ class MainApp(App):
     """
 
     def build(self):
-        sm = ScreenManager(
-            transition=SlideTransition(
-                direction="left",
-                duration=0.18
-            )
-        )
+        sm = ScreenManager(transition=NoTransition())
 
         # Register screens
         sm.add_widget(HomeScreen(name="home"))

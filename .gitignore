@@ -11,7 +11,7 @@ build/
 
 # Virtual Environment
 myenv/
-venv/
+.venv/
 env/
 ENV/
 
@@ -48,6 +48,7 @@ reference_file
 prompted_keys.txt
 ack.cnt
 bms.dat
+
 
 # Hardware specific (backend executables - optional)
 # reliance_ams_local-master/ftrScanAPI_Ex
