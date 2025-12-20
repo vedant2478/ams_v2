@@ -9,7 +9,7 @@ Config.set("graphics", "borderless", "1")
 # ================= SAFE TO IMPORT KIVY NOW =================
 from kivy.app import App
 from kivy.lang import Builder
-from kivy.uix.screenmanager import ScreenManager, SlideTransition
+from kivy.uix.screenmanager import ScreenManager, NoTransition
 import os, sys
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
