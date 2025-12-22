@@ -68,19 +68,29 @@ class AMS_CAN(object):
         self.key_lists = []
         self.key_lists_version = {}
 
-        # CAN bus
-        self.bus = can.Bus(channel="can0", bustype="socketcan", bitrate=125000)
+        # CAN bus (python-can)
+        # On newer python-can, use interface="socketcan"
+        self.bus = can.Bus(channel="can0", interface="socketcan", bitrate=125000)
 
         # listener + notifier
         self.buffer = can.BufferedReader()
         self.buffer.on_message_received = self._on_message_received
         self.notifier = can.Notifier(self.bus, [_get_message, self.buffer])
 
-        # Cabinet DOOR LOCK management
-        self.lib_door_lock = ctypes.CDLL("libKeyStrip.so")
-        self.lib_door_lock.canInit.argtypes = []
-        self.Lock_FD = self.lib_door_lock.canInit()
-        sleep(2)
+        # Cabinet DOOR LOCK management via libKeyStrip.so
+        # Bypass safely if wrong arch / missing
+        try:
+            print("Loading libKeyStrip.so...")
+            self.lib_door_lock = ctypes.CDLL("libKeyStrip.so")
+            self.lib_door_lock.canInit.argtypes = []
+            print("Calling canInit...")
+            self.Lock_FD = self.lib_door_lock.canInit()
+            print("Door lock init done, fd =", self.Lock_FD)
+            sleep(2)
+        except OSError as e:
+            print("Warning: door lock lib not usable, skipping:", e)
+            self.lib_door_lock = None
+            self.Lock_FD = None
 
     def create_arbitration_id(self, source, destination, message_type, function):
         arbitration_id = 0x0
@@ -273,12 +283,10 @@ class AMS_CAN(object):
             CAN_MSG_TYPE_SET,
             CAN_FUNCTION_ALL_LEDS,
         )
-
         if blinking:
             data = [0x22] * 7
         else:
             data = [0x11] * 7
-
         msg = can.Message(
             arbitration_id=arb_id, data=data, is_extended_id=True
         )
@@ -298,7 +306,6 @@ class AMS_CAN(object):
             CAN_MSG_TYPE_SET,
             CAN_FUNCTION_ALL_LEDS,
         )
-
         msg = can.Message(
             arbitration_id=arb_id,
             data=[0x00] * 7,
@@ -314,14 +321,12 @@ class AMS_CAN(object):
         return bool(self._current_function_response)
 
     def set_single_LED_state(self, list_ID, led_ID, led_state):
-        # LED positions 0–13
         arb_id = self.create_arbitration_id(
             self._can_controller_id,
             list_ID,
             CAN_MSG_TYPE_SET,
             CAN_FUNCTION_SINGLE_LED,
         )
-
         msg = can.Message(
             arbitration_id=arb_id,
             data=[led_ID, led_state],
@@ -343,7 +348,6 @@ class AMS_CAN(object):
             CAN_MSG_TYPE_SET,
             CAN_FUNCTION_SINGLE_KEYLOCK,
         )
-
         msg = can.Message(
             arbitration_id=arb_id,
             data=[position, lock_status],
@@ -365,7 +369,6 @@ class AMS_CAN(object):
             CAN_MSG_TYPE_SET,
             CAN_FUNCTION_ALL_KEYLOCKS,
         )
-
         msg = can.Message(
             arbitration_id=arb_id,
             data=[0x00] * 7,
@@ -387,7 +390,6 @@ class AMS_CAN(object):
             CAN_MSG_TYPE_SET,
             CAN_FUNCTION_ALL_KEYLOCKS,
         )
-
         msg = can.Message(
             arbitration_id=arb_id,
             data=[0x11] * 7,
@@ -403,10 +405,8 @@ class AMS_CAN(object):
         return bool(self._current_function_response)
 
     def get_key_id(self, list_ID, key_position):
-        # hardware uses 0–13, UI uses 1–14
         key_position -= 1
         can_function = CAN_FUNCTION_KEY_ID | key_position
-
         arb_id = self.create_arbitration_id(
             self._can_controller_id,
             list_ID,
@@ -476,7 +476,9 @@ def monitor_keys(ams_can):
 
 
 def main():
+    print("Main started")
     ams_can = AMS_CAN()
+    print("AMS_CAN created")
     sleep(6)
 
     print("Getting version no from list 1 & 2")
