@@ -2,6 +2,7 @@ from time import sleep
 import can
 import ctypes
 import logging
+import time
 
 CHANNEL_NAME = "can0"
 CAN_SOURCE_MASK = 0x0ff00000
@@ -481,6 +482,7 @@ def main():
     print("AMS_CAN created")
     sleep(6)
 
+    # Existing version + LED test
     print("Getting version no from list 1 & 2")
     strip_version = ams_can.get_version_number(1)
     if strip_version:
@@ -598,11 +600,57 @@ def main():
         ams_can.lock_all_positions(list_id)
         ams_can.set_all_LED_OFF(list_id)
 
-    print("Hardware tests complete, starting key monitor...")
-    monitor_keys(ams_can)
+    # New loop: monitor for 5s, then take input and unlock, repeat
+    try:
+        while True:
+            # Monitor for 5 seconds
+            print("\nMonitoring key events for 5 seconds...")
+            end_time = time.time() + 5
+            while time.time() < end_time:
+                if ams_can.key_taken_event:
+                    print(
+                        f"KEY TAKEN: id={ams_can.key_taken_id}, "
+                        f"list={ams_can.key_taken_position_list}, "
+                        f"slot={ams_can.key_taken_position_slot}"
+                    )
+                    ams_can.key_taken_event = False
 
-    ams_can.cleanup()
-    return
+                if ams_can.key_inserted_event:
+                    print(
+                        f"KEY INSERTED: id={ams_can.key_inserted_id}, "
+                        f"list={ams_can.key_inserted_position_list}, "
+                        f"slot={ams_can.key_inserted_position_slot}"
+                    )
+                    ams_can.key_inserted_event = False
+
+                sleep(0.05)
+
+            # After 5s, ask which key to unlock
+            if not ams_can.key_lists:
+                print("No keylists detected, cannot unlock.")
+            else:
+                print("\nDetected keylists:", ams_can.key_lists)
+                try:
+                    list_id = int(input("Enter keystrip (list) ID to unlock from: ").strip())
+                    slot = int(input("Enter slot number to unlock (1-14): ").strip())
+                except ValueError:
+                    print("Invalid input, please enter numbers.")
+                else:
+                    if list_id not in ams_can.key_lists:
+                        print(f"List {list_id} not in detected keylists.")
+                    else:
+                        print(f"Unlocking list {list_id}, slot {slot}...")
+                        led_ok = ams_can.set_single_LED_state(list_id, slot, CAN_LED_STATE_ON)
+                        lock_ok = ams_can.set_single_key_lock_state(list_id, slot, CAN_KEY_UNLOCKED)
+                        print(f"LED set: {led_ok}, lock unlocked: {lock_ok}")
+
+            # Loop again: monitor another 5 seconds, then prompt again
+
+    except KeyboardInterrupt:
+        print("\nExiting...")
+    finally:
+        ams_can.cleanup()
+        return
 
 
 if __name__ == "__main__":
