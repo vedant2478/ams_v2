@@ -61,52 +61,50 @@ class CardScanScreen(BaseScreen):
 
     def poll_card(self):
         """Background thread to continuously poll for cards"""
-        timeout = 15  # 15 seconds timeout
+        timeout = 15
         start_time = time.time()
         
         while self.card_reading and (time.time() - start_time) < timeout:
             try:
-                # Get card number from BMS
                 card_no = self.bms.get_cardNo()
-                
                 if card_no:
-                    # Card detected! Schedule UI update on main thread
                     Clock.schedule_once(lambda dt: self.handle_card_result(card_no), 0)
                     return
-                
-                time.sleep(0.2)  # Poll every 200ms
-                
+                time.sleep(0.2)
             except Exception as e:
                 print(f"Error polling card: {e}")
                 time.sleep(0.5)
-        
+
         # Timeout - no card detected
         Clock.schedule_once(lambda dt: self.handle_card_result(None), 0)
-        
+
     
-    def handle_card_result(self, card_no):
-        """Handle card read result (runs on main thread)"""
-        if card_no is not None and str(card_no).strip():
-            print(f"✓ Card {card_no} detected")
-            
-            # Check if card exists in database
-            card_info = check_card_exists(card_no)
-            
-            if card_info["exists"]:
-                print(f"✓ Card found: {card_info['name']}")
-                self.instruction_text = f"Welcome {card_info['name']}"
-                self.manager.card_number = str(card_no)
-                self.manager.card_info = card_info  # Store full card info
-                self.progress = 100
-                
-                if hasattr(self, "_event"):
-                    self._event.cancel()
-                
-                Clock.schedule_once(self.go_to_pin, 0.5)
-            else:
-                print(f"✗ Card {card_no} not found in database")
-                self.instruction_text = "INVALID CARD!"
-                self.progress = 0
+def handle_card_result(self, card_no):
+    """Handle card read result (runs on main thread)"""
+    if card_no is not None and str(card_no).strip():
+        # existing VALID card logic stays the same
+        print(f"✓ Card {card_no} detected")
+        card_info = check_card_exists(card_no)
+        if card_info["exists"]:
+            print(f"✓ Card found: {card_info['name']}")
+            self.instruction_text = f"Welcome {card_info['name']}"
+            self.manager.card_number = str(card_no)
+            self.manager.card_info = card_info
+            self.progress = 100
+            if hasattr(self, "_event"):
+                self._event.cancel()
+            Clock.schedule_once(self.go_to_pin, 0.5)
+        else:
+            print(f"✗ Card {card_no} not found in database")
+            self.instruction_text = "INVALID CARD!"
+            self.progress = 0
+    else:
+        print("No card detected within timeout, returning to previous screen")
+        self.instruction_text = "No card detected"
+        self.progress = 0
+        self.go_back()
+
+
 
     def update_progress(self, dt):
         """Animate progress while waiting"""
