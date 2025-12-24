@@ -8,8 +8,6 @@ from datetime import datetime
 import time
 from components.base_screen import BaseScreen
 from amsbms import AMSBMS
-
-
 class CardScanScreen(BaseScreen):
     progress = NumericProperty(0)
     instruction_text = StringProperty("Show your card")
@@ -30,12 +28,33 @@ class CardScanScreen(BaseScreen):
     def on_enter(self):
         self.progress = 0
         self.instruction_text = "Show your card"
-
-        # Update time display
         Clock.schedule_interval(self.update_time, 1)
 
-        # Initialize BMS (update port/baud if needed)
-        self.bms = AMSBMS(port="/dev/ttyAML1", baud=9600)
+        # Ask on this screen: testing or real scan?
+        try:
+            ans = input("Are you on testing? (y/n): ").strip().lower()
+        except Exception as e:
+            print(f"Error reading testing input: {e}")
+            ans = "n"
+
+        if ans == "y":
+            # Testing: do NOT open BMS, use default card and skip scanning
+            print("Testing mode ON on CardScanScreen: using card 3663674")
+            self.card_reading = False
+            # Optionally, no progress animation
+            self._event = None
+            Clock.schedule_once(lambda dt: self.handle_card_result("3663674"), 0)
+            return
+
+        # Normal procedure: init AMSBMS and start scan
+        try:
+            self.bms = AMSBMS(port="/dev/ttyAML1", baud=9600)
+        except Exception as e:
+            print(f"Error opening /dev/ttyAML1: {e}")
+            self.instruction_text = "Reader error"
+            self.bms = None
+            self.card_reading = False
+            return
 
         # Start card reading in background
         self.card_reading = True
@@ -72,29 +91,26 @@ class CardScanScreen(BaseScreen):
 
         while self.card_reading and (time.time() - start_time) < timeout:
             try:
+                if not self.bms:
+                    break
                 card_no = self.bms.get_cardNo()
                 if card_no:
-                    # Card detected! Schedule UI update on main thread
                     Clock.schedule_once(
                         lambda dt, c=card_no: self.handle_card_result(c), 0
                     )
                     return
-
-                time.sleep(0.2)  # Poll every 200ms
-
+                time.sleep(0.2)
             except Exception as e:
                 print(f"Error polling card: {e}")
-                time.sleep(0.5)
+                break
 
         # Timeout - no card detected
         Clock.schedule_once(lambda dt: self.handle_card_result(None), 0)
 
     def handle_card_result(self, card_no):
         """Handle card read result (runs on main thread)."""
-        # Stop further reading once we have a result (success or timeout)
         self.card_reading = False
 
-        # Stop progress animation
         if self._event is not None:
             self._event.cancel()
             self._event = None
@@ -102,34 +118,27 @@ class CardScanScreen(BaseScreen):
         if card_no is not None and str(card_no).strip():
             print(f"✓ Card {card_no} detected")
 
-            # Check if card exists in database
             card_info = check_card_exists(card_no)
 
             if card_info["exists"]:
                 print(f"✓ Card found: {card_info['name']}")
                 self.instruction_text = f"Welcome {card_info['name']}"
                 self.manager.card_number = str(card_no)
-                self.manager.card_info = card_info  # Store full card info
+                self.manager.card_info = card_info
                 self.progress = 100
-
-                # Go to PIN screen after short delay
                 Clock.schedule_once(self.go_to_pin, 0.5)
             else:
                 print(f"✗ Card {card_no} not found in database")
                 self.instruction_text = "INVALID CARD!"
                 self.progress = 0
-                # Stay on this screen, allow user to try again manually
         else:
-            # TIMEOUT / NO CARD
             print("No card detected within timeout, returning to previous screen")
             self.instruction_text = "No card detected"
             self.progress = 0
-            # Stop card reading and go back
             self.go_back()
 
     def update_progress(self, dt):
         """Animate progress while waiting (60s total)."""
-        # 60s / 0.5s = 120 steps → 100 / 120 per step
         if self.progress >= 95:
             return
         self.progress += 100.0 / 120.0

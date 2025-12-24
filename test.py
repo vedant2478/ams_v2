@@ -442,7 +442,39 @@ class AMS_CAN(object):
     def cleanup(self):
         self.notifier.stop()
         self.bus.shutdown()
+    def unlock_single_key(self, strip_id, position):
+        """
+        Unlock one key (LED ON + key unlocked) on a given strip and slot.
 
+        strip_id: CAN list_ID / key strip number
+        position: slot number (1-14)
+        Returns True if both commands reported response, False otherwise.
+        """
+        print(f"AMS_CAN: unlocking strip {strip_id}, position {position}")
+        led_ok = self.set_single_LED_state(strip_id, position, CAN_LED_STATE_ON)
+        lock_ok = self.set_single_key_lock_state(strip_id, position, CAN_KEY_UNLOCKED)
+        return bool(led_ok and lock_ok)
+
+    def unlock_keys_batch(self, keys):
+        """
+        Unlock a batch of keys.
+
+        keys: iterable of dicts, each having 'strip' and 'position' fields.
+              Example: {'strip': 1, 'position': 3, 'name': 'Key A'}
+        Returns list of results.
+        """
+        results = []
+        for k in keys:
+            strip = int(k["strip"])
+            pos = int(k["position"])
+            ok = self.unlock_single_key(strip, pos)
+            results.append({
+                "strip": strip,
+                "position": pos,
+                "ok": ok,
+                "name": k.get("name", "")
+            })
+        return results
 
 def main():
     ams_can = AMS_CAN()
