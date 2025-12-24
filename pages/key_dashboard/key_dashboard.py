@@ -52,6 +52,8 @@ class KeyDashboardScreen(BaseScreen):
             # Load keys for this activity
             activity_id = self.activity_info.get('id')
             keys = get_keys_for_activity(activity_id)
+
+            print(keys)
             
             print(f"Found {len(keys)} keys for activity")
             

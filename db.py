@@ -96,7 +96,6 @@ def check_card_exists(card_number):
         print(f"Error checking card: {e}")
         return {"exists": False, "error": str(e)}
 
-
 def verify_card_pin(card_number, pin):
     """Verify if PIN matches for the card"""
     try:
@@ -120,7 +119,6 @@ def verify_card_pin(card_number, pin):
         print(f"Error verifying PIN: {e}")
         return False
 
-
 def get_user_by_card(card_number):
     """Get complete user info by card number"""
     try:
@@ -140,7 +138,6 @@ def get_user_by_card(card_number):
     except Exception as e:
         print(f"Error getting user: {e}")
         return None
-
 
 def get_user_activities(user_id):
     """Get all activities assigned to a user"""
@@ -176,7 +173,6 @@ def get_user_activities(user_id):
     except Exception as e:
         print(f"Error getting user activities: {e}")
         return []
-
 
 def verify_activity_code(user_id, activity_code):
     """Verify if activity code is valid for the user"""
@@ -214,41 +210,6 @@ def verify_activity_code(user_id, activity_code):
     except Exception as e:
         print(f"Error verifying activity code: {e}")
         return {"valid": False, "message": str(e)}
-
-
-def get_activity_keys(activity_id):
-    """Get list of keys for an activity"""
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        cur = conn.cursor()
-        
-        cur.execute("""
-            SELECT keys, keyNames
-            FROM activities 
-            WHERE id = ? AND deletedAt IS NULL
-        """, (activity_id,))
-        
-        result = cur.fetchone()
-        conn.close()
-        
-        if result and result[0]:
-            key_ids = result[0].split(',')
-            key_names = result[1].split(',') if result[1] else []
-            
-            keys = []
-            for i, key_id in enumerate(key_ids):
-                keys.append({
-                    'id': key_id.strip(),
-                    'name': key_names[i].strip() if i < len(key_names) else f"Key {key_id}"
-                })
-            
-            return keys
-        
-        return []
-        
-    except Exception as e:
-        print(f"Error getting activity keys: {e}")
-        return []
 
 def get_keys_for_activity(activity_id):
     """Get detailed key information for an activity"""
