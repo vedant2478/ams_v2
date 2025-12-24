@@ -3,7 +3,6 @@ import can
 import ctypes
 import logging
 
-
 CHANNEL_NAME = "can0"
 CAN_SOURCE_MASK = 0x0FF00000
 CAN_DESTINATION_MASK = 0x000FF000
@@ -82,39 +81,32 @@ class AMS_CAN(object):
         return arbitration_id
 
     def _on_message_received(self, msg):
-        # print("\nCAN MESSAGE RECEIVED : " + str(msg))
         source_list = (msg.arbitration_id & CAN_SOURCE_MASK) >> 20
         destination = (msg.arbitration_id & CAN_DESTINATION_MASK) >> 12
         message_type = (msg.arbitration_id & CAN_MSG_TYPE_MASK) >> 9
         function_type = msg.arbitration_id & CAN_FUNCTION_MASK
-        # print("\nSource = " + str(source_list) + " Destination = " + str(destination) + " Function Type : " + str(function_type))
-        # print("\n Data received : " + str(msg.data))
-        # INIT PROCEDURE - Process query from Key-List(s) and send ACK
+
         new_device_id = 0
         if (
             source_list == 0
             and function_type == CAN_FUNCTION_UNIQUE_ID
             and destination == CAN_IMX_ID
         ):
-            # Send ACK to UNIQUE ID message
             print("\nINIT--RECV--[1]: LIST -> IMX - UNIQUE ID Message Received")
             arb_id = self.create_arbitration_id(
                 CAN_IMX_ID, 0x0, CAN_MSG_TYPE_ACK, CAN_FUNCTION_UNIQUE_ID
             )
 
-            msg = can.Message(arbitration_id=arb_id, data=[], is_extended_id=True)
+            msg_ack = can.Message(arbitration_id=arb_id, data=[], is_extended_id=True)
             self._current_function = CAN_FUNCTION_UNIQUE_ID
             self._current_function_ack = True
             self._current_function_response = False
             self._current_function_response_data = None
-            self.send_message(msg)
+            self.send_message(msg_ack)
             sleep(0.2)
             print(
                 "\nINIT--SENT--[2]: IMS -> LIST - ACK message sent to UNIQUE ID Message"
             )
-            # print("\nINIT[2]: IMS -> LIS UNIQUE ID ACK")
-
-            # Send device id to list
 
             arb_id = self.create_arbitration_id(
                 CAN_IMX_ID, 0x0, CAN_MSG_TYPE_SET, CAN_FUNCTION_NEW_DEVICE
@@ -122,7 +114,7 @@ class AMS_CAN(object):
 
             new_device_id = len(self.key_lists) + 1
             self.key_lists.append(new_device_id)
-            msg = can.Message(
+            msg_set = can.Message(
                 arbitration_id=arb_id, data=[new_device_id], is_extended_id=True
             )
             self._current_function = CAN_FUNCTION_NEW_DEVICE
@@ -130,7 +122,7 @@ class AMS_CAN(object):
             self._current_function_ack = True
             self._current_function_response = False
             self._current_function_response_data = None
-            self.send_message(msg)
+            self.send_message(msg_set)
             sleep(0.2)
             print(
                 "\nINIT--SENT--[3]: IMS -> LIST - DEVICE ID message sent 1st Time [LIST Id - "
@@ -148,35 +140,32 @@ class AMS_CAN(object):
                 "\nINIT--RECV--[4]: LIST -> IMS - ACK for DEVICE ID message received from LIST [LIST Id - "
                 + str(source_list)
             )
+
         if (
             source_list != 0
             and function_type == CAN_FUNCTION_NEW_DEVICE
             and message_type == CAN_MSG_TYPE_GET
         ):
-            # print("\nINIT--[6]: LIST -> IMS - DEVICE ID message received from LIST")
-            # print("\nINIT[4]: LIST -> IMX NEW DEVICE ACK")
-            # Send ACK to List
             arb_id = self.create_arbitration_id(
                 CAN_IMX_ID, source_list, CAN_MSG_TYPE_ACK, CAN_FUNCTION_NEW_DEVICE
             )
-            msg = can.Message(arbitration_id=arb_id, data=[], is_extended_id=True)
+            msg_ack = can.Message(arbitration_id=arb_id, data=[], is_extended_id=True)
             self._current_function = CAN_FUNCTION_NEW_DEVICE
             self._current_function_list_id = source_list
             self._current_function_ack = True
             self._current_function_response = False
             self._current_function_response_data = None
-            self.send_message(msg)
+            self.send_message(msg_ack)
             print(
                 "\nINIT--SENT--[5]: IMX -> ACK message to LIST [LIST ID - "
                 + str(source_list)
             )
 
-            # Send device id to list - 2nd time
             arb_id = self.create_arbitration_id(
                 CAN_IMX_ID, source_list, CAN_MSG_TYPE_SET, CAN_FUNCTION_NEW_DEVICE
             )
 
-            msg = can.Message(
+            msg_set2 = can.Message(
                 arbitration_id=arb_id, data=[source_list], is_extended_id=True
             )
 
@@ -185,15 +174,13 @@ class AMS_CAN(object):
             self._current_function_ack = False
             self._current_function_response = True
             self._current_function_response_data = None
-            self.send_message(msg)
+            self.send_message(msg_set2)
             sleep(0.2)
             print(
                 "\nINIT--SENT--[6]: IMX -> LIST - ACK for LIST DEVICE ID message sent [LIST Id - "
                 + str(source_list)
             )
-            # print("\nINIT[6]: IMX -> LIST NEW DEVICE SET MSG")
 
-        # INIT PROCEDURE - Process response from Key-List and add the list to AMS-CAN key-list[]
         if (
             source_list != 0
             and function_type == CAN_FUNCTION_NEW_DEVICE
@@ -203,10 +190,6 @@ class AMS_CAN(object):
                 "\nINIT--RECV--[7]: LIST -> IMX - ACK  received from LIST for 2nd DEVICE ID message [LIST Id - "
                 + str(source_list)
             )
-
-            # if source_list not in self.key_lists:
-            #     self.key_lists.append(source_list)
-            #     print("********* Adding " + str(source_list) + " to keylist having current length of " + str(len(self.key_lists)))
             self._current_function = None
             self._current_function_list_id = source_list
             self._current_function_ack = True
@@ -218,7 +201,6 @@ class AMS_CAN(object):
             and function_type != CAN_FUNCTION_NEW_DEVICE
             and function_type != CAN_FUNCTION_UNIQUE_ID
         ):
-            # print("##### Inside command on_message")
             if (
                 message_type == CAN_MSG_TYPE_ACK
                 and function_type == self._current_function
@@ -241,7 +223,6 @@ class AMS_CAN(object):
                 self._current_function = CAN_FUNCTION_KEY_TAKEN
                 self.key_taken_position_list = source_list
                 self.key_taken_position_slot = (function_type & 0xF) + 1
-                # print("#### Key taken from slot no: " + str(self.key_taken_position_slot))
                 self._current_function_response = True
                 self._current_function_response_data = msg.data
                 self.key_taken_event = True
@@ -287,7 +268,7 @@ class AMS_CAN(object):
         print(
             "Get Version no Response: "
             + str(self._current_function_response)
-            + "   & Date = "
+            + "   & Data = "
             + str(self._current_function_response_data)
         )
         if self._current_function_response and self._current_function_response_data:
@@ -296,7 +277,6 @@ class AMS_CAN(object):
             return None
 
     def set_all_LED_ON(self, list_ID, blinking):
-
         arb_id = self.create_arbitration_id(
             self._can_controller_id, list_ID, CAN_MSG_TYPE_SET, CAN_FUNCTION_ALL_LEDS
         )
@@ -321,13 +301,9 @@ class AMS_CAN(object):
         self._current_function_response_data = None
         self.send_message(msg)
         sleep(0.2)
-        if self._current_function_response:
-            return True
-        else:
-            return False
+        return bool(self._current_function_response)
 
     def set_all_LED_OFF(self, list_ID):
-
         arb_id = self.create_arbitration_id(
             self._can_controller_id, list_ID, CAN_MSG_TYPE_SET, CAN_FUNCTION_ALL_LEDS
         )
@@ -344,12 +320,8 @@ class AMS_CAN(object):
         self._current_function_response_data = None
         self.send_message(msg)
         sleep(0.2)
-        if self._current_function_response:
-            return True
-        else:
-            return False
+        return bool(self._current_function_response)
 
-    # Note that LED/POSITIONS range from 0 to 13
     def set_single_LED_state(self, list_ID, led_ID, led_state):
         arb_id = self.create_arbitration_id(
             self._can_controller_id, list_ID, CAN_MSG_TYPE_SET, CAN_FUNCTION_SINGLE_LED
@@ -365,13 +337,9 @@ class AMS_CAN(object):
         self._current_function_response_data = None
         self.send_message(msg)
         sleep(0.2)
-        if self._current_function_response:
-            return True
-        else:
-            return False
+        return bool(self._current_function_response)
 
     def set_single_key_lock_state(self, list_ID, position, lock_status):
-        # print("\n\nParameters received: " + str(position) + " Lock status " + str(lock_status) + "\n")
         arb_id = self.create_arbitration_id(
             self._can_controller_id,
             list_ID,
@@ -389,10 +357,7 @@ class AMS_CAN(object):
         self._current_function_response_data = None
         self.send_message(msg)
         sleep(0.2)
-        if self._current_function_response:
-            return True
-        else:
-            return False
+        return bool(self._current_function_response)
 
     def lock_all_positions(self, list_ID):
         arb_id = self.create_arbitration_id(
@@ -414,10 +379,7 @@ class AMS_CAN(object):
         self._current_function_response_data = None
         self.send_message(msg)
         sleep(0.2)
-        if self._current_function_response:
-            return True
-        else:
-            return False
+        return bool(self._current_function_response)
 
     def unlock_all_positions(self, list_ID):
         arb_id = self.create_arbitration_id(
@@ -439,23 +401,14 @@ class AMS_CAN(object):
         self._current_function_response_data = None
         self.send_message(msg)
         sleep(0.2)
-        if self._current_function_response:
-            return True
-        else:
-            return False
+        return bool(self._current_function_response)
 
     def get_key_id(self, list_ID, key_position):
-
-        # Decrementing pos/slot as KMS position ranges from 0 to 13
         key_position -= 1
-        # print("\nInside get key id function")
         can_function = CAN_FUNCTION_KEY_ID | key_position
-        # can_function = (CAN_FUNCTION_KEY_ID & key_position)
-        # print("Can Function: " + str(can_function))
         arb_id = self.create_arbitration_id(
             self._can_controller_id, list_ID, CAN_MSG_TYPE_GET, can_function
         )
-        # print("Arb Id: " + str(arb_id))
         msg = can.Message(arbitration_id=arb_id, data=[], is_extended_id=True)
         self._current_function = can_function
         self._current_function_list_id = list_ID
@@ -471,11 +424,9 @@ class AMS_CAN(object):
                 for num in result_list[:5]:
                     key_fob_id += str(num)
                 return int(key_fob_id)
-        else:
-            return False
+        return False
 
     def send_message(self, message):
-
         try:
             self.bus.send(message)
             return True
@@ -484,50 +435,34 @@ class AMS_CAN(object):
             return False
 
     def flush_buffer(self):
-
         msg = self.buffer.get_message()
         while msg is not None:
             msg = self.buffer.get_message()
 
     def cleanup(self):
-
         self.notifier.stop()
         self.bus.shutdown()
 
-    # @property
-    # def lib_door_lock(self):
-    #     return self._lib_door_lock
-
-    # @lib_door_lock.setter
-    # def lib_door_lock(self, value):
-    #     self._lib_door_lock = value
-
 
 def main():
-
     ams_can = AMS_CAN()
     sleep(6)
+
     print("Getting version no from list 1 & 2")
     strip_version = ams_can.get_version_number(1)
     if strip_version:
         print("Keystrip 1 version:" + str(strip_version))
-    # sleep(2)
     strip_version = ams_can.get_version_number(2)
     if strip_version:
         print("Keystrip 2 version:" + str(strip_version))
-    # ams_can = AMS_CAN()
-    # sleep(3)
 
     ams_can.set_all_LED_ON(1, False)
     ams_can.set_all_LED_ON(2, False)
     sleep(4)
     ams_can.set_all_LED_OFF(1)
     ams_can.set_all_LED_OFF(2)
-    # sleep(5)
-    # ams_can = AMS_CAN()
-    # sleep(3)
-    print("No of keylists = " + str(len(ams_can.key_lists)))
 
+    print("No of keylists = " + str(len(ams_can.key_lists)))
     for keys in ams_can.key_lists:
         print("Key-list Id : " + str(keys))
 
@@ -538,111 +473,39 @@ def main():
         ams_can.set_all_LED_OFF(list_id)
         sleep(1)
 
-    for list_id in ams_can.key_lists:
-        print(
-            "Setting STRIP-"
-            + str(list_id)
-            + " LED 1 to ON STATE: "
-            + str(ams_can.set_single_LED_state(list_id, 1, CAN_LED_STATE_ON))
-        )
-        print(
-            "Setting STRIP-"
-            + str(list_id)
-            + " POSITION 1 to UN-LOCK state: "
-            + str(ams_can.set_single_key_lock_state(list_id, 1, CAN_KEY_UNLOCKED))
-        )
-        sleep(1)
-        print(
-            "Setting STRIP-"
-            + str(list_id)
-            + " LED 2 to ON STATE: "
-            + str(ams_can.set_single_LED_state(list_id, 2, CAN_LED_STATE_ON))
-        )
-        print(
-            "Setting STRIP-"
-            + str(list_id)
-            + " POSITION 2 to UN-LOCK state: "
-            + str(ams_can.set_single_key_lock_state(list_id, 2, CAN_KEY_UNLOCKED))
-        )
-        sleep(1)
-        print(
-            "Setting STRIP-"
-            + str(list_id)
-            + " LED 3 to ON STATE: "
-            + str(ams_can.set_single_LED_state(list_id, 3, CAN_LED_STATE_ON))
-        )
-        print(
-            "Setting STRIP-"
-            + str(list_id)
-            + " POSITION 3 to UN-LOCK state: "
-            + str(ams_can.set_single_key_lock_state(list_id, 3, CAN_KEY_UNLOCKED))
-        )
-        sleep(1)
-        print(
-            "Setting STRIP-"
-            + str(list_id)
-            + " LED 4 to ON STATE: "
-            + str(ams_can.set_single_LED_state(list_id, 4, CAN_LED_STATE_ON))
-        )
-        print(
-            "Setting STRIP-"
-            + str(list_id)
-            + " POSITION 4 to UN-LOCK state: "
-            + str(ams_can.set_single_key_lock_state(list_id, 4, CAN_KEY_UNLOCKED))
-        )
-        sleep(1)
-        print(
-            "Setting STRIP-"
-            + str(list_id)
-            + " LED 5 to ON STATE: "
-            + str(ams_can.set_single_LED_state(list_id, 5, CAN_LED_STATE_ON))
-        )
-        print(
-            "Setting STRIP-"
-            + str(list_id)
-            + " POSITION 5 to UN-LOCK state: "
-            + str(ams_can.set_single_key_lock_state(list_id, 5, CAN_KEY_UNLOCKED))
-        )
-    sleep(1)
+    # -------- NEW: interactive loop to unlock by user input --------
+    try:
+        while True:
+            if not ams_can.key_lists:
+                print("No keylists detected yet. Waiting...")
+                sleep(3)
+                continue
 
-    print("Setting all list to lock and LED-OFF")
-    for list_id in ams_can.key_lists:
-        ams_can.lock_all_positions(list_id)
-        ams_can.set_all_LED_OFF(list_id)
-    #
-    # print("Setting all LED to OFF STATE: " + str(ams_can.set_all_LED_OFF(1)))
-    # sleep(3)
-    # print("Locking ALL positions: " + str(ams_can.lock_all_positions(1)))
-    # sleep(3)
-    # print("Setting LED 1 to ON STATE: " + str(ams_can.set_single_LED_state(1, 1, CAN_LED_STATE_ON)))
-    # sleep(3)
-    # print("Setting POSITION 1 to UN-LOCK state: " + str(ams_can.set_single_key_lock_state(1,1, CAN_KEY_UNLOCKED)))
-    # sleep(3)
-    # print("Setting LED 2 to ON STATE: " + str(ams_can.set_single_LED_state(1, 2, CAN_LED_STATE_ON)))
-    # sleep(3)
-    # print("Setting POSITION 2 to UN-LOCK state: " + str(ams_can.set_single_key_lock_state(1, 2, CAN_KEY_UNLOCKED)))
-    # sleep(3)
-    # print("Setting LED 3 to BLINK STATE: " + str(ams_can.set_single_LED_state(1, 3, CAN_LED_STATE_BLINK)))
-    # sleep(3)
-    # print("Setting POSITION 3 to UN-LOCK state: " + str(ams_can.set_single_key_lock_state(1, 3, CAN_KEY_UNLOCKED)))
-    # sleep(3)
-    # print("Setting LED 1, 2,3 to OFF STATE: " + str(ams_can.set_single_LED_state(1, 1, CAN_LED_STATE_OFF)))
-    # ams_can.set_single_LED_state(1, 2, CAN_LED_STATE_OFF)
-    # ams_can.set_single_LED_state(1, 3, CAN_LED_STATE_OFF)
-    # print("Locking ALL positions: " + str(ams_can.lock_all_positions(1)))
-    # sleep(3)
-    #
-    # print("Locking ALL positions: " + str(ams_can.unlock_all_positions(1)))
-    # sleep(3)
-    # counter = 0
-    # while counter < 30:
-    #     sleep(1)
-    #     counter += 1
+            print("\nDetected keylists:", ams_can.key_lists)
+            try:
+                list_id = int(input("Enter keystrip (list) ID: ").strip())
+                slot = int(input("Enter slot number to unlock (1-14): ").strip())
+            except ValueError:
+                print("Invalid input, please enter numbers.")
+                continue
 
-    ams_can.cleanup()
-    # print("Can Bus shutdown...signing off")
+            if list_id not in ams_can.key_lists:
+                print(f"List {list_id} not in detected keylists.")
+                continue
+            if not (1 <= slot <= 14):
+                print("Slot must be between 1 and 14.")
+                continue
 
-    return
+            print(f"Unlocking list {list_id}, slot {slot}...")
+            led_ok = ams_can.set_single_LED_state(list_id, slot, CAN_LED_STATE_ON)
+            lock_ok = ams_can.set_single_key_lock_state(list_id, slot, CAN_KEY_UNLOCKED)
+            print(f"LED set: {led_ok}, lock unlocked: {lock_ok}")
+
+    except KeyboardInterrupt:
+        print("\nExiting...")
+    finally:
+        ams_can.cleanup()
+        return
 
 
 if __name__ == "__main__":

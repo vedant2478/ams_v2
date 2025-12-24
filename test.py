@@ -487,3 +487,9 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+# sudo ip link set can0 down
+# sudo ip link set can0 type can bitrate 125000
+# sudo ip link set can0 up
+# ip link show can0
