@@ -136,5 +136,4 @@ class CardScanScreen(BaseScreen):
 
     def go_to_pin(self, dt):
         self.stop_card_reading()
-        self.manager.transition.direction = "left"
         self.manager.current = "pin"

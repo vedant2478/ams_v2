@@ -7,6 +7,51 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "csiams.dev.sqlite")
 
 
+def toggle_key_status_and_get_position(key_id):
+    """
+    Toggle keyStatus (0 <-> 1) for given key, and return updated row
+    including strip and position.
+    """
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+
+    # Get current status and position info
+    cur.execute("""
+        SELECT id, keyName, description, color, keyLocation, keyStatus,
+               keyAtDoor, keyStrip, keyPosition
+        FROM keys
+        WHERE id = ? AND deletedAt IS NULL
+    """, (key_id,))
+    row = cur.fetchone()
+
+    if not row:
+        conn.close()
+        return None
+
+    current_status = row[5] or 0
+    new_status = 0 if current_status == 1 else 1
+
+    # Update status
+    cur.execute("""
+        UPDATE keys
+        SET keyStatus = ?
+        WHERE id = ?
+    """, (new_status, key_id))
+    conn.commit()
+    conn.close()
+
+    return {
+        "id": row[0],
+        "name": row[1],
+        "description": row[2],
+        "color": row[3],
+        "location": row[4],
+        "status": new_status,
+        "door": row[6],
+        "strip": row[7],
+        "position": row[8],
+    }
+
 def get_site_name():
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()

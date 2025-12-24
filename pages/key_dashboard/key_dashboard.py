@@ -3,18 +3,18 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.properties import StringProperty, ListProperty, ObjectProperty
 from components.base_screen import BaseScreen
-from db import get_keys_for_activity
+from db import get_keys_for_activity, toggle_key_status_and_get_position
+
 
 
 class KeyItem(ButtonBehavior, BoxLayout):
     key_name = StringProperty("")
-    status = StringProperty("")
+    status = StringProperty("")        # "IN" or "OUT" for display
     status_color = ListProperty([0, 1, 0, 1])
     dashboard = ObjectProperty(None)
     key_id = StringProperty("")
 
     def on_status(self, *_):
-        # status: 0 = IN/AVAILABLE (green), 1 = OUT/TAKEN (red)
         if isinstance(self.status, int):
             self.status_color = [0, 1, 0, 1] if self.status == 0 else [1, 0, 0, 1]
         else:
@@ -22,7 +22,7 @@ class KeyItem(ButtonBehavior, BoxLayout):
 
     def on_release(self):
         if self.dashboard:
-            self.dashboard.open_done_page(self.key_name, self.status, self.key_id)
+            self.dashboard.toggle_key_and_open_done(self)
 
 
 class KeyDashboardScreen(BaseScreen):
@@ -114,5 +114,38 @@ class KeyDashboardScreen(BaseScreen):
         done.retrieved_text = f"{key_name} ({status})"
         done.returned_text = ""
         
+        self.manager.transition.direction = "left"
+        self.manager.current = "activity_done"
+
+    def toggle_key_and_open_done(self, key_widget: KeyItem):
+        key_id = key_widget.key_id
+        print(f"Toggling key ID: {key_id}")
+
+        key_info = toggle_key_status_and_get_position(key_id)
+        if not key_info:
+            print("Key not found in DB")
+            return
+
+        # Update status text on widget
+        new_status = key_info["status"]  # 0=IN, 1=OUT
+        status_text = "IN" if new_status == 0 else "OUT"
+        key_widget.status = status_text  # triggers on_status -> status_color
+
+        # Position & strip from DB
+        strip = key_info["strip"]
+        position = key_info["position"]
+        print(f"Key {key_id} now {status_text}, strip={strip}, position={position}")
+
+        # Save for use in next screen / CAN logic
+        self.manager.selected_key_id = key_id
+        self.manager.selected_key_name = key_info["name"]
+        self.manager.selected_key_strip = strip
+        self.manager.selected_key_position = position
+        self.manager.selected_key_status = new_status
+
+        # Go to done page if you still want that flow
+        done = self.manager.get_screen("activity_done")
+        done.retrieved_text = f"{key_info['name']} ({status_text})"
+        done.returned_text = ""
         self.manager.transition.direction = "left"
         self.manager.current = "activity_done"
