@@ -20,9 +20,12 @@ class KeyItem(ButtonBehavior, BoxLayout):
     status_color = ListProperty([0, 1, 0, 1])
     dashboard = ObjectProperty(None)
 
-    def set_status(self, status):
-        self.status = status
-        self.status_color = [0, 1, 0, 1] if status == "IN" else [1, 0, 0, 1]
+    def on_status(self, *_):
+        """Automatically update color when status changes"""
+        if self.status == "IN":
+            self.status_color = [0, 1, 0, 1]   # GREEN
+        else:
+            self.status_color = [1, 0, 0, 1]   # RED
 
     def on_release(self):
         if self.dashboard:
@@ -63,23 +66,23 @@ class KeyDashboardScreen(BaseScreen):
         self.activity_name = self.activity_info.get("name", "")
         self.time_remaining = str(self.activity_info.get("time_limit", 15))
 
-        # Create CAN only once
+        # Create CAN once
         if not hasattr(self.manager, "ams_can") or self.manager.ams_can is None:
             print("[CAN] Creating AMS_CAN instance")
             self.manager.ams_can = AMS_CAN()
-            self.setup_can_and_lock_all()
+            self._hardware_init_and_lock_all()
 
-        # 🔄 SYNC hardware → DB (SAFE)
+        # 1️⃣ Sync hardware → DB (authoritative)
         self.sync_hardware_to_db()
 
-        # Load DB → UI
+        # 2️⃣ Load DB → UI
         self.reload_keys_from_db()
         self.populate_keys()
 
-        # Unlock only allowed activity keys
+        # 3️⃣ Unlock only allowed activity keys
         self.unlock_activity_keys()
 
-        # Start polling CAN runtime events
+        # 4️⃣ Start CAN runtime polling
         if self._can_poll_event is None:
             self._can_poll_event = Clock.schedule_interval(
                 self.poll_can_events, 0.2
@@ -91,9 +94,9 @@ class KeyDashboardScreen(BaseScreen):
             self._can_poll_event = None
 
     # =====================================================
-    # CAN INIT / SECURITY
+    # HARDWARE INIT + SECURITY
     # =====================================================
-    def setup_can_and_lock_all(self):
+    def _hardware_init_and_lock_all(self):
         ams_can = self.manager.ams_can
 
         print("[CAN][INIT] Waiting for CAN boot…")
@@ -105,54 +108,44 @@ class KeyDashboardScreen(BaseScreen):
             ams_can.set_all_LED_OFF(strip_id)
 
     # =====================================================
-    # HARDWARE → DB SYNC (FIXED)
+    # HARDWARE → DB SYNC (CORRECT PEG ID LOGIC)
     # =====================================================
     def sync_hardware_to_db(self):
         ams_can = self.manager.ams_can
         activity_id = self.activity_info.get("id")
 
-        # Keys assigned to this activity
         db_keys = get_keys_for_activity(activity_id)
 
-        print("\n[SYNC] 🔄 Syncing hardware state to DB (slot-based)")
+        print("\n[SYNC] 🔄 Syncing hardware state to DB")
 
         for key in db_keys:
             strip = key.get("strip")
             pos = key.get("position")
-            db_key_id = key.get("id")
-            db_peg_id = key.get("peg_id")   # ⬅️ REAL peg id from DB
+            db_peg_id = key.get("peg_id")
 
             if not strip or not pos:
                 continue
 
-            # Ask hardware what is present in this slot
             hw_peg_id = ams_can.get_key_id(strip, pos)
 
-            # 🟢 HARDWARE SAYS KEY PRESENT
+            # 🟢 Key physically present
             if hw_peg_id:
                 print(
-                    f"[SYNC] 🟢 Key PRESENT strip={strip} pos={pos} peg_id={db_peg_id}"
+                    f"[SYNC] 🟢 PRESENT strip={strip} pos={pos} peg_id={hw_peg_id}"
                 )
-                print(hw_peg_id)
                 set_key_status_by_peg_id(hw_peg_id, 0)  # IN
 
-            # 🔴 HARDWARE SAYS SLOT EMPTY
+            # 🔴 Slot empty
             else:
                 print(
-                    f"[SYNC] 🔴 Slot empty strip={strip} pos={pos} "
-                    f"→ DB key_id={db_key_id} peg_id={db_peg_id} OUT"
+                    f"[SYNC] 🔴 EMPTY strip={strip} pos={pos} "
+                    f"→ peg_id={db_peg_id} OUT"
                 )
-
-                # Use DB peg_id (NOT slot number)
                 if db_peg_id:
-                    set_key_status_by_peg_id(db_peg_id, 1)  # OUT
-                else:
-                    print(
-                        f"[SYNC][WARN] No peg_id in DB for key_id={db_peg_id}"
-                    )
+                    set_key_status_by_peg_id(db_peg_id, 1)
 
     # =====================================================
-    # DATABASE
+    # DATABASE LOAD
     # =====================================================
     def reload_keys_from_db(self):
         activity_id = self.activity_info.get("id")
@@ -184,14 +177,12 @@ class KeyDashboardScreen(BaseScreen):
         grid.clear_widgets()
 
         for item in self.keys_data:
-            status_text = "IN" if item["status"] == 0 else "OUT"
-
             widget = KeyItem(
                 key_id=item["key_id"],
                 key_name=item["key_name"],
+                status="IN" if item["status"] == 0 else "OUT",
                 dashboard=self
             )
-            widget.set_status(status_text)
             grid.add_widget(widget)
 
     # =====================================================
