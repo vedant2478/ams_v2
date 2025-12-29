@@ -102,39 +102,25 @@ class KeyDashboardScreen(BaseScreen):
             })
 
     # -------------------- UI --------------------
-    def poll_can_events(self, _dt):
-        ams_can = self.manager.ams_can
+    def populate_keys(self):
+        grid = self.ids.key_grid
+        grid.clear_widgets()
+        self.key_widgets.clear()
 
-        # 🔴 KEY TAKEN
-        if ams_can.key_taken_event:
-            peg_id = ams_can.key_taken_id
-            print(f"[CAN] 🔴 KEY TAKEN peg_id={peg_id}")
+        for item in self.keys_data:
+            status_text = "IN" if item["status"] == 0 else "OUT"
 
-            set_key_status_by_peg_id(peg_id, 1)  # OUT
-            self.reload_keys_from_db()
+            widget = KeyItem(
+                key_id=item["key_id"],
+                key_name=item["key_name"],
+                status=status_text,     # 👈 DIRECT PROPERTY
+                dashboard=self
+            )
 
-            for item in self.keys_data:
-                widget = self.key_widgets.get(item["key_id"])
-                if widget:
-                    widget.status = "IN" if item["status"] == 0 else "OUT"
+            self.key_widgets[item["key_id"]] = widget
+            grid.add_widget(widget)
 
-            ams_can.key_taken_event = False
 
-        # 🟢 KEY INSERTED
-        if ams_can.key_inserted_event:
-            peg_id = ams_can.key_inserted_id
-            print(f"[CAN] 🟢 KEY INSERTED peg_id={peg_id}")
-
-            set_key_status_by_peg_id(peg_id, 0)  # IN
-            self.reload_keys_from_db()
-
-            for item in self.keys_data:
-                widget = self.key_widgets.get(item["key_id"])
-                if widget:
-                    widget.status = "IN" if item["status"] == 0 else "OUT"
-
-            ams_can.key_inserted_event = False
-            
     # -------------------- CAN POLL --------------------
     def poll_can_events(self, _dt):
         ams_can = self.manager.ams_can
@@ -146,7 +132,11 @@ class KeyDashboardScreen(BaseScreen):
 
             set_key_status_by_peg_id(peg_id, 1)  # OUT
             self.reload_keys_from_db()
-            self.populate_keys()
+
+            for item in self.keys_data:
+                widget = self.key_widgets.get(item["key_id"])
+                if widget:
+                    widget.status = "IN" if item["status"] == 0 else "OUT"
 
             ams_can.key_taken_event = False
 
@@ -157,7 +147,11 @@ class KeyDashboardScreen(BaseScreen):
 
             set_key_status_by_peg_id(peg_id, 0)  # IN
             self.reload_keys_from_db()
-            self.populate_keys()
+
+            for item in self.keys_data:
+                widget = self.key_widgets.get(item["key_id"])
+                if widget:
+                    widget.status = "IN" if item["status"] == 0 else "OUT"
 
             ams_can.key_inserted_event = False
 
