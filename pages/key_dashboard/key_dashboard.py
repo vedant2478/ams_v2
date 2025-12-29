@@ -131,7 +131,7 @@ class KeyDashboardScreen(BaseScreen):
             # 🟢 HARDWARE SAYS KEY PRESENT
             if hw_peg_id:
                 print(
-                    f"[SYNC] 🟢 Key PRESENT strip={strip} pos={pos} peg_id={hw_peg_id}"
+                    f"[SYNC] 🟢 Key PRESENT strip={strip} pos={pos} peg_id={db_key_id}"
                 )
 
                 # Trust hardware peg_id
