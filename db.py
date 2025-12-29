@@ -6,50 +6,37 @@ DB_PATH = "csiams.dev.sqlite"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "csiams.dev.sqlite")
 
-
-def toggle_key_status_and_get_position(key_id):
+def set_key_status(key_id, new_status):
     """
-    Toggle keyStatus (0 <-> 1) for given key, and return updated row
-    including strip and position.
+    new_status:
+        0 = IN (present)
+        1 = OUT (taken)
     """
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
 
-    # Get current status and position info
-    cur.execute("""
-        SELECT id, keyName, description, color, keyLocation, keyStatus,
-               keyAtDoor, keyStrip, keyPosition
-        FROM keys
-        WHERE id = ? AND deletedAt IS NULL
-    """, (key_id,))
-    row = cur.fetchone()
-
-    if not row:
-        conn.close()
-        return None
-
-    current_status = row[5] or 0
-    new_status = 0 if current_status == 1 else 1
-
-    # Update status
     cur.execute("""
         UPDATE keys
         SET keyStatus = ?
-        WHERE id = ?
+        WHERE id = ? AND deletedAt IS NULL
     """, (new_status, key_id))
+
     conn.commit()
+
+    cur.execute("""
+        SELECT id, keyStatus, keyStrip, keyPosition
+        FROM keys
+        WHERE id = ?
+    """, (key_id,))
+
+    row = cur.fetchone()
     conn.close()
 
     return {
         "id": row[0],
-        "name": row[1],
-        "description": row[2],
-        "color": row[3],
-        "location": row[4],
-        "status": new_status,
-        "door": row[6],
-        "strip": row[7],
-        "position": row[8],
+        "status": row[1],
+        "strip": row[2],
+        "position": row[3],
     }
 
 
