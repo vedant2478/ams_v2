@@ -6,7 +6,7 @@ from kivy.properties import StringProperty, ListProperty, ObjectProperty
 from kivy.clock import Clock
 
 from components.base_screen import BaseScreen
-from db import get_keys_for_activity, set_key_status
+from db import get_keys_for_activity, set_key_status_by_peg_id
 from test import AMS_CAN
 
 
@@ -131,32 +131,34 @@ class KeyDashboardScreen(BaseScreen):
     # ------------------------------
     # POLL CAN EVENTS (REAL TIME)
     # ------------------------------
-    def poll_can_events(self, _dt):
-        ams_can = self.manager.ams_can
+def poll_can_events(self, _dt):
+    ams_can = getattr(self.manager, "ams_can", None)
+    if not ams_can:
+        return
 
-        # 🔴 KEY TAKEN → OUT
-        if ams_can.key_taken_event:
-            peg_id = ams_can.key_taken_id
-            print(f"[CAN] 🔴 KEY TAKEN peg_id={peg_id}")
+    # 🔴 KEY TAKEN
+    if ams_can.key_taken_event:
+        peg_id = ams_can.key_taken_id
+        print(f"[CAN] 🔴 KEY TAKEN peg_id={peg_id}")
 
-            set_key_status(peg_id, 1)   # SET → OUT
+        set_key_status_by_peg_id(peg_id, 1)   # OUT
 
-            self.reload_keys_from_db()
-            self.populate_keys()
+        self.reload_keys_from_db()
+        self.populate_keys()
 
-            ams_can.key_taken_event = False
+        ams_can.key_taken_event = False
 
-        # 🟢 KEY INSERTED → IN
-        if ams_can.key_inserted_event:
-            peg_id = ams_can.key_inserted_id
-            print(f"[CAN] 🟢 KEY INSERTED peg_id={peg_id}")
+    # 🟢 KEY INSERTED
+    if ams_can.key_inserted_event:
+        peg_id = ams_can.key_inserted_id
+        print(f"[CAN] 🟢 KEY INSERTED peg_id={peg_id}")
 
-            set_key_status(peg_id, 0)   # SET → IN
+        set_key_status_by_peg_id(peg_id, 0)   # IN
 
-            self.reload_keys_from_db()
-            self.populate_keys()
+        self.reload_keys_from_db()
+        self.populate_keys()
 
-            ams_can.key_inserted_event = False
+        ams_can.key_inserted_event = False
 
     # ------------------------------
     # NAVIGATION
