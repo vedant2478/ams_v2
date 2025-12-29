@@ -148,7 +148,7 @@ class KeyDashboardScreen(BaseScreen):
                     set_key_status_by_peg_id(db_peg_id, 1)  # OUT
                 else:
                     print(
-                        f"[SYNC][WARN] No peg_id in DB for key_id={db_key_id}"
+                        f"[SYNC][WARN] No peg_id in DB for key_id={db_peg_id}"
                     )
 
     # =====================================================
