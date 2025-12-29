@@ -6,38 +6,47 @@ DB_PATH = "csiams.dev.sqlite"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "csiams.dev.sqlite")
 
-def set_key_status(key_id, new_status):
+def set_key_status_by_peg_id(peg_id, status):
     """
-    new_status:
-        0 = IN (present)
-        1 = OUT (taken)
+    status:
+        0 = IN (key present)
+        1 = OUT (key taken)
     """
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
 
+    # Find key by peg_id
+    cur.execute("""
+        SELECT id, keyStrip, keyPosition
+        FROM keys
+        WHERE peg_id = ? AND deletedAt IS NULL
+    """, (str(peg_id),))
+
+    row = cur.fetchone()
+
+    if not row:
+        print(f"[DB] ❌ No key found for peg_id={peg_id}")
+        conn.close()
+        return False
+
+    key_id, strip, position = row
+
+    # Update status
     cur.execute("""
         UPDATE keys
         SET keyStatus = ?
-        WHERE id = ? AND deletedAt IS NULL
-    """, (new_status, key_id))
+        WHERE id = ?
+    """, (status, key_id))
 
     conn.commit()
-
-    cur.execute("""
-        SELECT id, keyStatus, keyStrip, keyPosition
-        FROM keys
-        WHERE id = ?
-    """, (key_id,))
-
-    row = cur.fetchone()
     conn.close()
 
-    return {
-        "id": row[0],
-        "status": row[1],
-        "strip": row[2],
-        "position": row[3],
-    }
+    print(
+        f"[DB] ✅ Updated key_id={key_id} "
+        f"(peg_id={peg_id}, strip={strip}, pos={position}) → status={status}"
+    )
+
+    return True
 
 
 def set_key_status_by_peg_id(peg_id, status):
