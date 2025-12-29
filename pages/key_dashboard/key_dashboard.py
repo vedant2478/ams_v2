@@ -21,9 +21,7 @@ class KeyItem(ButtonBehavior, BoxLayout):
     dashboard = ObjectProperty(None)
 
     def set_status(self, status):
-        """Update text + color"""
         self.status = status
-
         if status == "IN":
             self.status_color = [0, 1, 0, 1]   # GREEN
         else:
@@ -68,22 +66,28 @@ class KeyDashboardScreen(BaseScreen):
         self.activity_name = self.activity_info.get("name", "")
         self.time_remaining = str(self.activity_info.get("time_limit", 15))
 
-        # Create CAN once
+        # Create CAN only once
         if not hasattr(self.manager, "ams_can") or self.manager.ams_can is None:
             print("[CAN] Creating AMS_CAN instance")
             self.manager.ams_can = AMS_CAN()
-
-            # FULL HARDWARE INIT SEQUENCE
             self.setup_can_and_lock_all()
 
-        # Load DB → UI
+        # 1️⃣ Load keys from DB
         self.reload_keys_from_db()
+
+        # 2️⃣ HARDWARE → DB sync
+        self.sync_hardware_to_db()
+
+        # 3️⃣ Reload corrected DB state
+        self.reload_keys_from_db()
+
+        # 4️⃣ Populate UI
         self.populate_keys()
 
-        # Unlock ONLY activity keys
+        # 5️⃣ Unlock ONLY activity keys
         self.unlock_activity_keys()
 
-        # Start CAN polling
+        # 6️⃣ Start CAN polling
         if self._can_poll_event is None:
             self._can_poll_event = Clock.schedule_interval(
                 self.poll_can_events, 0.2
@@ -103,61 +107,61 @@ class KeyDashboardScreen(BaseScreen):
     def setup_can_and_lock_all(self):
         ams_can = self.manager.ams_can
 
-        print("[CAN][INIT] Waiting for CAN boot...")
+        print("[CAN][INIT] Waiting for CAN boot…")
         sleep(6)
 
-        print("[CAN][INIT] Detecting keystrips")
+        print("[CAN][SECURITY] Locking ALL keys and LEDs OFF")
         for strip_id in ams_can.key_lists or [1, 2]:
-            version = ams_can.get_version_number(strip_id)
-            if version:
-                print(f"[CAN][INIT] Strip {strip_id} version: {version}")
-
-        print("[CAN][INIT] LED test")
-        for strip_id in ams_can.key_lists or [1, 2]:
-            ams_can.set_all_LED_ON(strip_id, False)
-        sleep(4)
-        for strip_id in ams_can.key_lists or [1, 2]:
-            ams_can.set_all_LED_OFF(strip_id)
-
-        print("[CAN][SECURITY] Locking ALL keys")
-        for strip_id in ams_can.key_lists:
             ams_can.lock_all_positions(strip_id)
             ams_can.set_all_LED_OFF(strip_id)
 
     # =====================================================
-    # DATABASE
+    # DATABASE LOAD
     # =====================================================
     def reload_keys_from_db(self):
         activity_id = self.activity_info.get("id")
         keys = get_keys_for_activity(activity_id)
 
-        print(f"\n[DB][INIT] Loaded {len(keys)} keys from database")
+        print(f"\n[DB][LOAD] Loaded {len(keys)} keys")
 
         self.keys_data = []
         for key in keys:
             status_text = "IN" if key["status"] == 0 else "OUT"
-
             print(
-                f"[DB][INIT] Key → id={key['id']} "
-                f"name={key['name']} status={status_text} "
-                f"strip={key.get('strip')} pos={key.get('position')}"
+                f"[DB] id={key['id']} name={key['name']} "
+                f"status={status_text} strip={key.get('strip')} pos={key.get('position')}"
             )
 
             self.keys_data.append({
                 "key_id": str(key["id"]),
                 "key_name": key["name"],
-                "status": key["status"],  # 0 IN, 1 OUT
+                "status": key["status"],      # 0 IN, 1 OUT
                 "strip": key.get("strip"),
                 "position": key.get("position"),
             })
 
-        print("\n[UI][STATE] Current keys:")
-        for k in self.keys_data:
-            print(
-                f"   - {k['key_name']} "
-                f"(id={k['key_id']}) → "
-                f"{'IN' if k['status']==0 else 'OUT'}"
-            )
+    # =====================================================
+    # HARDWARE → DB SYNC (CRITICAL PART)
+    # =====================================================
+    def sync_hardware_to_db(self):
+        ams_can = self.manager.ams_can
+        print("\n[SYNC] 🔄 Syncing hardware state to DB")
+
+        for item in self.keys_data:
+            strip = item.get("strip")
+            pos = item.get("position")
+
+            if not strip or not pos:
+                continue
+
+            hw_peg_id = ams_can.get_key_id(strip, pos)
+
+            if hw_peg_id:
+                print(f"[SYNC] 🟢 Key PRESENT strip={strip} pos={pos}")
+                set_key_status_by_peg_id(hw_peg_id, 0)   # IN
+            else:
+                print(f"[SYNC] 🔴 Key NOT PRESENT strip={strip} pos={pos}")
+                set_key_status_by_peg_id(item["key_id"], 1)  # OUT
 
     # =====================================================
     # UI RENDER
@@ -182,8 +186,7 @@ class KeyDashboardScreen(BaseScreen):
     # =====================================================
     def unlock_activity_keys(self):
         ams_can = self.manager.ams_can
-
-        print(f"[CAN] 🔓 Unlocking {len(self.keys_data)} activity keys")
+        print(f"\n[CAN] 🔓 Unlocking {len(self.keys_data)} activity keys")
 
         for item in self.keys_data:
             if item["strip"] and item["position"]:
@@ -193,7 +196,7 @@ class KeyDashboardScreen(BaseScreen):
                 )
 
     # =====================================================
-    # CAN POLLING
+    # CAN POLLING (REAL-TIME)
     # =====================================================
     def poll_can_events(self, _dt):
         ams_can = self.manager.ams_can
@@ -203,9 +206,7 @@ class KeyDashboardScreen(BaseScreen):
             peg_id = ams_can.key_taken_id
             print(f"\n[CAN] 🔴 KEY TAKEN peg_id={peg_id}")
 
-            result = set_key_status_by_peg_id(peg_id, 1)
-            print(f"[DB][UPDATE] peg_id={peg_id} → OUT result={result}")
-
+            set_key_status_by_peg_id(peg_id, 1)
             self.reload_keys_from_db()
             self.populate_keys()
 
@@ -216,9 +217,7 @@ class KeyDashboardScreen(BaseScreen):
             peg_id = ams_can.key_inserted_id
             print(f"\n[CAN] 🟢 KEY INSERTED peg_id={peg_id}")
 
-            result = set_key_status_by_peg_id(peg_id, 0)
-            print(f"[DB][UPDATE] peg_id={peg_id} → IN result={result}")
-
+            set_key_status_by_peg_id(peg_id, 0)
             self.reload_keys_from_db()
             self.populate_keys()
 
