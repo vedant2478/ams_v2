@@ -131,10 +131,9 @@ class KeyDashboardScreen(BaseScreen):
             # 🟢 HARDWARE SAYS KEY PRESENT
             if hw_peg_id:
                 print(
-                    f"[SYNC] 🟢 Key PRESENT strip={strip} pos={pos} peg_id={db_key_id}"
+                    f"[SYNC] 🟢 Key PRESENT strip={strip} pos={pos} peg_id={db_peg_id}"
                 )
-
-                # Trust hardware peg_id
+                print(hw_peg_id)
                 set_key_status_by_peg_id(hw_peg_id, 0)  # IN
 
             # 🔴 HARDWARE SAYS SLOT EMPTY
