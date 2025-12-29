@@ -12,13 +12,15 @@ from test import AMS_CAN
 class KeyItem(ButtonBehavior, BoxLayout):
     key_id = StringProperty("")
     key_name = StringProperty("")
-    status = StringProperty("IN")
+    status = StringProperty("IN")   # "IN" / "OUT"
     status_color = ListProperty([0, 1, 0, 1])
     dashboard = ObjectProperty(None)
 
-    def set_status(self, status):
-        self.status = status
-        if status == "IN":
+    def on_status(self, *_):
+        """
+        Automatically called whenever status changes
+        """
+        if self.status == "IN":
             self.status_color = [0, 1, 0, 1]   # green
         else:
             self.status_color = [1, 0, 0, 1]   # red
@@ -39,6 +41,7 @@ class KeyDashboardScreen(BaseScreen):
     keys_data = ListProperty()
 
     def __init__(self, **kwargs):
+        self.key_widgets = {} 
         super().__init__(**kwargs)
         self.keys_data = []
         self._can_poll_event = None
@@ -99,22 +102,39 @@ class KeyDashboardScreen(BaseScreen):
             })
 
     # -------------------- UI --------------------
-    def populate_keys(self):
-        grid = self.ids.key_grid
-        grid.clear_widgets()
+    def poll_can_events(self, _dt):
+        ams_can = self.manager.ams_can
 
-        for item in self.keys_data:
-            status_text = "IN" if item["status"] == 0 else "OUT"
+        # 🔴 KEY TAKEN
+        if ams_can.key_taken_event:
+            peg_id = ams_can.key_taken_id
+            print(f"[CAN] 🔴 KEY TAKEN peg_id={peg_id}")
 
-            widget = KeyItem(
-                key_id=item["key_id"],
-                key_name=item["key_name"],
-                dashboard=self
-            )
-            widget.set_status(status_text)
+            set_key_status_by_peg_id(peg_id, 1)  # OUT
+            self.reload_keys_from_db()
 
-            grid.add_widget(widget)
+            for item in self.keys_data:
+                widget = self.key_widgets.get(item["key_id"])
+                if widget:
+                    widget.status = "IN" if item["status"] == 0 else "OUT"
 
+            ams_can.key_taken_event = False
+
+        # 🟢 KEY INSERTED
+        if ams_can.key_inserted_event:
+            peg_id = ams_can.key_inserted_id
+            print(f"[CAN] 🟢 KEY INSERTED peg_id={peg_id}")
+
+            set_key_status_by_peg_id(peg_id, 0)  # IN
+            self.reload_keys_from_db()
+
+            for item in self.keys_data:
+                widget = self.key_widgets.get(item["key_id"])
+                if widget:
+                    widget.status = "IN" if item["status"] == 0 else "OUT"
+
+            ams_can.key_inserted_event = False
+            
     # -------------------- CAN POLL --------------------
     def poll_can_events(self, _dt):
         ams_can = self.manager.ams_can
