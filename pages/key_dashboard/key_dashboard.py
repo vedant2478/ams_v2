@@ -234,3 +234,43 @@ class KeyDashboardScreen(BaseScreen):
         self.manager.selected_key_id = key_id
         self.manager.selected_key_name = key_name
         self.manager.current = "activity_done"
+
+    # =====================================================
+    # MOVE BACK
+    # =====================================================
+
+    def go_back(self):
+        print("\n[UI] ⬅ Going back from KeyDashboardScreen")
+
+        # 1️⃣ Stop CAN polling
+        if self._can_poll_event:
+            print("[CAN] Stopping CAN polling")
+            self._can_poll_event.cancel()
+            self._can_poll_event = None
+
+        # 2️⃣ Unlock ALL keys + LEDs OFF (fail-safe)
+        ams_can = getattr(self.manager, "ams_can", None)
+        if ams_can:
+            print("[CAN] 🔓 Unlocking ALL keys before exit")
+
+            for strip_id in ams_can.key_lists or [1, 2]:
+                try:
+                    ams_can.unlock_all_positions(strip_id)
+                    ams_can.set_all_LED_OFF(strip_id)
+                except Exception as e:
+                    print(f"[CAN][WARN] Failed unlocking strip {strip_id}: {e}")
+
+            # 3️⃣ Cleanup CAN (important)
+            try:
+                print("[CAN] Cleaning up CAN interface")
+                ams_can.cleanup()
+            except Exception as e:
+                print(f"[CAN][WARN] CAN cleanup error: {e}")
+
+            # Remove reference
+            self.manager.ams_can = None
+
+        # 4️⃣ Navigate back
+        self.manager.transition.direction = "right"
+        self.manager.current = "activity"   # ⬅ previous screen name
+
