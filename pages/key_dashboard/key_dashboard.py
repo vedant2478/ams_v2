@@ -8,16 +8,18 @@ from db import get_keys_for_activity, set_key_status_by_peg_id
 from test import AMS_CAN
 
 
-# -------------------- UI ITEM --------------------
+# ==================== UI ITEM ====================
 class KeyItem(ButtonBehavior, BoxLayout):
     key_id = StringProperty("")
     key_name = StringProperty("")
-    status = StringProperty("IN")
+    status = StringProperty("IN")          # "IN" / "OUT"
     status_color = ListProperty([0, 1, 0, 1])
     dashboard = ObjectProperty(None)
 
-    def on_status(self, *_):
-        if self.status == "IN":
+    def set_status(self, status):
+        """Update text + color together"""
+        self.status = status
+        if status == "IN":
             self.status_color = [0, 1, 0, 1]   # green
         else:
             self.status_color = [1, 0, 0, 1]   # red
@@ -29,7 +31,7 @@ class KeyItem(ButtonBehavior, BoxLayout):
             )
 
 
-# -------------------- SCREEN --------------------
+# ==================== SCREEN ====================
 class KeyDashboardScreen(BaseScreen):
 
     activity_code = StringProperty("")
@@ -40,43 +42,49 @@ class KeyDashboardScreen(BaseScreen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.keys_data = []
-        self.key_widgets = {}
         self._can_poll_event = None
 
-    # -------------------- ENTER --------------------
+    # ==================== ENTER ====================
     def on_enter(self, *args):
         print("\n[UI] ▶ Entered KeyDashboardScreen")
 
         self.activity_info = getattr(self.manager, "activity_info", None)
         if not self.activity_info:
-            print("[UI] ❌ No activity info")
+            print("[UI] ❌ No activity info found")
             return
 
         self.activity_code = self.activity_info.get("code", "")
         self.activity_name = self.activity_info.get("name", "")
         self.time_remaining = str(self.activity_info.get("time_limit", 15))
 
-        # CAN init
+        # Create AMS_CAN once
         if not hasattr(self.manager, "ams_can") or self.manager.ams_can is None:
             print("[CAN] Creating AMS_CAN instance")
             self.manager.ams_can = AMS_CAN()
 
+        # Load DB → UI
         self.reload_keys_from_db()
         self.populate_keys()
+
+        # 🔒 Lock everything first
+        self.lock_all_other_keys()
+
+        # 🔓 Unlock only activity keys
         self.unlock_all_displayed_keys()
 
+        # Start CAN polling
         if self._can_poll_event is None:
             self._can_poll_event = Clock.schedule_interval(
                 self.poll_can_events, 0.2
             )
 
-    # -------------------- EXIT --------------------
+    # ==================== EXIT ====================
     def on_leave(self, *args):
         if self._can_poll_event:
             self._can_poll_event.cancel()
             self._can_poll_event = None
 
-    # -------------------- DB LOAD --------------------
+    # ==================== DB ====================
     def reload_keys_from_db(self):
         activity_id = self.activity_info.get("id")
         keys = get_keys_for_activity(activity_id)
@@ -95,16 +103,15 @@ class KeyDashboardScreen(BaseScreen):
             self.keys_data.append({
                 "key_id": str(key["id"]),
                 "key_name": key["name"],
-                "status": key["status"],
+                "status": key["status"],   # 0=IN, 1=OUT
                 "strip": key.get("strip"),
                 "position": key.get("position"),
             })
 
-    # -------------------- UI BUILD --------------------
+    # ==================== UI ====================
     def populate_keys(self):
         grid = self.ids.key_grid
         grid.clear_widgets()
-        self.key_widgets.clear()
 
         for item in self.keys_data:
             status_text = "IN" if item["status"] == 0 else "OUT"
@@ -112,14 +119,20 @@ class KeyDashboardScreen(BaseScreen):
             widget = KeyItem(
                 key_id=item["key_id"],
                 key_name=item["key_name"],
-                status=status_text,
                 dashboard=self
             )
+            widget.set_status(status_text)
 
-            self.key_widgets[item["key_id"]] = widget
             grid.add_widget(widget)
 
-    # -------------------- CAN EVENTS --------------------
+        print("\n[UI][STATE] Current keys:")
+        for k in self.keys_data:
+            print(
+                f"   - {k['key_name']} (id={k['key_id']}) → "
+                f"{'IN' if k['status'] == 0 else 'OUT'}"
+            )
+
+    # ==================== CAN POLLING ====================
     def poll_can_events(self, _dt):
         ams_can = self.manager.ams_can
 
@@ -128,12 +141,16 @@ class KeyDashboardScreen(BaseScreen):
             peg_id = ams_can.key_taken_id
             print(f"\n[CAN] 🔴 KEY TAKEN peg_id={peg_id}")
 
-            result = set_key_status_by_peg_id(peg_id, 1)
-            print(f"[DB][UPDATE] peg_id={peg_id} → status=OUT result={result}")
+            key_id = set_key_status_by_peg_id(peg_id, 1)  # OUT
 
-            self.reload_keys_from_db()
-            self._refresh_widgets()
-            self._print_ui_state()
+            if key_id:
+                print(f"[DB][UPDATE] peg_id={peg_id} → status=OUT key_id={key_id}")
+
+                if any(k["key_id"] == str(key_id) for k in self.keys_data):
+                    self.reload_keys_from_db()
+                    self.populate_keys()
+                else:
+                    print("[UI] ℹ️ Key not part of this activity")
 
             ams_can.key_taken_event = False
 
@@ -142,35 +159,36 @@ class KeyDashboardScreen(BaseScreen):
             peg_id = ams_can.key_inserted_id
             print(f"\n[CAN] 🟢 KEY INSERTED peg_id={peg_id}")
 
-            result = set_key_status_by_peg_id(peg_id, 0)
-            print(f"[DB][UPDATE] peg_id={peg_id} → status=IN result={result}")
+            key_id = set_key_status_by_peg_id(peg_id, 0)  # IN
 
-            self.reload_keys_from_db()
-            self._refresh_widgets()
-            self._print_ui_state()
+            if key_id:
+                print(f"[DB][UPDATE] peg_id={peg_id} → status=IN key_id={key_id}")
+
+                if any(k["key_id"] == str(key_id) for k in self.keys_data):
+                    self.reload_keys_from_db()
+                    self.populate_keys()
+                else:
+                    print("[UI] ℹ️ Key not part of this activity")
 
             ams_can.key_inserted_event = False
 
-    # -------------------- UI REFRESH --------------------
-    def _refresh_widgets(self):
-        for item in self.keys_data:
-            widget = self.key_widgets.get(item["key_id"])
-            if widget:
-                widget.status = "IN" if item["status"] == 0 else "OUT"
+    # ==================== LOCK / UNLOCK ====================
+    def lock_all_other_keys(self):
+        ams_can = self.manager.ams_can
 
-    def _print_ui_state(self):
-        print("\n[UI][STATE] Current keys:")
-        for item in self.keys_data:
-            status_text = "IN" if item["status"] == 0 else "OUT"
-            print(
-                f"   - {item['key_name']} "
-                f"(id={item['key_id']}) → {status_text}"
-            )
+        if not ams_can.key_lists:
+            print("[CAN] ⚠️ No key strips detected yet")
+            return
 
-    # -------------------- UNLOCK --------------------
+        print("\n[CAN] 🔒 Locking ALL keys & turning LEDs OFF")
+
+        for strip_id in ams_can.key_lists:
+            ams_can.lock_all_positions(strip_id)
+            ams_can.set_all_LED_OFF(strip_id)
+
     def unlock_all_displayed_keys(self):
         ams_can = self.manager.ams_can
-        print(f"\n[CAN] Unlocking {len(self.keys_data)} keys")
+        print(f"\n[CAN] 🔓 Unlocking {len(self.keys_data)} activity keys")
 
         for item in self.keys_data:
             if item["strip"] and item["position"]:
@@ -179,7 +197,7 @@ class KeyDashboardScreen(BaseScreen):
                     int(item["position"])
                 )
 
-    # -------------------- NAV --------------------
+    # ==================== NAV ====================
     def open_done_page(self, key_name, status, key_id):
         self.manager.selected_key_id = key_id
         self.manager.selected_key_name = key_name
