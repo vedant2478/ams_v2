@@ -1,31 +1,30 @@
-# pages/key_dashboard/key_dashboard.py
-
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.properties import StringProperty, ListProperty, ObjectProperty
 from kivy.clock import Clock
 
 from components.base_screen import BaseScreen
-from db import get_keys_for_activity, set_key_status_by_peg_id
+from db import get_keys_for_activity, toggle_key_status_and_get_position
 from test import AMS_CAN
 
 
-# -------------------------
-# Individual Key Widget
-# -------------------------
+# ---------------------------
+# Key Widget
+# ---------------------------
 class KeyItem(ButtonBehavior, BoxLayout):
-    key_name = StringProperty("")
-    status = StringProperty("IN")   # "IN" or "OUT"
-    status_color = ListProperty([0, 1, 0, 1])  # green default
-    dashboard = ObjectProperty(None)
     key_id = StringProperty("")
+    key_name = StringProperty("")
+    status = StringProperty("IN")
+    status_color = ListProperty([0, 1, 0, 1])  # default GREEN
+    dashboard = ObjectProperty(None)
 
-    def on_status(self, *_):
-        """Automatically update color when status changes"""
-        if self.status.upper() == "IN":
-            self.status_color = [0, 1, 0, 1]   # Green
+    def set_status(self, status):
+        """Explicitly set status and color (NO on_status usage)"""
+        self.status = status
+        if status == "IN":
+            self.status_color = [0, 1, 0, 1]   # green
         else:
-            self.status_color = [1, 0, 0, 1]   # Red
+            self.status_color = [1, 0, 0, 1]   # red
 
     def on_release(self):
         if self.dashboard:
@@ -34,55 +33,43 @@ class KeyItem(ButtonBehavior, BoxLayout):
             )
 
 
-# -------------------------
-# Key Dashboard Screen
-# -------------------------
+# ---------------------------
+# Dashboard Screen
+# ---------------------------
 class KeyDashboardScreen(BaseScreen):
 
     activity_code = StringProperty("")
     activity_name = StringProperty("")
     time_remaining = StringProperty("15")
-    keys_data = ListProperty()
+    keys_data = ListProperty([])
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.keys_data = []
-        self.key_widgets = {}  # 🔥 key_id → KeyItem reference
-
-    # -------------------------
-    # Screen lifecycle
-    # -------------------------
     def on_enter(self, *args):
-        """Called when screen becomes visible"""
-
         self.activity_info = getattr(self.manager, "activity_info", None)
 
         if not self.activity_info:
-            print("⚠️ No activity info found")
+            self.keys_data = []
+            self.populate_keys()
             return
 
         self.activity_code = self.activity_info.get("code", "")
         self.activity_name = self.activity_info.get("name", "")
         self.time_remaining = str(self.activity_info.get("time_limit", 15))
 
-        # Load keys from DB
-        self.load_keys_from_db()
-
-        # Unlock keys physically
+        self.reload_keys_from_db()
+        self.populate_keys()
         self.unlock_all_displayed_keys()
 
-        # Start CAN polling loop (10 times/sec)
-        Clock.schedule_interval(self.check_can_events, 0.1)
+        # Start CAN polling loop
+        Clock.schedule_interval(self.poll_can_events, 0.3)
 
     def on_leave(self, *args):
-        """Stop polling when screen exits"""
-        Clock.unschedule(self.check_can_events)
+        Clock.unschedule(self.poll_can_events)
 
-    # -------------------------
-    # Load + populate UI
-    # -------------------------
-    def load_keys_from_db(self):
-        activity_id = self.activity_info["id"]
+    # ---------------------------
+    # DATABASE + UI
+    # ---------------------------
+    def reload_keys_from_db(self):
+        activity_id = self.activity_info.get("id")
         keys = get_keys_for_activity(activity_id)
 
         self.keys_data = []
@@ -90,92 +77,76 @@ class KeyDashboardScreen(BaseScreen):
             self.keys_data.append({
                 "key_id": str(key["id"]),
                 "key_name": key["name"],
-                "status": key["status"],  # 0 IN / 1 OUT
+                "status": "IN" if key["status"] == 0 else "OUT",
                 "strip": key.get("strip"),
                 "position": key.get("position"),
             })
 
-        self.populate_keys()
-
     def populate_keys(self):
         grid = self.ids.key_grid
         grid.clear_widgets()
-        self.key_widgets.clear()
 
         for item in self.keys_data:
-            status_text = "IN" if item["status"] == 0 else "OUT"
-
             widget = KeyItem(
                 key_id=item["key_id"],
                 key_name=item["key_name"],
-                status=status_text,
                 dashboard=self,
             )
-
-            # 🔥 SAVE REFERENCE FOR REAL-TIME UPDATE
-            self.key_widgets[item["key_id"]] = widget
+            widget.set_status(item["status"])
             grid.add_widget(widget)
 
-    # -------------------------
-    # CAN event polling
-    # -------------------------
-    def check_can_events(self, dt):
-        if not hasattr(self.manager, "ams_can"):
-            return
-
-        ams_can = self.manager.ams_can
-
-        # -------- KEY TAKEN --------
-        if ams_can.key_taken_event:
-            peg_id = ams_can.key_taken_id
-            print(f"[CAN] 🔴 KEY TAKEN peg_id={peg_id}")
-
-            key_id = set_key_status_by_peg_id(peg_id, 1)  # OUT
-
-            if key_id:
-                widget = self.key_widgets.get(str(key_id))
-                if widget:
-                    widget.status = "OUT"   # 🔥 UI UPDATE
-
-            ams_can.key_taken_event = False
-
-        # -------- KEY INSERTED --------
-        if ams_can.key_inserted_event:
-            peg_id = ams_can.key_inserted_id
-            print(f"[CAN] 🟢 KEY INSERTED peg_id={peg_id}")
-
-            key_id = set_key_status_by_peg_id(peg_id, 0)  # IN
-
-            if key_id:
-                widget = self.key_widgets.get(str(key_id))
-                if widget:
-                    widget.status = "IN"    # 🔥 UI UPDATE
-
-            ams_can.key_inserted_event = False
-
-    # -------------------------
-    # Unlock hardware keys
-    # -------------------------
+    # ---------------------------
+    # CAN INTEGRATION
+    # ---------------------------
     def unlock_all_displayed_keys(self):
-        if not hasattr(self.manager, "ams_can"):
-            print("Creating AMS_CAN instance")
+        if not hasattr(self.manager, "ams_can") or self.manager.ams_can is None:
             self.manager.ams_can = AMS_CAN()
 
         ams_can = self.manager.ams_can
 
         for item in self.keys_data:
-            strip = item.get("strip")
-            pos = item.get("position")
-            if strip and pos:
-                ams_can.unlock_single_key(int(strip), int(pos))
+            if item["strip"] and item["position"]:
+                ams_can.unlock_single_key(
+                    int(item["strip"]),
+                    int(item["position"])
+                )
 
-    # -------------------------
-    # Navigation
-    # -------------------------
-    def go_back(self):
-        self.manager.transition.direction = "right"
-        self.manager.current = "activity_code"
+    def poll_can_events(self, _dt):
+        ams_can = getattr(self.manager, "ams_can", None)
+        if not ams_can:
+            return
 
+        # ---------------- KEY TAKEN ----------------
+        if ams_can.key_taken_event:
+            peg_id = ams_can.key_taken_id
+            print(f"[CAN] 🔴 KEY TAKEN peg_id={peg_id}")
+
+            updated = toggle_key_status_and_get_position(peg_id)
+            if updated:
+                print(f"[DB] ✅ Updated key_id={updated['id']} → OUT")
+
+                self.reload_keys_from_db()
+                self.populate_keys()
+
+            ams_can.key_taken_event = False
+
+        # ---------------- KEY INSERTED ----------------
+        if ams_can.key_inserted_event:
+            peg_id = ams_can.key_inserted_id
+            print(f"[CAN] 🟢 KEY INSERTED peg_id={peg_id}")
+
+            updated = toggle_key_status_and_get_position(peg_id)
+            if updated:
+                print(f"[DB] ✅ Updated key_id={updated['id']} → IN")
+
+                self.reload_keys_from_db()
+                self.populate_keys()
+
+            ams_can.key_inserted_event = False
+
+    # ---------------------------
+    # NAVIGATION
+    # ---------------------------
     def open_done_page(self, key_name, status, key_id):
         self.manager.selected_key_id = key_id
         self.manager.selected_key_name = key_name
@@ -186,3 +157,7 @@ class KeyDashboardScreen(BaseScreen):
 
         self.manager.transition.direction = "left"
         self.manager.current = "activity_done"
+
+    def go_back(self):
+        self.manager.transition.direction = "right"
+        self.manager.current = "activity_code"
