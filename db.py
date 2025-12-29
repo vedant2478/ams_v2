@@ -293,7 +293,7 @@ def verify_activity_code(user_id, activity_code):
         return {"valid": False, "message": str(e)}
 
 def get_keys_for_activity(activity_id):
-    """Get detailed key information for an activity (WITH peg_id)"""
+    """Get detailed key information for an activity"""
     try:
         conn = sqlite3.connect(DB_PATH)
         cur = conn.cursor()
@@ -312,7 +312,8 @@ def get_keys_for_activity(activity_id):
 
         key_ids = [k.strip() for k in activity[0].split(',')]
         key_names_from_activity = (
-            [k.strip() for k in activity[1].split(',')] if activity[1] else []
+            [k.strip() for k in activity[1].split(',')]
+            if activity[1] else []
         )
 
         keys_list = []
@@ -329,7 +330,7 @@ def get_keys_for_activity(activity_id):
                     keyAtDoor,
                     keyStrip,
                     keyPosition,
-                    pegId              -- ✅ IMPORTANT
+                    peg_id          -- ✅ CORRECT COLUMN NAME
                 FROM keys
                 WHERE id = ? AND deletedAt IS NULL
             """, (key_id,))
@@ -343,19 +344,22 @@ def get_keys_for_activity(activity_id):
                     "description": row[2],
                     "color": row[3],
                     "location": row[4],
-                    "status": row[5],      # 0=IN, 1=OUT
+                    "status": row[5],     # 0=IN, 1=OUT
                     "door": row[6],
                     "strip": row[7],
                     "position": row[8],
-                    "peg_id": row[9],      # ✅ ADDED
+                    "peg_id": row[9],     # ✅ use peg_id
                 })
             else:
-                # fallback
+                # fallback if key row missing
+                key_name = (
+                    key_names_from_activity[i]
+                    if i < len(key_names_from_activity)
+                    else f"Key {key_id}"
+                )
                 keys_list.append({
                     "id": key_id,
-                    "name": key_names_from_activity[i]
-                            if i < len(key_names_from_activity)
-                            else f"Key {key_id}",
+                    "name": key_name,
                     "description": "",
                     "color": "",
                     "location": "",
@@ -363,7 +367,7 @@ def get_keys_for_activity(activity_id):
                     "door": None,
                     "strip": None,
                     "position": None,
-                    "peg_id": None,        # ✅ SAFE DEFAULT
+                    "peg_id": None,
                 })
 
         conn.close()
