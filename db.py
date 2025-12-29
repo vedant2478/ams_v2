@@ -52,6 +52,45 @@ def toggle_key_status_and_get_position(key_id):
         "position": row[8],
     }
 
+
+def toggle_key_status_by_peg_id(peg_id):
+    """
+    Toggle keyStatus using peg_id coming from CAN hardware.
+    peg_id == hardware key fob ID
+    """
+
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+
+    # Map peg_id -> key record
+    cur.execute("""
+        SELECT id, keyStatus
+        FROM keys
+        WHERE peg_id = ? AND deletedAt IS NULL
+    """, (int(peg_id),))
+
+    row = cur.fetchone()
+    if not row:
+        print(f"[DB] ❌ No key found for peg_id={peg_id}")
+        conn.close()
+        return None
+
+    key_id, current_status = row
+    new_status = 0 if current_status == 1 else 1
+
+    cur.execute("""
+        UPDATE keys
+        SET keyStatus = ?
+        WHERE id = ?
+    """, (new_status, key_id))
+
+    conn.commit()
+    conn.close()
+
+    print(f"[DB] ✅ Updated key_id={key_id} → status={new_status}")
+    return key_id
+
+
 def get_site_name():
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
