@@ -4,7 +4,7 @@ from kivy.properties import StringProperty, ListProperty, ObjectProperty
 from kivy.clock import Clock
 
 from components.base_screen import BaseScreen
-from db import get_keys_for_activity, toggle_key_status_by_peg_id
+from db import get_keys_for_activity, set_key_status_by_peg_id
 from test import AMS_CAN
 
 
@@ -67,13 +67,13 @@ class KeyDashboardScreen(BaseScreen):
         keys = get_keys_for_activity(activity_id)
 
         self.keys_data = []
-        for key in keys:
+        for k in keys:
             self.keys_data.append({
-                "key_id": str(key["id"]),
-                "key_name": key["name"],
-                "status": key["status"],   # 0 / 1
-                "strip": key.get("strip"),
-                "position": key.get("position"),
+                "key_id": str(k["id"]),
+                "key_name": k["name"],
+                "status": k["status"],
+                "strip": k["strip"],
+                "position": k["position"],
             })
 
         self.populate_keys()
@@ -92,33 +92,33 @@ class KeyDashboardScreen(BaseScreen):
             grid.add_widget(widget)
 
     # --------------------------------------------------
-    # CAN EVENTS → DB → UI
+    # CAN → DB → UI (EXPLICIT STATE)
     # --------------------------------------------------
     def check_can_events(self, dt):
         ams_can = self.manager.ams_can
 
-        # KEY TAKEN
+        # KEY TAKEN → OUT
         if ams_can.key_taken_event:
             peg_id = ams_can.key_taken_id
             print(f"[CAN] 🔴 KEY TAKEN peg_id={peg_id}")
 
-            toggle_key_status_by_peg_id(peg_id)
+            set_key_status_by_peg_id(peg_id, 1)
             self.refresh_keys_from_db()
 
             ams_can.key_taken_event = False
 
-        # KEY INSERTED
+        # KEY INSERTED → IN
         if ams_can.key_inserted_event:
             peg_id = ams_can.key_inserted_id
             print(f"[CAN] 🟢 KEY INSERTED peg_id={peg_id}")
 
-            toggle_key_status_by_peg_id(peg_id)
+            set_key_status_by_peg_id(peg_id, 0)
             self.refresh_keys_from_db()
 
             ams_can.key_inserted_event = False
 
     # --------------------------------------------------
-    # Unlock Keys on Enter
+    # Unlock keys on screen enter
     # --------------------------------------------------
     def unlock_all_displayed_keys(self):
         ams_can = self.manager.ams_can

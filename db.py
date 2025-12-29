@@ -53,19 +53,18 @@ def toggle_key_status_and_get_position(key_id):
     }
 
 
-def toggle_key_status_by_peg_id(peg_id):
+def set_key_status_by_peg_id(peg_id, status):
     """
-    Toggle keyStatus using peg_id coming from CAN hardware.
-    peg_id == hardware key fob ID
+    Set keyStatus explicitly using peg_id from CAN.
+    status: 0 = IN, 1 = OUT
     """
 
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
 
-    # Map peg_id -> key record
+    # Map peg_id → key id
     cur.execute("""
-        SELECT id, keyStatus
-        FROM keys
+        SELECT id FROM keys
         WHERE peg_id = ? AND deletedAt IS NULL
     """, (int(peg_id),))
 
@@ -75,20 +74,67 @@ def toggle_key_status_by_peg_id(peg_id):
         conn.close()
         return None
 
-    key_id, current_status = row
-    new_status = 0 if current_status == 1 else 1
+    key_id = row[0]
 
     cur.execute("""
         UPDATE keys
         SET keyStatus = ?
         WHERE id = ?
-    """, (new_status, key_id))
+    """, (status, key_id))
 
     conn.commit()
     conn.close()
 
-    print(f"[DB] ✅ Updated key_id={key_id} → status={new_status}")
+    print(f"[DB] ✅ key_id={key_id} set to status={status}")
     return key_id
+
+
+def get_keys_for_activity(activity_id):
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT keys, keyNames
+        FROM activities
+        WHERE id = ? AND deletedAt IS NULL
+    """, (activity_id,))
+
+    activity = cur.fetchone()
+    if not activity or not activity[0]:
+        conn.close()
+        return []
+
+    key_ids = [k.strip() for k in activity[0].split(",")]
+    key_names = activity[1].split(",") if activity[1] else []
+
+    keys_data = []
+    for i, key_id in enumerate(key_ids):
+        cur.execute("""
+            SELECT id, keyName, keyStatus, keyStrip, keyPosition
+            FROM keys
+            WHERE id = ? AND deletedAt IS NULL
+        """, (key_id,))
+
+        row = cur.fetchone()
+        if row:
+            keys_data.append({
+                "id": row[0],
+                "name": row[1],
+                "status": row[2],  # 0=IN, 1=OUT
+                "strip": row[3],
+                "position": row[4],
+            })
+        else:
+            keys_data.append({
+                "id": key_id,
+                "name": key_names[i] if i < len(key_names) else f"Key {key_id}",
+                "status": 0,
+                "strip": None,
+                "position": None,
+            })
+
+    conn.close()
+    return keys_data
 
 
 def get_site_name():
