@@ -109,30 +109,48 @@ class KeyDashboardScreen(BaseScreen):
     # =====================================================
     def sync_hardware_to_db(self):
         ams_can = self.manager.ams_can
-
-        print("\n[SYNC] 🔄 Syncing hardware state to DB")
-
-        # Load DB keys first
         activity_id = self.activity_info.get("id")
+
+        # Keys assigned to this activity
         db_keys = get_keys_for_activity(activity_id)
+
+        print("\n[SYNC] 🔄 Syncing hardware state to DB (slot-based)")
 
         for key in db_keys:
             strip = key.get("strip")
             pos = key.get("position")
+            db_key_id = key.get("id")
+            db_peg_id = key.get("peg_id")   # ⬅️ REAL peg id from DB
 
             if not strip or not pos:
                 continue
 
-            peg_id = ams_can.get_key_id(strip, pos)
+            # Ask hardware what is present in this slot
+            hw_peg_id = ams_can.get_key_id(strip, pos)
 
-            # ✅ KEY PRESENT → update using REAL peg_id
-            if peg_id:
-                print(f"[SYNC] 🟢 Key PRESENT strip={strip} pos={pos} peg_id={peg_id}")
-                set_key_status_by_peg_id(peg_id, 0)
+            # 🟢 HARDWARE SAYS KEY PRESENT
+            if hw_peg_id:
+                print(
+                    f"[SYNC] 🟢 Key PRESENT strip={strip} pos={pos} peg_id={hw_peg_id}"
+                )
 
-            # ❌ KEY NOT PRESENT → DO NOTHING (IMPORTANT)
+                # Trust hardware peg_id
+                set_key_status_by_peg_id(hw_peg_id, 0)  # IN
+
+            # 🔴 HARDWARE SAYS SLOT EMPTY
             else:
-                print(f"[SYNC] 🔴 Slot empty strip={strip} pos={pos} (no DB update)")
+                print(
+                    f"[SYNC] 🔴 Slot empty strip={strip} pos={pos} "
+                    f"→ DB key_id={db_key_id} peg_id={db_peg_id} OUT"
+                )
+
+                # Use DB peg_id (NOT slot number)
+                if db_peg_id:
+                    set_key_status_by_peg_id(db_peg_id, 1)  # OUT
+                else:
+                    print(
+                        f"[SYNC][WARN] No peg_id in DB for key_id={db_key_id}"
+                    )
 
     # =====================================================
     # DATABASE
