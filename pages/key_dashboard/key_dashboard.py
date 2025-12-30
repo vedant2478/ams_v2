@@ -23,12 +23,11 @@ class KeyItem(ButtonBehavior, BoxLayout):
         self.status_text = status   # ✅ FIX: update the bound property
         self.status_color = [0, 1, 0, 1] if status == "IN" else [1, 0, 0, 1]
 
-
     def on_release(self):
         if self.dashboard:
             self.dashboard.open_done_page(
                 self.key_name,
-                self.status,
+                self.status_text,
                 self.key_id
             )
 
