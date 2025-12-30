@@ -10,6 +10,9 @@ from components.base_screen import BaseScreen
 from db import get_keys_for_activity, set_key_status_by_peg_id
 from test import AMS_CAN
 
+# 🔒 DOOR LIMIT SWITCH (SINGLE SOURCE OF TRUTH)
+from csi_ams.utils.commons import read_limit_switch, LIMIT_SWITCH
+
 
 # =========================================================
 # KEY ITEM (UI COMPONENT)
@@ -46,14 +49,12 @@ class KeyDashboardScreen(BaseScreen):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-
         self.key_widgets = {}
         self._can_poll_event = None
 
-        # Door monitoring
-        self._door_proc = None
-        self._last_door_state = None
+        # 🚪 door tracking
         self._door_monitor_started = False
+        self._last_door_state = None
 
     # -----------------------------------------------------
     # SCREEN ENTER
@@ -70,23 +71,23 @@ class KeyDashboardScreen(BaseScreen):
         self.activity_name = self.activity_info.get("name", "")
         self.time_remaining = str(self.activity_info.get("time_limit", 15))
 
-        # 🔧 Ensure CAN is up
+        # 🔧 ENSURE CAN
         self.ensure_can_up()
 
-        # 🚍 Create CAN instance ONCE
+        # 🚍 INIT CAN
         if not hasattr(self.manager, "ams_can") or self.manager.ams_can is None:
             print("[CAN] Creating AMS_CAN instance")
             self.manager.ams_can = AMS_CAN()
             self._setup_can_and_lock_all()
 
-        # 📦 Load DB → UI
+        # 📦 LOAD DATA
         self.reload_keys_from_db()
         self.populate_keys()
 
-        # 🔓 Unlock allowed keys
+        # 🔓 UNLOCK KEYS
         self.unlock_activity_keys()
 
-        # 🔥 Trigger solenoid (root, non-blocking)
+        # 🔥 TRIGGER SOLENOID (NON-BLOCKING)
         try:
             subprocess.Popen(
                 ["sudo", "python3", "solenoid.py", "1"],
@@ -96,13 +97,10 @@ class KeyDashboardScreen(BaseScreen):
         except Exception as e:
             print("[HW][ERROR]", e)
 
-        # ⏳ Let hardware stabilize
-        sleep(0.3)
-
-        # 🚪 START DOOR MONITOR **NOW**
+        # 🚪 START DOOR MONITOR (AFTER SOLENOID)
         self.start_door_monitor()
 
-        # 🔁 Start polling
+        # 🔁 START POLLING
         if self._can_poll_event is None:
             self._can_poll_event = Clock.schedule_interval(
                 self.poll_can_events, 0.2
@@ -112,7 +110,6 @@ class KeyDashboardScreen(BaseScreen):
     # ENSURE CAN INTERFACE
     # -----------------------------------------------------
     def ensure_can_up(self):
-        print("[CAN] Ensuring can0 is UP")
         subprocess.run(
             ["sudo", "ip", "link", "set", "can0", "down"],
             stdout=subprocess.DEVNULL,
@@ -127,55 +124,32 @@ class KeyDashboardScreen(BaseScreen):
         sleep(0.5)
 
     # -----------------------------------------------------
-    # START DOOR MONITOR (AFTER SOLENOID)
+    # DOOR MONITOR (START ONCE)
     # -----------------------------------------------------
     def start_door_monitor(self):
         if self._door_monitor_started:
             return
 
-        try:
-            self._door_proc = subprocess.Popen(
-                ["sudo", "python3", "door_status.py"],
-                cwd="/home/rock/Desktop/ams_v2",
-                stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
-                text=True,
-                bufsize=1
-            )
-            self._door_monitor_started = True
-            self._last_door_state = None
-            print("[DOOR] Door monitor started")
-        except Exception as e:
-            print("[DOOR][ERROR]", e)
+        self._door_monitor_started = True
+        state = read_limit_switch(LIMIT_SWITCH)
+        self._last_door_state = state
 
-    # -----------------------------------------------------
-    # READ DOOR STATUS (0 / 1)
-    # -----------------------------------------------------
+        print("[DOOR] Door monitor started")
+        print("[DOOR] Initial:", "OPEN" if state == 1 else "CLOSED")
+
     def monitor_door_status(self):
-        if not self._door_proc:
+        if not self._door_monitor_started:
             return
 
-        line = self._door_proc.stdout.readline().strip()
-        if not line:
-            return
-
-        try:
-            state = int(line)
-        except ValueError:
-            return
-
-        # 1 = OPEN, 0 = CLOSED
-        if self._last_door_state is None:
-            self._last_door_state = state
-            print("[DOOR] Initial:", "OPEN" if state == 1 else "CLOSED")
-            return
+        state = read_limit_switch(LIMIT_SWITCH)
 
         if state != self._last_door_state:
-            self._last_door_state = state
             if state == 1:
                 print("[DOOR] 🚪 OPEN")
             else:
                 print("[DOOR] 🔒 CLOSED")
+
+            self._last_door_state = state
 
     # -----------------------------------------------------
     # SCREEN EXIT
@@ -185,17 +159,11 @@ class KeyDashboardScreen(BaseScreen):
             self._can_poll_event.cancel()
             self._can_poll_event = None
 
-        if self._door_proc:
-            self._door_proc.terminate()
-            self._door_proc = None
-            self._door_monitor_started = False
-            print("[DOOR] Door monitor stopped")
-
     # -----------------------------------------------------
     # BACK BUTTON
     # -----------------------------------------------------
     def go_back(self):
-        print("[UI] ◀ Back pressed")
+        print("[UI] ◀ Back pressed → unlocking all keys")
 
         try:
             ams_can = self.manager.ams_can
@@ -213,8 +181,6 @@ class KeyDashboardScreen(BaseScreen):
     # -----------------------------------------------------
     def _setup_can_and_lock_all(self):
         ams_can = self.manager.ams_can
-
-        print("[CAN][INIT] Waiting for CAN boot…")
         sleep(2)
 
         print("[CAN][SECURITY] Locking ALL keys")
@@ -284,15 +250,12 @@ class KeyDashboardScreen(BaseScreen):
     def poll_can_events(self, _dt):
         ams_can = self.manager.ams_can
 
-        # 🚪 Door monitoring
-        if self._door_monitor_started:
-            self.monitor_door_status()
+        # 🚪 DOOR
+        self.monitor_door_status()
 
         # 🔴 KEY TAKEN
         if ams_can.key_taken_event:
             peg_id = ams_can.key_taken_id
-            print(f"[CAN] 🔴 KEY TAKEN peg_id={peg_id}")
-
             set_key_status_by_peg_id(peg_id, 1)
             self.reload_keys_from_db()
             self.update_key_widgets()
@@ -301,8 +264,6 @@ class KeyDashboardScreen(BaseScreen):
         # 🟢 KEY INSERTED
         if ams_can.key_inserted_event:
             peg_id = ams_can.key_inserted_id
-            print(f"[CAN] 🟢 KEY INSERTED peg_id={peg_id}")
-
             set_key_status_by_peg_id(peg_id, 0)
             self.reload_keys_from_db()
             self.update_key_widgets()
