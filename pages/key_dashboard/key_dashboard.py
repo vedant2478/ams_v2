@@ -240,7 +240,7 @@ class KeyDashboardScreen(BaseScreen):
         ams_can = self.manager.ams_can
 
         # 👀 Monitor door state
-        self.monitor_door_status()
+        
 
         # 🔴 KEY TAKEN
         if ams_can.key_taken_event:
