@@ -93,7 +93,7 @@ class KeyDashboardScreen(BaseScreen):
         # 🔥 CALL HARDWARE SCRIPT (ROOT)
         try:
             subprocess.Popen(
-                ["sudo", "python3", "solenoid.py"],
+                ["sudo", "python3", "solenoid.py","1"],
                 cwd="/home/rock/Desktop/ams_v2"
             )
             print("[HW] Solenoid triggered")
