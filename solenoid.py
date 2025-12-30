@@ -34,11 +34,11 @@ if state == 1:
     print("[GPIO] Activating solenoids")
     rl1.write(1)
     rl2.write(1)
-    buzzer.write(1)
+    
 else:
     print("[GPIO] Deactivating solenoids")
     rl1.write(0)
     rl2.write(0)
-    buzzer.write(0)
+  
 
 time.sleep(0.2)
