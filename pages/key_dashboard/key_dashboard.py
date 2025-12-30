@@ -3,6 +3,7 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.properties import StringProperty, ListProperty, ObjectProperty
 from kivy.clock import Clock
+import mraa
 
 from components.base_screen import BaseScreen
 from db import get_keys_for_activity, set_key_status_by_peg_id
@@ -40,6 +41,14 @@ class KeyItem(ButtonBehavior, BoxLayout):
 # DASHBOARD SCREEN
 # =========================================================
 class KeyDashboardScreen(BaseScreen):
+
+    buzzer = mraa.Gpio(37)
+    RL1 =  mraa.Gpio(38)
+    RL2 = mraa.Gpio(40)
+
+    buzzer.dir(mraa.DIR_OUT)
+    RL1.dir(mraa.DIR_OUT)
+    RL2.dir(mraa.DIR_OUT)
 
     activity_code = StringProperty("")
     activity_name = StringProperty("")
@@ -79,7 +88,10 @@ class KeyDashboardScreen(BaseScreen):
 
         # Unlock only allowed keys
         self.unlock_activity_keys()
-
+        sleep(1)
+        self.RL1.write(1)
+        self.RL2.write(1)
+        sleep(0.5)
         # Start CAN polling
         if self._can_poll_event is None:
             self._can_poll_event = Clock.schedule_interval(
