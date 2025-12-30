@@ -1,9 +1,14 @@
 #:kivy 2.1.0
+#:import dp kivy.metrics.dp
 
+# =========================================================
+# MAIN SCREEN
+# =========================================================
 <KeyDashboardScreen>:
     BoxLayout:
         orientation: "vertical"
 
+        # ================= HEADER =================
         Header:
             size_hint_y: None
             height: dp(64)
@@ -17,50 +22,109 @@
                 text: "Back"
                 size_hint_x: None
                 width: dp(100)
-                background_color: 0,0,0,0
+                background_normal: ""
+                background_color: 0, 0, 0, 0
+                color: 0.90, 0.95, 1, 1
+                font_size: "16sp"
                 on_release: root.go_back()
 
             Widget:
 
-        BoxLayout:
+        # ================= BODY =================
+        FloatLayout:
             size_hint_y: 1
-            padding: dp(24)
 
+            # ---------- BACKGROUND ----------
             GradientBackground:
                 pos: self.pos
                 size: self.size
 
+            # ---------- CONTENT ----------
             BoxLayout:
                 orientation: "vertical"
-                spacing: dp(16)
+                size_hint: 0.9, 0.9
+                pos_hint: {"center_x": 0.5, "center_y": 0.5}
+                padding: dp(20)
+                spacing: dp(15)
 
+                # -------- TITLE --------
                 Label:
                     text: "KEY AUTHORIZATION\nDASHBOARD"
                     font_size: "24sp"
                     bold: True
-                    size_hint_y: None
-                    height: self.texture_size[1] + dp(12)
-                    text_size: self.width, None
+                    color: 0.92, 0.96, 0.99, 1
                     halign: "center"
                     valign: "middle"
+                    size_hint_y: None
+                    height: self.texture_size[1] + dp(20)
+                    text_size: self.width, None
 
+                # -------- ACTIVITY INFO --------
                 BoxLayout:
                     size_hint_y: None
                     height: dp(56)
                     spacing: dp(12)
 
-                    Label:
-                        text: "ACTIVITY CODE: " + root.activity_code
-                        bold: True
+                    BoxLayout:
+                        padding: dp(10)
+                        size_hint_x: 0.6
+                        canvas.before:
+                            Color:
+                                rgba: 0.18, 0.65, 0.31, 1
+                            RoundedRectangle:
+                                radius: [20]
+                                pos: self.pos
+                                size: self.size
+                        Label:
+                            text: "ACTIVITY CODE: " + root.activity_code
+                            bold: True
+                            color: 1, 1, 1, 1
+                            font_size: "17sp"
 
                     Label:
+                        size_hint_x: 0.4
                         text: "Time: " + root.time_remaining + " sec"
+                        font_size: "17sp"
+                        color: 0.80, 0.90, 0.98, 1
                         halign: "right"
+                        valign: "middle"
+                        text_size: self.size
 
+                # -------- PROGRESS BAR --------
+                BoxLayout:
+                    size_hint_y: None
+                    height: dp(12)
+                    padding: dp(2)
+                    canvas.before:
+                        Color:
+                            rgba: 0.12, 0.20, 0.30, 1
+                        RoundedRectangle:
+                            radius: [7]
+                            pos: self.pos
+                            size: self.size
+                    BoxLayout:
+                        size_hint_x: 0.6
+                        canvas.before:
+                            Color:
+                                rgba: 0.95, 0.45, 0.05, 1
+                            RoundedRectangle:
+                                radius: [7]
+                                pos: self.pos
+                                size: self.size
+
+                # ================= KEY LIST =================
                 BoxLayout:
                     orientation: "vertical"
                     size_hint_y: 1
                     padding: dp(12)
+                    spacing: dp(8)
+                    canvas.before:
+                        Color:
+                            rgba: 0.02, 0.08, 0.16, 1
+                        RoundedRectangle:
+                            radius: [18]
+                            pos: self.pos
+                            size: self.size
 
                     ScrollView:
                         do_scroll_x: False
@@ -69,50 +133,74 @@
                             id: key_grid
                             cols: 1
                             spacing: dp(8)
+                            padding: dp(6)
                             size_hint_y: None
                             height: self.minimum_height
-                            row_default_height: dp(56)
                             row_force_default: True
+                            row_default_height: dp(56)
 
+        # ================= FOOTER =================
         Footer:
             size_hint_y: None
             height: dp(48)
+            version: "12.9.3"
 
-    # LOADING OVERLAY
+    # =====================================================
+    # FULL SCREEN LOADING OVERLAY (ON TOP OF EVERYTHING)
+    # =====================================================
     FloatLayout:
         opacity: 1 if root.is_loading else 0
         disabled: not root.is_loading
 
+        canvas.before:
+            Color:
+                rgba: 0, 0, 0, 0.55
+            Rectangle:
+                pos: self.pos
+                size: self.size
+
         BoxLayout:
             size_hint: None, None
-            size: dp(300), dp(120)
-            pos_hint: {"center_x":0.5,"center_y":0.5}
+            size: dp(320), dp(140)
+            pos_hint: {"center_x": 0.5, "center_y": 0.5}
             orientation: "vertical"
-            spacing: dp(10)
-            padding: dp(16)
+            spacing: dp(12)
+            padding: dp(20)
 
             canvas.before:
                 Color:
-                    rgba: 0,0,0,0.7
+                    rgba: 0.02, 0.08, 0.16, 0.95
                 RoundedRectangle:
                     radius: [18]
                     pos: self.pos
                     size: self.size
 
             Label:
-                text: "Initializing Hardware..."
-                font_size: "16sp"
+                text: "Initializing Hardware"
+                font_size: "18sp"
+                bold: True
+                color: 1, 1, 1, 1
                 halign: "center"
+                valign: "middle"
+                text_size: self.size
 
             Label:
-                text: "Please wait"
+                text: "Please wait..."
                 font_size: "14sp"
+                color: 0.8, 0.85, 0.9, 1
+                halign: "center"
+                valign: "middle"
+                text_size: self.size
 
 
+# =========================================================
+# KEY ITEM
+# =========================================================
 <KeyItem>:
     size_hint_y: None
     height: dp(56)
     padding: dp(16), 0
+    spacing: dp(10)
 
     canvas.before:
         Color:
@@ -124,20 +212,31 @@
 
     Label:
         text: root.key_name
-        size_hint_x: 0.7
+        color: 0.90, 0.95, 1, 1
+        font_size: "16sp"
+        halign: "left"
+        valign: "middle"
+        text_size: self.size
 
     BoxLayout:
-        size_hint_x: 0.3
+        size_hint_x: None
+        width: dp(110)
         spacing: dp(8)
 
         Widget:
+            size_hint_x: None
+            width: dp(20)
             canvas:
                 Color:
                     rgba: root.status_color
                 Ellipse:
-                    size: dp(16), dp(16)
                     pos: self.center_x - dp(8), self.center_y - dp(8)
+                    size: dp(16), dp(16)
 
         Label:
-            text: root.status
+            text: root.status.upper()
             color: root.status_color
+            font_size: "14sp"
+            valign: "middle"
+            halign: "left"
+            text_size: self.size

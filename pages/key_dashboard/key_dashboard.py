@@ -210,4 +210,4 @@ class KeyDashboardScreen(BaseScreen):
     def open_done_page(self, key_name, status, key_id):
         self.manager.selected_key_id = key_id
         self.manager.selected_key_name = key_name
-        self.manager.current = "activity_done"
+        self.manager.current = "activity"
