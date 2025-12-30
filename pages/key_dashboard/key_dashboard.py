@@ -121,22 +121,12 @@ class KeyDashboardScreen(BaseScreen):
     # -----------------------------------------------------
     def monitor_door_status(self):
         try:
-            door_status = read_limit_switch(LIMIT_SWITCH)  # 1=open, 0=closed
+            door_status = read_limit_switch(LIMIT_SWITCH)
+            print(f"[DOOR][RAW] read_limit_switch -> {door_status}")
         except Exception as e:
             print("[DOOR][ERROR]", e)
             return
 
-        if self._last_door_state is None:
-            self._last_door_state = door_status
-            print("[DOOR] Initial:", "OPEN" if door_status else "CLOSED")
-            return
-
-        if door_status != self._last_door_state:
-            if door_status == 1:
-                print("[DOOR] 🚪 OPEN")
-            else:
-                print("[DOOR] 🔒 CLOSED")
-            self._last_door_state = door_status
 
     # -----------------------------------------------------
     # SCREEN EXIT
