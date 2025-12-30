@@ -2,11 +2,11 @@ import sys
 import mraa
 import threading
 from . import bms
-from model import *
-from amscan import *
+from csi_ams.model import *
+from csi_ams.amscan import *
 import _thread as thread
 from datetime import datetime
-from utils import lcd, keypad, card_reader
+from csi_ams.utils import lcd, keypad, card_reader
 
 
 AUTH_MODE_PIN = 1
