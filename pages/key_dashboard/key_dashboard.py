@@ -42,14 +42,6 @@ class KeyItem(ButtonBehavior, BoxLayout):
 # =========================================================
 class KeyDashboardScreen(BaseScreen):
 
-    buzzer = mraa.Gpio(37)
-    RL1 =  mraa.Gpio(38)
-    RL2 = mraa.Gpio(40)
-
-    buzzer.dir(mraa.DIR_OUT)
-    RL1.dir(mraa.DIR_OUT)
-    RL2.dir(mraa.DIR_OUT)
-
     activity_code = StringProperty("")
     activity_name = StringProperty("")
     time_remaining = StringProperty("15")
