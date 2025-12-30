@@ -1,7 +1,7 @@
 from time import sleep
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.behaviors import ButtonBehavior
-from kivy.properties import StringProperty, ListProperty, ObjectProperty, BooleanProperty
+from kivy.properties import StringProperty, ListProperty, ObjectProperty
 from kivy.clock import Clock
 
 from components.base_screen import BaseScreen
@@ -10,17 +10,21 @@ from test import AMS_CAN
 
 
 # =========================================================
-# UI ITEM (CREATED ONCE, UPDATED VIA PROPERTIES)
+# KEY ITEM (UI COMPONENT)
 # =========================================================
 class KeyItem(ButtonBehavior, BoxLayout):
     key_id = StringProperty("")
     key_name = StringProperty("")
-    status_text = StringProperty("")          # "IN" / "OUT"
+    status_text = StringProperty("IN")     # <-- BOUND TO KV
     status_color = ListProperty([0, 1, 0, 1])
     dashboard = ObjectProperty(None)
 
-    def set_status(self, status):
-        self.status_text = status   # ✅ FIX: update the bound property
+    def set_status(self, status: str):
+        """
+        This is the ONLY method that updates UI state.
+        KV is bound to status_text and status_color.
+        """
+        self.status_text = status
         self.status_color = [0, 1, 0, 1] if status == "IN" else [1, 0, 0, 1]
 
     def on_release(self):
@@ -33,7 +37,7 @@ class KeyItem(ButtonBehavior, BoxLayout):
 
 
 # =========================================================
-# SCREEN
+# DASHBOARD SCREEN
 # =========================================================
 class KeyDashboardScreen(BaseScreen):
 
@@ -42,41 +46,38 @@ class KeyDashboardScreen(BaseScreen):
     time_remaining = StringProperty("15")
 
     keys_data = ListProperty([])
-    is_loading = BooleanProperty(True)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.key_widgets = {}      # key_id -> KeyItem
+        self.key_widgets = {}          # key_id -> KeyItem
         self._can_poll_event = None
 
     # -----------------------------------------------------
-    # ENTER
+    # SCREEN ENTER
     # -----------------------------------------------------
     def on_enter(self, *args):
         print("\n[UI] ▶ Entered KeyDashboardScreen")
-        self.is_loading = True
 
         self.activity_info = getattr(self.manager, "activity_info", None)
         if not self.activity_info:
             print("[UI] ❌ No activity info")
-            self.is_loading = False
             return
 
         self.activity_code = self.activity_info.get("code", "")
         self.activity_name = self.activity_info.get("name", "")
         self.time_remaining = str(self.activity_info.get("time_limit", 15))
 
-        # Create CAN only once
+        # Create CAN once
         if not hasattr(self.manager, "ams_can") or self.manager.ams_can is None:
             print("[CAN] Creating AMS_CAN instance")
             self.manager.ams_can = AMS_CAN()
-            self.setup_can_and_lock_all()
+            self._setup_can_and_lock_all()
 
         # Load DB → UI
         self.reload_keys_from_db()
         self.populate_keys()
 
-        # Unlock activity keys
+        # Unlock only allowed keys
         self.unlock_activity_keys()
 
         # Start CAN polling
@@ -85,10 +86,8 @@ class KeyDashboardScreen(BaseScreen):
                 self.poll_can_events, 0.2
             )
 
-        self.is_loading = False
-
     # -----------------------------------------------------
-    # EXIT
+    # SCREEN EXIT
     # -----------------------------------------------------
     def on_leave(self, *args):
         if self._can_poll_event:
@@ -99,7 +98,7 @@ class KeyDashboardScreen(BaseScreen):
     # BACK BUTTON
     # -----------------------------------------------------
     def go_back(self):
-        print("[UI] ◀ Going back — unlocking all keys")
+        print("[UI] ◀ Back pressed → unlocking all keys")
 
         try:
             ams_can = self.manager.ams_can
@@ -113,9 +112,9 @@ class KeyDashboardScreen(BaseScreen):
         self.manager.current = "activity"
 
     # =====================================================
-    # CAN INIT
+    # CAN INITIALIZATION
     # =====================================================
-    def setup_can_and_lock_all(self):
+    def _setup_can_and_lock_all(self):
         ams_can = self.manager.ams_can
 
         print("[CAN][INIT] Waiting for CAN boot…")
@@ -127,31 +126,30 @@ class KeyDashboardScreen(BaseScreen):
             ams_can.set_all_LED_OFF(strip_id)
 
     # =====================================================
-    # DATABASE
+    # DATABASE LOAD
     # =====================================================
     def reload_keys_from_db(self):
         activity_id = self.activity_info.get("id")
         keys = get_keys_for_activity(activity_id)
 
-        print(f"\n[DB][LOAD] Loaded {len(keys)} keys")
+        print(f"\n[DB] Loaded {len(keys)} keys")
 
         self.keys_data = []
         for key in keys:
             self.keys_data.append({
                 "key_id": str(key["id"]),
                 "key_name": key["name"],
-                "status": key["status"],     # 0 IN, 1 OUT
+                "status": key["status"],   # 0 = IN, 1 = OUT
                 "strip": key.get("strip"),
                 "position": key.get("position"),
             })
 
     # =====================================================
-    # UI CREATION (ONCE)
+    # UI BUILD (ONCE)
     # =====================================================
     def populate_keys(self):
         grid = self.ids.key_grid
 
-        # Create widgets only once
         if not self.key_widgets:
             grid.clear_widgets()
 
@@ -195,7 +193,7 @@ class KeyDashboardScreen(BaseScreen):
                 )
 
     # =====================================================
-    # CAN EVENTS
+    # CAN EVENTS (REALTIME)
     # =====================================================
     def poll_can_events(self, _dt):
         ams_can = self.manager.ams_can

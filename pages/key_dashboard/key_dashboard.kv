@@ -47,6 +47,7 @@
                     padding: dp(20)
                     spacing: dp(15)
 
+                    # -------- TITLE --------
                     Label:
                         text: "KEY AUTHORIZATION\nDASHBOARD"
                         font_size: "24sp"
@@ -58,6 +59,7 @@
                         height: self.texture_size[1] + dp(20)
                         text_size: self.width, None
 
+                    # -------- ACTIVITY INFO --------
                     BoxLayout:
                         size_hint_y: None
                         height: dp(56)
@@ -88,6 +90,7 @@
                             valign: "middle"
                             text_size: self.size
 
+                    # -------- PROGRESS BAR --------
                     BoxLayout:
                         size_hint_y: None
                         height: dp(12)
@@ -109,6 +112,7 @@
                                     pos: self.pos
                                     size: self.size
 
+                    # -------- KEY LIST --------
                     BoxLayout:
                         orientation: "vertical"
                         size_hint_y: 1
@@ -135,43 +139,11 @@
                                 row_force_default: True
                                 row_default_height: dp(56)
 
+            # ================= FOOTER =================
             Footer:
                 size_hint_y: None
                 height: dp(48)
                 version: "12.9.3"
-
-        # =====================================================
-        # LOADING OVERLAY (ON TOP OF EVERYTHING)
-        # =====================================================
-        FloatLayout:
-            size_hint: 1, 1
-            opacity: 1 if root.is_loading else 0
-            disabled: not root.is_loading
-            visible: root.is_loading
-            canvas.before:
-                Color:
-                    rgba: 0, 0, 0, 0.75
-                Rectangle:
-                    pos: self.pos
-                    size: self.size
-
-            BoxLayout:
-                orientation: "vertical"
-                size_hint: None, None
-                size: dp(300), dp(140)
-                pos_hint: {"center_x": 0.5, "center_y": 0.5}
-                spacing: dp(12)
-
-                Label:
-                    text: "Initializing Hardware"
-                    font_size: "20sp"
-                    bold: True
-                    color: 1, 1, 1, 1
-
-                Label:
-                    text: "Connecting to CAN bus..."
-                    font_size: "14sp"
-                    color: 0.85, 0.85, 0.85, 1
 
 
 <KeyItem>:
@@ -188,6 +160,7 @@
             pos: self.pos
             size: self.size
 
+    # -------- KEY NAME --------
     Label:
         text: root.key_name
         color: 0.90, 0.95, 1, 1
@@ -196,6 +169,7 @@
         valign: "middle"
         text_size: self.size
 
+    # -------- STATUS --------
     BoxLayout:
         size_hint_x: None
         width: dp(110)
