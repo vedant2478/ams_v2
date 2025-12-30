@@ -3,7 +3,7 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.properties import StringProperty, ListProperty, ObjectProperty
 from kivy.clock import Clock
-# from csi_ams.utils.commons import read_limit_switch , LIMIT_SWITCH
+from csi_ams.utils.commons import read_limit_switch , LIMIT_SWITCH
 import mraa
 import subprocess
 from components.base_screen import BaseScreen
@@ -103,29 +103,26 @@ class KeyDashboardScreen(BaseScreen):
     # -----------------------------------------------------
     # TRACK DOOR STATE
     # ----------------------------------------------------- 
-    # def monitor_door_status(self):
-    #     try:
-    #         door_status = read_limit_switch(LIMIT_SWITCH)
-    #     except Exception as e:
-    #         print("[DOOR][ERROR]", e)
-    #         return
+    def monitor_door_status(self):
+        try:
+            door_status = read_limit_switch(LIMIT_SWITCH)
+        except Exception as e:
+            print("[DOOR][ERROR]", e)
+            return
 
-    #     # door_status: 1 = OPEN, 0 = CLOSED
-    #     if self._last_door_state is None:
-    #         self._last_door_state = door_status
-    #         print("[DOOR] Initial:", "OPEN" if door_status else "CLOSED")
-    #         return
+        # door_status: 1 = OPEN, 0 = CLOSED
+        if self._last_door_state is None:
+            self._last_door_state = door_status
+            print("[DOOR] Initial:", "OPEN" if door_status else "CLOSED")
+            return
 
-    #     if door_status != self._last_door_state:
-    #         if door_status == 1:
-    #             print("[DOOR] 🚪 OPEN")
-    #         else:
-    #             print("[DOOR] 🔒 CLOSED")
+        if door_status != self._last_door_state:
+            if door_status == 1:
+                print("[DOOR] 🚪 OPEN")
+            else:
+                print("[DOOR] 🔒 CLOSED")
 
-    #         self._last_door_state = door_status
-
-   
-
+            self._last_door_state = door_status
 
     # -----------------------------------------------------
     # SCREEN EXIT
@@ -239,7 +236,7 @@ class KeyDashboardScreen(BaseScreen):
     def poll_can_events(self, _dt):
         ams_can = self.manager.ams_can
 
-        # 👀 Monitor door state
+        self.monitor_door_status()
         
 
         # 🔴 KEY TAKEN
