@@ -147,7 +147,7 @@
             size_hint: 1, 1
             opacity: 1 if root.is_loading else 0
             disabled: not root.is_loading
-
+            visible: root.is_loading
             canvas.before:
                 Color:
                     rgba: 0, 0, 0, 0.75
