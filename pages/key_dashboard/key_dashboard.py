@@ -26,7 +26,8 @@ class KeyItem(ButtonBehavior, BoxLayout):
     status_color = ListProperty([0, 1, 0, 1])
     dashboard = ObjectProperty(None)
 
-    def set_status(self, status):
+    def set_status(self, status: str):
+        """Update BOTH text and color"""
         self.status = status
         self.status_color = (
             [0, 1, 0, 1] if status == "IN" else [1, 0, 0, 1]
@@ -37,7 +38,7 @@ class KeyItem(ButtonBehavior, BoxLayout):
             self.dashboard.open_done_page(
                 self.key_name,
                 self.status,
-                self.key_id,
+                self.key_id
             )
 
 
@@ -50,46 +51,59 @@ class KeyDashboardScreen(BaseScreen):
     activity_name = StringProperty("")
     time_remaining = StringProperty("15")
 
-    keys_data = ListProperty([])
+    keys_data = ListProperty()
     is_loading = BooleanProperty(True)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.keys_data = []
         self._can_poll_event = None
 
     # -----------------------------------------------------
-    # ENTER
+    # ENTER (UI THREAD SAFE)
     # -----------------------------------------------------
     def on_enter(self, *args):
         print("\n[UI] ▶ Entered KeyDashboardScreen")
 
-        self.is_loading = True
-
         self.activity_info = getattr(self.manager, "activity_info", None)
         if not self.activity_info:
             print("[UI] ❌ No activity info")
-            self.is_loading = False
             return
 
         self.activity_code = self.activity_info.get("code", "")
         self.activity_name = self.activity_info.get("name", "")
         self.time_remaining = str(self.activity_info.get("time_limit", 15))
 
+        # 🔥 SHOW LOADING OVERLAY FIRST
+        self.is_loading = True
+
+        # 🔥 START BACKGROUND INIT AFTER 1 FRAME
+        Clock.schedule_once(self._start_background_init, 0)
+
+    def _start_background_init(self, _dt):
         Thread(target=self._init_can_and_load, daemon=True).start()
 
     # -----------------------------------------------------
-    # BACKGROUND INIT
+    # BACKGROUND INIT (NO UI ACCESS)
     # -----------------------------------------------------
     def _init_can_and_load(self):
-        if not hasattr(self.manager, "ams_can") or self.manager.ams_can is None:
-            print("[CAN] Creating AMS_CAN instance")
-            self.manager.ams_can = AMS_CAN()
-            self.setup_can_and_lock_all()
+        try:
+            if not hasattr(self.manager, "ams_can") or self.manager.ams_can is None:
+                print("[CAN] Creating AMS_CAN instance")
+                self.manager.ams_can = AMS_CAN()
+                self._secure_lock_all_keys()
 
-        self.sync_hardware_to_db()
+            self._sync_hardware_to_db()
 
+        except Exception as e:
+            print("[ERROR][INIT]", e)
+
+        # 🔥 RETURN TO UI THREAD
         Clock.schedule_once(self._finish_loading, 0)
 
+    # -----------------------------------------------------
+    # FINALIZE UI
+    # -----------------------------------------------------
     def _finish_loading(self, _dt):
         self.reload_keys_from_db()
         self.populate_keys()
@@ -103,37 +117,31 @@ class KeyDashboardScreen(BaseScreen):
         self.is_loading = False
         print("[UI] ✅ Dashboard ready")
 
-    # -----------------------------------------------------
-    # EXIT
-    # -----------------------------------------------------
-    def on_leave(self, *args):
-        if self._can_poll_event:
-            self._can_poll_event.cancel()
-            self._can_poll_event = None
-
     # =====================================================
-    # CAN INIT / SECURITY
+    # CAN SECURITY INIT
     # =====================================================
-    def setup_can_and_lock_all(self):
+    def _secure_lock_all_keys(self):
         ams_can = self.manager.ams_can
 
         print("[CAN][INIT] Waiting for CAN boot…")
         sleep(6)
 
-        print("[CAN][SECURITY] Locking ALL keys and LEDs OFF")
+        print("[CAN][SECURITY] Locking ALL keys & LEDs OFF")
         for strip_id in ams_can.key_lists or [1, 2]:
-            ams_can.lock_all_positions(strip_id)
-            ams_can.set_all_LED_OFF(strip_id)
+            try:
+                ams_can.lock_all_positions(strip_id)
+                ams_can.set_all_LED_OFF(strip_id)
+            except Exception as e:
+                print("[CAN][WARN]", e)
 
     # =====================================================
-    # HARDWARE → DB SYNC
+    # HARDWARE → DB SYNC (AUTHORITATIVE)
     # =====================================================
-    def sync_hardware_to_db(self):
+    def _sync_hardware_to_db(self):
         ams_can = self.manager.ams_can
         activity_id = self.activity_info.get("id")
 
         db_keys = get_keys_for_activity(activity_id)
-
         print("\n[SYNC] 🔄 Syncing hardware state to DB")
 
         for key in db_keys:
@@ -141,18 +149,21 @@ class KeyDashboardScreen(BaseScreen):
             pos = key.get("position")
             peg_id = key.get("peg_id")
 
-            if not strip or not pos:
+            if not strip or not pos or not peg_id:
                 continue
 
-            hw_peg_id = ams_can.get_key_id(strip, pos)
+            try:
+                hw_peg = ams_can.get_key_id(strip, pos)
 
-            if hw_peg_id:
-                print(f"[SYNC] 🟢 PRESENT strip={strip} pos={pos}")
-                set_key_status_by_peg_id(hw_peg_id, 0)
-            else:
-                if peg_id:
+                if hw_peg:
+                    print(f"[SYNC] 🟢 PRESENT strip={strip} pos={pos}")
+                    set_key_status_by_peg_id(hw_peg, 0)
+                else:
                     print(f"[SYNC] 🔴 EMPTY strip={strip} pos={pos}")
                     set_key_status_by_peg_id(peg_id, 1)
+
+            except Exception as e:
+                print("[SYNC][WARN]", e)
 
     # =====================================================
     # DATABASE
@@ -167,7 +178,8 @@ class KeyDashboardScreen(BaseScreen):
         for key in keys:
             status_text = "IN" if key["status"] == 0 else "OUT"
             print(
-                f"[DB] {key['name']} → {status_text}"
+                f"[DB] id={key['id']} name={key['name']} "
+                f"status={status_text}"
             )
 
             self.keys_data.append({
@@ -197,28 +209,31 @@ class KeyDashboardScreen(BaseScreen):
             grid.add_widget(widget)
 
     # =====================================================
-    # UNLOCK ACTIVITY KEYS
+    # UNLOCK ONLY ACTIVITY KEYS
     # =====================================================
     def unlock_activity_keys(self):
         ams_can = self.manager.ams_can
-        print(f"[CAN] 🔓 Unlocking {len(self.keys_data)} activity keys")
+        print(f"\n[CAN] 🔓 Unlocking {len(self.keys_data)} activity keys")
 
         for item in self.keys_data:
-            if item["strip"] and item["position"]:
-                ams_can.unlock_single_key(
-                    int(item["strip"]),
-                    int(item["position"]),
-                )
+            try:
+                if item["strip"] and item["position"]:
+                    ams_can.unlock_single_key(
+                        int(item["strip"]),
+                        int(item["position"]),
+                    )
+            except Exception as e:
+                print("[CAN][WARN]", e)
 
     # =====================================================
-    # CAN EVENTS
+    # LIVE CAN EVENTS
     # =====================================================
     def poll_can_events(self, _dt):
         ams_can = self.manager.ams_can
 
         if ams_can.key_taken_event:
             peg_id = ams_can.key_taken_id
-            print(f"[CAN] 🔴 KEY TAKEN peg_id={peg_id}")
+            print(f"\n[CAN] 🔴 KEY TAKEN peg_id={peg_id}")
             set_key_status_by_peg_id(peg_id, 1)
             self.reload_keys_from_db()
             self.populate_keys()
@@ -226,29 +241,32 @@ class KeyDashboardScreen(BaseScreen):
 
         if ams_can.key_inserted_event:
             peg_id = ams_can.key_inserted_id
-            print(f"[CAN] 🟢 KEY INSERTED peg_id={peg_id}")
+            print(f"\n[CAN] 🟢 KEY INSERTED peg_id={peg_id}")
             set_key_status_by_peg_id(peg_id, 0)
             self.reload_keys_from_db()
             self.populate_keys()
             ams_can.key_inserted_event = False
 
     # =====================================================
-    # BACK BUTTON
+    # GO BACK (SAFE EXIT)
     # =====================================================
     def go_back(self):
-        print("[UI] ⬅ Going back, unlocking all keys")
+        print("[UI] ⬅️ Going back")
 
         if self._can_poll_event:
             self._can_poll_event.cancel()
             self._can_poll_event = None
 
-        ams_can = getattr(self.manager, "ams_can", None)
-        if ams_can:
-            for strip_id in ams_can.key_lists or [1, 2]:
+        try:
+            ams_can = self.manager.ams_can
+            for strip_id in ams_can.key_lists or []:
                 ams_can.unlock_all_positions(strip_id)
                 ams_can.set_all_LED_OFF(strip_id)
+        except Exception as e:
+            print("[CAN][WARN]", e)
 
-        self.manager.current = self.manager.previous()
+        self.manager.transition.direction = "right"
+        self.manager.current = "activity_code"
 
     # =====================================================
     # NAV
@@ -256,4 +274,4 @@ class KeyDashboardScreen(BaseScreen):
     def open_done_page(self, key_name, status, key_id):
         self.manager.selected_key_id = key_id
         self.manager.selected_key_name = key_name
-        self.manager.current = "activity"
+        self.manager.current = "activity_done"
