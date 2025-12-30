@@ -1,7 +1,14 @@
 from time import sleep
+from threading import Thread
+
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.behaviors import ButtonBehavior
-from kivy.properties import StringProperty, ListProperty, ObjectProperty, BooleanProperty
+from kivy.properties import (
+    StringProperty,
+    ListProperty,
+    ObjectProperty,
+    BooleanProperty
+)
 from kivy.clock import Clock
 
 from components.base_screen import BaseScreen
@@ -15,18 +22,16 @@ from test import AMS_CAN
 class KeyItem(ButtonBehavior, BoxLayout):
     key_id = StringProperty("")
     key_name = StringProperty("")
-    status = StringProperty("IN")        # drives TEXT
+    status = StringProperty("IN")     # MUST BE STRING
     status_color = ListProperty([0, 1, 0, 1])
     dashboard = ObjectProperty(None)
 
-    def set_status(self, status: str):
-        status = status.upper().strip()
-        self.status = status
-
-        if status == "IN":
-            self.status_color = [0, 1, 0, 1]
-        else:
-            self.status_color = [1, 0, 0, 1]
+    def set_status(self, status):
+        """
+        This MUST update BOTH text + color
+        """
+        self.status = "IN" if status == "IN" else "OUT"
+        self.status_color = [0, 1, 0, 1] if self.status == "IN" else [1, 0, 0, 1]
 
     def on_release(self):
         if self.dashboard:
@@ -46,122 +51,161 @@ class KeyDashboardScreen(BaseScreen):
     activity_name = StringProperty("")
     time_remaining = StringProperty("15")
 
-    loading = BooleanProperty(True)
+    keys_data = ListProperty([])
+
+    # 🔑 REQUIRED BY KV (THIS FIXES YOUR CRASH)
+    is_loading = BooleanProperty(True)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.keys_data = []
-        self.key_widgets = {}          # 🔑 IMPORTANT
         self._can_poll_event = None
 
     # -----------------------------------------------------
     # ENTER
     # -----------------------------------------------------
     def on_enter(self, *args):
-        print("[UI] ▶ Entered KeyDashboardScreen")
-        self.loading = True
+        print("\n[UI] ▶ Entered KeyDashboardScreen")
+
+        self.is_loading = True  # SHOW LOADER
 
         self.activity_info = getattr(self.manager, "activity_info", None)
         if not self.activity_info:
+            print("[UI] ❌ No activity info")
+            self.is_loading = False
             return
 
         self.activity_code = self.activity_info.get("code", "")
         self.activity_name = self.activity_info.get("name", "")
         self.time_remaining = str(self.activity_info.get("time_limit", 15))
 
-        if not hasattr(self.manager, "ams_can"):
-            print("[CAN] Creating AMS_CAN")
-            self.manager.ams_can = AMS_CAN()
-            Clock.schedule_once(self._finish_init, 0)
+        # Run heavy CAN init in background
+        Thread(target=self._init_can_and_load, daemon=True).start()
 
-    def _finish_init(self, _dt):
+    # -----------------------------------------------------
+    # BACKGROUND INIT (NON-BLOCKING)
+    # -----------------------------------------------------
+    def _init_can_and_load(self):
+        try:
+            if not hasattr(self.manager, "ams_can") or self.manager.ams_can is None:
+                print("[CAN] Creating AMS_CAN instance")
+                self.manager.ams_can = AMS_CAN()
+                sleep(3)
+
+            # Sync hardware → DB safely
+            self.sync_hardware_to_db()
+
+            # Load DB → UI
+            Clock.schedule_once(lambda dt: self.reload_and_render())
+
+            # Start CAN polling
+            Clock.schedule_once(lambda dt: self.start_can_poll())
+
+        except Exception as e:
+            print("[ERROR][INIT]", e)
+
+        finally:
+            Clock.schedule_once(lambda dt: self.hide_loader())
+
+    # -----------------------------------------------------
+    def hide_loader(self):
+        print("[UI] ✅ Loading finished")
+        self.is_loading = False
+
+    # -----------------------------------------------------
+    def reload_and_render(self):
         self.reload_keys_from_db()
         self.populate_keys()
         self.unlock_activity_keys()
 
-        self.loading = False
-
-        if not self._can_poll_event:
+    # -----------------------------------------------------
+    def start_can_poll(self):
+        if self._can_poll_event is None:
             self._can_poll_event = Clock.schedule_interval(
                 self.poll_can_events, 0.2
             )
 
-    def on_leave(self, *args):
-        if self._can_poll_event:
-            self._can_poll_event.cancel()
-            self._can_poll_event = None
-
-    # =====================================================
-    # DATABASE
-    # =====================================================
+    # -----------------------------------------------------
+    # DB → MEMORY
+    # -----------------------------------------------------
     def reload_keys_from_db(self):
         activity_id = self.activity_info.get("id")
         keys = get_keys_for_activity(activity_id)
 
-        self.keys_data = keys
+        print(f"[DB] Loaded {len(keys)} keys")
 
-        print("[DB] Loaded keys:")
-        for k in keys:
-            print(f" - {k['name']} → {'IN' if k['status']==0 else 'OUT'}")
+        self.keys_data = []
+        for key in keys:
+            self.keys_data.append({
+                "key_id": str(key["id"]),
+                "key_name": key["name"],
+                "status": key["status"],   # 0 / 1
+                "strip": key.get("strip"),
+                "position": key.get("position"),
+            })
 
-    # =====================================================
-    # UI RENDER (ONCE)
-    # =====================================================
+    # -----------------------------------------------------
+    # UI RENDER
+    # -----------------------------------------------------
     def populate_keys(self):
         grid = self.ids.key_grid
         grid.clear_widgets()
-        self.key_widgets.clear()
 
         for item in self.keys_data:
             status_text = "IN" if item["status"] == 0 else "OUT"
 
             widget = KeyItem(
-                key_id=str(item["id"]),
-                key_name=item["name"],
+                key_id=item["key_id"],
+                key_name=item["key_name"],
                 dashboard=self
             )
             widget.set_status(status_text)
 
-            self.key_widgets[str(item["id"])] = widget
             grid.add_widget(widget)
 
-    # =====================================================
-    # UPDATE UI WITHOUT REBUILDING
-    # =====================================================
-    def update_key_ui(self, key_id, status_int):
-        widget = self.key_widgets.get(str(key_id))
-        if not widget:
-            return
+    # -----------------------------------------------------
+    # CAN SYNC
+    # -----------------------------------------------------
+    def sync_hardware_to_db(self):
+        ams_can = self.manager.ams_can
+        activity_id = self.activity_info.get("id")
+        keys = get_keys_for_activity(activity_id)
 
-        widget.set_status("IN" if status_int == 0 else "OUT")
+        print("[SYNC] 🔄 Syncing hardware → DB")
 
-    # =====================================================
-    # CAN EVENTS
-    # =====================================================
+        for key in keys:
+            strip = key.get("strip")
+            pos = key.get("position")
+            peg_id = key.get("peg_id")
+
+            if not strip or not pos or not peg_id:
+                continue
+
+            hw_peg = ams_can.get_key_id(strip, pos)
+
+            if hw_peg:
+                set_key_status_by_peg_id(hw_peg, 0)
+            else:
+                set_key_status_by_peg_id(peg_id, 1)
+
+    # -----------------------------------------------------
+    # CAN RUNTIME EVENTS
+    # -----------------------------------------------------
     def poll_can_events(self, _dt):
         ams_can = self.manager.ams_can
 
         if ams_can.key_taken_event:
             peg_id = ams_can.key_taken_id
-            key_id = set_key_status_by_peg_id(peg_id, 1)
-
-            if key_id:
-                self.update_key_ui(key_id, 1)
-
+            set_key_status_by_peg_id(peg_id, 1)
+            self.reload_and_render()
             ams_can.key_taken_event = False
 
         if ams_can.key_inserted_event:
             peg_id = ams_can.key_inserted_id
-            key_id = set_key_status_by_peg_id(peg_id, 0)
-
-            if key_id:
-                self.update_key_ui(key_id, 0)
-
+            set_key_status_by_peg_id(peg_id, 0)
+            self.reload_and_render()
             ams_can.key_inserted_event = False
 
-    # =====================================================
-    # UNLOCK KEYS
-    # =====================================================
+    # -----------------------------------------------------
     def unlock_activity_keys(self):
         ams_can = self.manager.ams_can
         for item in self.keys_data:
@@ -171,24 +215,12 @@ class KeyDashboardScreen(BaseScreen):
                     int(item["position"])
                 )
 
-    # =====================================================
-    # BACK BUTTON
-    # =====================================================
+    # -----------------------------------------------------
     def go_back(self):
-        print("[UI] Going back → locking all keys")
+        print("[UI] ⬅ Going back")
 
-        if hasattr(self.manager, "ams_can"):
-            ams_can = self.manager.ams_can
-            for strip in ams_can.key_lists:
-                ams_can.lock_all_positions(strip)
-                ams_can.set_all_LED_OFF(strip)
+        if self._can_poll_event:
+            self._can_poll_event.cancel()
+            self._can_poll_event = None
 
-        self.manager.current = "previous_screen"
-
-    # =====================================================
-    # NAV
-    # =====================================================
-    def open_done_page(self, key_name, status, key_id):
-        self.manager.selected_key_id = key_id
-        self.manager.selected_key_name = key_name
-        self.manager.current = "activity"
+        self.manager.current = self.manager.previous()
