@@ -1,59 +1,147 @@
 #:kivy 2.1.0
 
 <KeyDashboardScreen>:
-    FloatLayout:
+    BoxLayout:
+        orientation: "vertical"
 
-        # ================= MAIN UI =================
+        # ================= HEADER =================
+        Header:
+            size_hint_y: None
+            height: dp(64)
+
         BoxLayout:
-            orientation: "vertical"
-            size_hint: 1, 1
+            size_hint_y: None
+            height: dp(48)
+            padding: dp(16), 0
 
-            Header:
-                size_hint_y: None
-                height: dp(64)
+            Button:
+                text: "Back"
+                size_hint_x: None
+                width: dp(100)
+                background_normal: ""
+                background_color: 0, 0, 0, 0
+                color: 0.90, 0.95, 1, 1
+                font_size: "16sp"
+                on_release: root.go_back()
 
-            BoxLayout:
-                size_hint_y: None
-                height: dp(48)
-                padding: dp(16), 0
+            Widget:
 
-                Button:
-                    text: "Back"
-                    size_hint_x: None
-                    width: dp(100)
-                    background_normal: ""
-                    background_color: 0,0,0,0
-                    on_release: root.go_back()
+        # ================= BODY =================
+        FloatLayout:
+            size_hint_y: 1
 
-                Widget:
+            GradientBackground:
+                pos: self.pos
+                size: self.size
 
             BoxLayout:
                 orientation: "vertical"
+                size_hint: 0.9, 0.9
+                pos_hint: {"center_x": 0.5, "center_y": 0.5}
                 padding: dp(20)
-                spacing: dp(10)
+                spacing: dp(15)
 
+                # -------- TITLE --------
                 Label:
-                    text: "KEY AUTHORIZATION DASHBOARD"
+                    text: "KEY AUTHORIZATION\nDASHBOARD"
                     font_size: "24sp"
+                    bold: True
+                    color: 0.92, 0.96, 0.99, 1
+                    halign: "center"
+                    valign: "middle"
                     size_hint_y: None
-                    height: self.texture_size[1] + dp(10)
+                    height: self.texture_size[1] + dp(20)
+                    text_size: self.width, None
 
-                ScrollView:
-                    GridLayout:
-                        id: key_grid
-                        cols: 1
-                        spacing: dp(8)
-                        padding: dp(8)
-                        size_hint_y: None
-                        height: self.minimum_height
-                        row_force_default: True
-                        row_default_height: dp(56)
+                # -------- ACTIVITY INFO --------
+                BoxLayout:
+                    size_hint_y: None
+                    height: dp(56)
+                    spacing: dp(12)
 
-            Footer:
-                size_hint_y: None
-                height: dp(48)
+                    BoxLayout:
+                        padding: dp(10)
+                        size_hint_x: 0.6
+                        canvas.before:
+                            Color:
+                                rgba: 0.18, 0.65, 0.31, 1
+                            RoundedRectangle:
+                                radius: [20]
+                                pos: self.pos
+                                size: self.size
+                        Label:
+                            text: "ACTIVITY CODE: " + root.activity_code
+                            bold: True
+                            color: 1, 1, 1, 1
+                            font_size: "17sp"
 
-        # ================= LOADING OVERLAY =================
+                    Label:
+                        size_hint_x: 0.4
+                        text: "Time: " + root.time_remaining + " sec"
+                        font_size: "17sp"
+                        color: 0.80, 0.90, 0.98, 1
+                        halign: "right"
+                        valign: "middle"
+                        text_size: self.size
+
+                # -------- PROGRESS BAR --------
+                BoxLayout:
+                    size_hint_y: None
+                    height: dp(12)
+                    padding: dp(2)
+                    canvas.before:
+                        Color:
+                            rgba: 0.12, 0.20, 0.30, 1
+                        RoundedRectangle:
+                            radius: [7]
+                            pos: self.pos
+                            size: self.size
+                    BoxLayout:
+                        size_hint_x: 0.6
+                        canvas.before:
+                            Color:
+                                rgba: 0.95, 0.45, 0.05, 1
+                            RoundedRectangle:
+                                radius: [7]
+                                pos: self.pos
+                                size: self.size
+
+                # ================= KEY LIST =================
+                BoxLayout:
+                    orientation: "vertical"
+                    size_hint_y: 1
+                    padding: dp(12)
+                    spacing: dp(8)
+                    canvas.before:
+                        Color:
+                            rgba: 0.02, 0.08, 0.16, 1
+                        RoundedRectangle:
+                            radius: [18]
+                            pos: self.pos
+                            size: self.size
+
+                    ScrollView:
+                        do_scroll_x: False
+
+                        GridLayout:
+                            id: key_grid
+                            cols: 1
+                            spacing: dp(8)
+                            padding: dp(6)
+                            size_hint_y: None
+                            height: self.minimum_height
+                            row_force_default: True
+                            row_default_height: dp(56)
+
+        # ================= FOOTER =================
+        Footer:
+            size_hint_y: None
+            height: dp(48)
+            version: "12.9.3"
+
+        # =====================================================
+        # 🔄 LOADING OVERLAY (ADDED — DOES NOT TOUCH UI)
+        # =====================================================
         FloatLayout:
             opacity: 1 if root.is_loading else 0
             disabled: not root.is_loading
@@ -65,10 +153,22 @@
                     pos: self.pos
                     size: self.size
 
-            Label:
-                text: "Initializing Hardware..."
-                font_size: "20sp"
+            BoxLayout:
+                orientation: "vertical"
+                size_hint: None, None
+                size: dp(260), dp(120)
                 pos_hint: {"center_x": 0.5, "center_y": 0.5}
+                spacing: dp(12)
+
+                Label:
+                    text: "Initializing Hardware"
+                    font_size: "18sp"
+                    color: 1, 1, 1, 1
+
+                Label:
+                    text: "Please wait..."
+                    font_size: "14sp"
+                    color: 0.8, 0.8, 0.8, 1
 
 
 <KeyItem>:
@@ -87,6 +187,7 @@
 
     Label:
         text: root.key_name
+        color: 0.90, 0.95, 1, 1
         font_size: "16sp"
         halign: "left"
         valign: "middle"
@@ -99,7 +200,7 @@
 
         Widget:
             size_hint_x: None
-            width: dp(18)
+            width: dp(20)
             canvas:
                 Color:
                     rgba: root.status_color
@@ -112,3 +213,5 @@
             color: root.status_color
             font_size: "14sp"
             valign: "middle"
+            halign: "left"
+            text_size: self.size
