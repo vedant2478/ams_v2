@@ -15,7 +15,7 @@ from test import AMS_CAN
 class KeyItem(ButtonBehavior, BoxLayout):
     key_id = StringProperty("")
     key_name = StringProperty("")
-    status_text = StringProperty("IN")          # "IN" / "OUT"
+    status_text = StringProperty("")          # "IN" / "OUT"
     status_color = ListProperty([0, 1, 0, 1])
     dashboard = ObjectProperty(None)
 
