@@ -3,7 +3,7 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.properties import StringProperty, ListProperty, ObjectProperty
 from kivy.clock import Clock
-from csi_ams.utils.commons import read_limit_switch , LIMIT_SWITCH
+# from csi_ams.utils.commons import read_limit_switch , LIMIT_SWITCH
 import mraa
 import subprocess
 from components.base_screen import BaseScreen
