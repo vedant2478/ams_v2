@@ -4,7 +4,7 @@ from kivy.uix.behaviors import ButtonBehavior
 from kivy.properties import StringProperty, ListProperty, ObjectProperty
 from kivy.clock import Clock
 import mraa
-
+import subprocess
 from components.base_screen import BaseScreen
 from db import get_keys_for_activity, set_key_status_by_peg_id
 from test import AMS_CAN
@@ -64,6 +64,7 @@ class KeyDashboardScreen(BaseScreen):
     # -----------------------------------------------------
     # SCREEN ENTER
     # -----------------------------------------------------
+
     def on_enter(self, *args):
         print("\n[UI] ▶ Entered KeyDashboardScreen")
 
@@ -76,23 +77,30 @@ class KeyDashboardScreen(BaseScreen):
         self.activity_name = self.activity_info.get("name", "")
         self.time_remaining = str(self.activity_info.get("time_limit", 15))
 
-        # Create CAN once
+        # CAN init
         if not hasattr(self.manager, "ams_can") or self.manager.ams_can is None:
             print("[CAN] Creating AMS_CAN instance")
             self.manager.ams_can = AMS_CAN()
             self._setup_can_and_lock_all()
 
-        # Load DB → UI
+        # DB → UI
         self.reload_keys_from_db()
         self.populate_keys()
 
-        # Unlock only allowed keys
+        # Unlock activity keys
         self.unlock_activity_keys()
-        sleep(1)
-        self.RL1.write(1)
-        self.RL2.write(1)
-        sleep(0.5)
-        # Start CAN polling
+
+        # 🔥 CALL HARDWARE SCRIPT (ROOT)
+        try:
+            subprocess.Popen(
+                ["sudo", "python3", "solenoid.py"],
+                cwd="/home/rock/Desktop/ams_v2"
+            )
+            print("[HW] Solenoid triggered")
+        except Exception as e:
+            print("[HW][ERROR]", e)
+
+        # CAN polling
         if self._can_poll_event is None:
             self._can_poll_event = Clock.schedule_interval(
                 self.poll_can_events, 0.2
