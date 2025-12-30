@@ -17,15 +17,14 @@
                 text: "Back"
                 size_hint_x: None
                 width: dp(100)
-                background_normal: ""
-                background_color: 0, 0, 0, 0
-                color: 0.9, 0.95, 1, 1
+                background_color: 0,0,0,0
                 on_release: root.go_back()
 
             Widget:
 
-        FloatLayout:
+        BoxLayout:
             size_hint_y: 1
+            padding: dp(24)
 
             GradientBackground:
                 pos: self.pos
@@ -33,85 +32,91 @@
 
             BoxLayout:
                 orientation: "vertical"
-                size_hint: 0.9, 0.9
-                pos_hint: {"center_x": .5, "center_y": .5}
-                padding: dp(16)
-                spacing: dp(12)
+                spacing: dp(16)
 
                 Label:
                     text: "KEY AUTHORIZATION\nDASHBOARD"
                     font_size: "24sp"
                     bold: True
-                    halign: "center"
-                    valign: "middle"
-                    text_size: self.width, None
                     size_hint_y: None
                     height: self.texture_size[1] + dp(12)
-
-                ScrollView:
-                    GridLayout:
-                        id: key_grid
-                        cols: 1
-                        spacing: dp(8)
-                        padding: dp(6)
-                        size_hint_y: None
-                        height: self.minimum_height
-
-        # ================= LOADING OVERLAY =================
-        FloatLayout:
-            opacity: 1 if root.is_loading else 0
-            disabled: not root.is_loading
-
-            canvas.before:
-                Color:
-                    rgba: 0, 0, 0, .6
-                Rectangle:
-                    pos: self.pos
-                    size: self.size
-
-            BoxLayout:
-                orientation: "vertical"
-                size_hint: None, None
-                size: dp(260), dp(160)
-                pos_hint: {"center_x": .5, "center_y": .5}
-                spacing: dp(16)
-                padding: dp(20)
-
-                canvas.before:
-                    Color:
-                        rgba: .06, .12, .22, 1
-                    RoundedRectangle:
-                        radius: [16]
-                        pos: self.pos
-                        size: self.size
-
-                Spinner:
-                    active: True
-                    size_hint: None, None
-                    size: dp(48), dp(48)
-
-                Label:
-                    text: "Initializing Key System..."
-                    color: .9, .95, 1, 1
+                    text_size: self.width, None
                     halign: "center"
                     valign: "middle"
-                    text_size: self.size
+
+                BoxLayout:
+                    size_hint_y: None
+                    height: dp(56)
+                    spacing: dp(12)
+
+                    Label:
+                        text: "ACTIVITY CODE: " + root.activity_code
+                        bold: True
+
+                    Label:
+                        text: "Time: " + root.time_remaining + " sec"
+                        halign: "right"
+
+                BoxLayout:
+                    orientation: "vertical"
+                    size_hint_y: 1
+                    padding: dp(12)
+
+                    ScrollView:
+                        do_scroll_x: False
+
+                        GridLayout:
+                            id: key_grid
+                            cols: 1
+                            spacing: dp(8)
+                            size_hint_y: None
+                            height: self.minimum_height
+                            row_default_height: dp(56)
+                            row_force_default: True
 
         Footer:
             size_hint_y: None
             height: dp(48)
-            version: "12.9.3"
+
+    # LOADING OVERLAY
+    FloatLayout:
+        opacity: 1 if root.is_loading else 0
+        disabled: not root.is_loading
+
+        BoxLayout:
+            size_hint: None, None
+            size: dp(300), dp(120)
+            pos_hint: {"center_x":0.5,"center_y":0.5}
+            orientation: "vertical"
+            spacing: dp(10)
+            padding: dp(16)
+
+            canvas.before:
+                Color:
+                    rgba: 0,0,0,0.7
+                RoundedRectangle:
+                    radius: [18]
+                    pos: self.pos
+                    size: self.size
+
+            Label:
+                text: "Initializing Hardware..."
+                font_size: "16sp"
+                halign: "center"
+
+            Label:
+                text: "Please wait"
+                font_size: "14sp"
 
 
 <KeyItem>:
     size_hint_y: None
     height: dp(56)
     padding: dp(16), 0
-    spacing: dp(10)
 
     canvas.before:
         Color:
-            rgba: .05, .12, .24, 1
+            rgba: 0.05, 0.12, 0.24, 1
         RoundedRectangle:
             radius: [14]
             pos: self.pos
@@ -119,28 +124,20 @@
 
     Label:
         text: root.key_name
-        color: .9, .95, 1, 1
-        halign: "left"
-        valign: "middle"
-        text_size: self.size
+        size_hint_x: 0.7
 
     BoxLayout:
-        size_hint_x: None
-        width: dp(110)
+        size_hint_x: 0.3
         spacing: dp(8)
 
         Widget:
-            size_hint_x: None
-            width: dp(20)
             canvas:
                 Color:
                     rgba: root.status_color
                 Ellipse:
-                    pos: self.center_x - dp(8), self.center_y - dp(8)
                     size: dp(16), dp(16)
+                    pos: self.center_x - dp(8), self.center_y - dp(8)
 
         Label:
             text: root.status
             color: root.status_color
-            valign: "middle"
-            text_size: self.size
