@@ -110,7 +110,7 @@ class KeyDashboardScreen(BaseScreen):
             print("[WARN] CAN cleanup failed:", e)
 
         self.manager.transition.direction = "right"
-        self.manager.current = "activity_code"
+        self.manager.current = "activity"
 
     # =====================================================
     # CAN INIT
