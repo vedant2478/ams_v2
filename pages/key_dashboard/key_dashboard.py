@@ -52,6 +52,7 @@ class KeyDashboardScreen(BaseScreen):
         super().__init__(**kwargs)
         self.key_widgets = {}          # key_id -> KeyItem
         self._can_poll_event = None
+        self._last_door_state = None
 
     # -----------------------------------------------------
     # SCREEN ENTER
@@ -97,6 +98,32 @@ class KeyDashboardScreen(BaseScreen):
             self._can_poll_event = Clock.schedule_interval(
                 self.poll_can_events, 0.2
             )
+
+    # -----------------------------------------------------
+    # TRACK DOOR STATE
+    # -----------------------------------------------------
+    def monitor_door_status(self):
+        ams_can = self.manager.ams_can
+
+        if not hasattr(ams_can, "door_closed_status"):
+            return
+
+        # door_closed_status = True → CLOSED
+        # door_closed_status = False → OPEN
+        door_closed = ams_can.door_closed_status
+
+        if self._last_door_state is None:
+            self._last_door_state = door_closed
+            return
+
+        if door_closed != self._last_door_state:
+            if door_closed:
+                print("[DOOR] 🔒 CLOSED")
+            else:
+                print("[DOOR] 🚪 OPEN")
+
+            self._last_door_state = door_closed
+
 
     # -----------------------------------------------------
     # SCREEN EXIT
@@ -209,6 +236,9 @@ class KeyDashboardScreen(BaseScreen):
     # =====================================================
     def poll_can_events(self, _dt):
         ams_can = self.manager.ams_can
+
+        # 👀 Monitor door state
+        self.monitor_door_status()
 
         # 🔴 KEY TAKEN
         if ams_can.key_taken_event:
