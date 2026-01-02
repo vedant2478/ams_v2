@@ -127,30 +127,10 @@ class KeyDashboardScreen(BaseScreen):
     # DOOR MONITOR (START ONCE)
     # -----------------------------------------------------
     def start_door_monitor(self):
-        if self._door_monitor_started:
-            return
-
-        self._door_monitor_started = True
-        state = read_limit_switch(LIMIT_SWITCH)
-        self._last_door_state = state
-
-        print("[DOOR] Door monitor started")
-        print("[DOOR] Initial:", "OPEN" if state == 1 else "CLOSED")
+        pass
 
     def monitor_door_status(self):
-        if not self._door_monitor_started:
-            return
-
-        state = read_limit_switch(LIMIT_SWITCH)
-
-        if state != self._last_door_state:
-            if state == 1:
-                print("[DOOR] 🚪 OPEN")
-            else:
-                print("[DOOR] 🔒 CLOSED")
-
-            self._last_door_state = state
-
+        pass
     # -----------------------------------------------------
     # SCREEN EXIT
     # -----------------------------------------------------
