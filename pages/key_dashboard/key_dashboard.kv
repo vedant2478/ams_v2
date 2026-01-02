@@ -3,14 +3,10 @@
 <KeyDashboardScreen>:
     FloatLayout:
 
-        # =====================================================
-        # BASE SCREEN (UNCHANGED UI)
-        # =====================================================
         BoxLayout:
             orientation: "vertical"
             size_hint: 1, 1
 
-            # ================= HEADER =================
             Header:
                 size_hint_y: None
                 height: dp(64)
@@ -32,7 +28,6 @@
 
                 Widget:
 
-            # ================= BODY =================
             FloatLayout:
                 size_hint_y: 1
 
@@ -47,7 +42,6 @@
                     padding: dp(20)
                     spacing: dp(15)
 
-                    # -------- TITLE --------
                     Label:
                         text: "KEY AUTHORIZATION\nDASHBOARD"
                         font_size: "24sp"
@@ -59,7 +53,6 @@
                         height: self.texture_size[1] + dp(20)
                         text_size: self.width, None
 
-                    # -------- ACTIVITY INFO --------
                     BoxLayout:
                         size_hint_y: None
                         height: dp(56)
@@ -90,7 +83,7 @@
                             valign: "middle"
                             text_size: self.size
 
-                    # -------- PROGRESS BAR --------
+                    # PROGRESS BAR
                     BoxLayout:
                         size_hint_y: None
                         height: dp(12)
@@ -102,8 +95,9 @@
                                 radius: [7]
                                 pos: self.pos
                                 size: self.size
+
                         BoxLayout:
-                            size_hint_x: 0.6
+                            size_hint_x: root.progress_value
                             canvas.before:
                                 Color:
                                     rgba: 0.95, 0.45, 0.05, 1
@@ -112,19 +106,11 @@
                                     pos: self.pos
                                     size: self.size
 
-                    # -------- KEY LIST --------
                     BoxLayout:
                         orientation: "vertical"
                         size_hint_y: 1
                         padding: dp(12)
                         spacing: dp(8)
-                        canvas.before:
-                            Color:
-                                rgba: 0.02, 0.08, 0.16, 1
-                            RoundedRectangle:
-                                radius: [18]
-                                pos: self.pos
-                                size: self.size
 
                         ScrollView:
                             do_scroll_x: False
@@ -139,12 +125,6 @@
                                 row_force_default: True
                                 row_default_height: dp(56)
 
-            # ================= FOOTER =================
-            Footer:
-                size_hint_y: None
-                height: dp(48)
-                version: "12.9.3"
-
 
 <KeyItem>:
     size_hint_y: None
@@ -152,43 +132,10 @@
     padding: dp(16), 0
     spacing: dp(10)
 
-    canvas.before:
-        Color:
-            rgba: 0.05, 0.12, 0.24, 1
-        RoundedRectangle:
-            radius: [14]
-            pos: self.pos
-            size: self.size
-
-    # -------- KEY NAME --------
     Label:
         text: root.key_name
-        color: 0.90, 0.95, 1, 1
         font_size: "16sp"
-        halign: "left"
-        valign: "middle"
-        text_size: self.size
 
-    # -------- STATUS --------
-    BoxLayout:
-        size_hint_x: None
-        width: dp(110)
-        spacing: dp(8)
-
-        Widget:
-            size_hint_x: None
-            width: dp(20)
-            canvas:
-                Color:
-                    rgba: root.status_color
-                Ellipse:
-                    pos: self.center_x - dp(8), self.center_y - dp(8)
-                    size: dp(16), dp(16)
-
-        Label:
-            text: root.status_text
-            color: root.status_color
-            font_size: "14sp"
-            valign: "middle"
-            halign: "left"
-            text_size: self.size
+    Label:
+        text: root.status_text
+        color: root.status_color
