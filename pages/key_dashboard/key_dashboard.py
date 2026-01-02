@@ -1,11 +1,15 @@
 from time import sleep
 import subprocess
-
 import paho.mqtt.client as mqtt
 
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.behaviors import ButtonBehavior
-from kivy.properties import StringProperty, ListProperty, ObjectProperty
+from kivy.properties import (
+    StringProperty,
+    ListProperty,
+    ObjectProperty,
+    NumericProperty,
+)
 from kivy.clock import Clock
 
 from components.base_screen import BaseScreen
@@ -32,7 +36,7 @@ class KeyItem(ButtonBehavior, BoxLayout):
             self.dashboard.open_done_page(
                 self.key_name,
                 self.status_text,
-                self.key_id
+                self.key_id,
             )
 
 
@@ -41,9 +45,11 @@ class KeyItem(ButtonBehavior, BoxLayout):
 # =========================================================
 class KeyDashboardScreen(BaseScreen):
 
+    # UI bindings
     activity_code = StringProperty("")
     activity_name = StringProperty("")
-    time_remaining = StringProperty("30")   # UI bound
+    time_remaining = StringProperty("30")
+    progress_value = NumericProperty(0.0)
 
     keys_data = ListProperty([])
 
@@ -58,7 +64,7 @@ class KeyDashboardScreen(BaseScreen):
         # CAN
         self._can_poll_event = None
 
-        # Door / timer
+        # Door timer
         self._door_open = False
         self._door_timer = 0
         self._door_timer_event = None
@@ -67,10 +73,10 @@ class KeyDashboardScreen(BaseScreen):
         self._mqtt_client = None
 
     # -----------------------------------------------------
-    # ENTER
+    # SCREEN ENTER
     # -----------------------------------------------------
     def on_enter(self, *args):
-        print("\n[UI] ▶ Entered KeyDashboardScreen")
+        print("[UI] Enter KeyDashboardScreen")
 
         self.activity_info = getattr(self.manager, "activity_info", None)
         if not self.activity_info:
@@ -80,41 +86,41 @@ class KeyDashboardScreen(BaseScreen):
         self.activity_code = self.activity_info.get("code", "")
         self.activity_name = self.activity_info.get("name", "")
         self.time_remaining = str(self.MAX_DOOR_TIME)
+        self.progress_value = 0.0
 
-        self._ensure_can_up()
+        self.ensure_can_up()
 
-        if not hasattr(self.manager, "ams_can") or self.manager.ams_can is None:
+        if not hasattr(self.manager, "ams_can"):
             self.manager.ams_can = AMS_CAN()
-            self._lock_all_keys()
+            self.lock_all_keys()
 
         self.reload_keys_from_db()
         self.populate_keys()
         self.unlock_activity_keys()
 
-        # 🔥 Solenoid
+        # 🔓 Trigger solenoid
         subprocess.Popen(
             ["sudo", "python3", "solenoid.py", "1"],
-            cwd="/home/rock/Desktop/ams_v2"
+            cwd="/home/rock/Desktop/ams_v2",
         )
 
-        # 🚪 Start GPIO monitoring
+        # 🚪 Start GPIO subscriber
         self.start_gpio_subscriber()
 
     # -----------------------------------------------------
     # CAN
     # -----------------------------------------------------
-    def _ensure_can_up(self):
-        subprocess.run(["sudo", "ip", "link", "set", "can0", "down"],
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    def ensure_can_up(self):
+        subprocess.run(["sudo", "ip", "link", "set", "can0", "down"])
         sleep(0.3)
-        subprocess.run(["sudo", "ip", "link", "set", "can0", "up",
-                        "type", "can", "bitrate", "125000"],
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run([
+            "sudo", "ip", "link", "set", "can0",
+            "up", "type", "can", "bitrate", "125000"
+        ])
         sleep(0.3)
 
-    def _lock_all_keys(self):
+    def lock_all_keys(self):
         ams_can = self.manager.ams_can
-        sleep(1)
         for strip in ams_can.key_lists or [1, 2]:
             ams_can.lock_all_positions(strip)
             ams_can.set_all_LED_OFF(strip)
@@ -123,89 +129,85 @@ class KeyDashboardScreen(BaseScreen):
     # MQTT GPIO
     # -----------------------------------------------------
     def start_gpio_subscriber(self):
-        print("[MQTT] Starting GPIO subscriber")
-
-        self._mqtt_client = mqtt.Client(client_id="kivy-door-subscriber")
-        self._mqtt_client.on_connect = self._on_mqtt_connect
-        self._mqtt_client.on_message = self._on_mqtt_message
+        self._mqtt_client = mqtt.Client("kivy-door-subscriber")
+        self._mqtt_client.on_connect = self.on_mqtt_connect
+        self._mqtt_client.on_message = self.on_mqtt_message
         self._mqtt_client.connect("localhost", 1883, 60)
         self._mqtt_client.loop_start()
 
-    def _on_mqtt_connect(self, client, userdata, flags, rc):
-        print("[MQTT] Connected rc =", rc)
+    def on_mqtt_connect(self, client, userdata, flags, rc):
         client.subscribe("gpio/pin32")
 
-    def _on_mqtt_message(self, client, userdata, msg):
-        try:
-            gpio_val = int(msg.payload.decode())
-            if gpio_val == 1 and not self._door_open:
-                self._door_open = True
-                self._on_door_opened()
+    def on_mqtt_message(self, client, userdata, msg):
+        value = int(msg.payload.decode())
 
-            elif gpio_val == 0 and self._door_open:
-                self._door_open = False
-                self._on_door_closed()
+        if value == 1 and not self._door_open:
+            self.on_door_opened()
 
-        except Exception as e:
-            print("[MQTT ERROR]", e)
+        elif value == 0 and self._door_open:
+            self.on_door_closed()
 
     # -----------------------------------------------------
     # DOOR EVENTS
     # -----------------------------------------------------
-    def _on_door_opened(self):
-        print("[DOOR] OPENED")
+    def on_door_opened(self):
+        print("[DOOR] OPEN")
 
+        self._door_open = True
         self._door_timer = 0
+        self.progress_value = 0.0
         self.time_remaining = str(self.MAX_DOOR_TIME)
 
-        self._door_timer_event = Clock.schedule_interval(
-            self._door_timer_tick, 1
+        self._can_poll_event = Clock.schedule_interval(
+            self.poll_can_events, 0.2
         )
 
-        if self._can_poll_event is None:
-            self._can_poll_event = Clock.schedule_interval(
-                self.poll_can_events, 0.2
-            )
+        self._door_timer_event = Clock.schedule_interval(
+            self.door_timer_tick, 1
+        )
 
-    def _on_door_closed(self):
+    def on_door_closed(self):
         print("[DOOR] CLOSED")
 
-        if self._door_timer_event:
-            self._door_timer_event.cancel()
-            self._door_timer_event = None
+        self._door_open = False
 
         if self._can_poll_event:
             self._can_poll_event.cancel()
             self._can_poll_event = None
 
-        print(f"[DOOR] Total open time: {self._door_timer}s")
+        if self._door_timer_event:
+            self._door_timer_event.cancel()
+            self._door_timer_event = None
 
-    def _door_timer_tick(self, dt):
+    def door_timer_tick(self, dt):
         self._door_timer += 1
+
         remaining = max(0, self.MAX_DOOR_TIME - self._door_timer)
         self.time_remaining = str(remaining)
 
+        self.progress_value = self._door_timer / float(self.MAX_DOOR_TIME)
+
         if self._door_timer >= self.MAX_DOOR_TIME:
-            print("[TIMEOUT] Door open limit reached")
-            self._on_door_closed()
+            print("[TIMEOUT] Door open too long")
+            self.on_door_closed()
 
     # -----------------------------------------------------
     # CAN POLLING
     # -----------------------------------------------------
-    def poll_can_events(self, _dt):
+    def poll_can_events(self, dt):
         ams_can = self.manager.ams_can
 
         if ams_can.key_taken_event:
             set_key_status_by_peg_id(ams_can.key_taken_id, 1)
+            ams_can.key_taken_event = False
             self.reload_keys_from_db()
             self.update_key_widgets()
-            ams_can.key_taken_event = False
 
         if ams_can.key_inserted_event:
             set_key_status_by_peg_id(ams_can.key_inserted_id, 0)
+            ams_can.key_inserted_event = False
             self.reload_keys_from_db()
             self.update_key_widgets()
-            ams_can.key_inserted_event = False
 
     # -----------------------------------------------------
     # DATABASE + UI
@@ -218,52 +220,47 @@ class KeyDashboardScreen(BaseScreen):
         grid.clear_widgets()
         self.key_widgets.clear()
 
-        for item in self.keys_data:
+        for key in self.keys_data:
             widget = KeyItem(
-                key_id=str(item["id"]),
-                key_name=item["name"],
-                dashboard=self
+                key_id=str(key["id"]),
+                key_name=key["name"],
+                dashboard=self,
             )
-            self.key_widgets[str(item["id"])] = widget
+            self.key_widgets[str(key["id"])] = widget
             grid.add_widget(widget)
 
         self.update_key_widgets()
 
     def update_key_widgets(self):
-        for item in self.keys_data:
-            widget = self.key_widgets.get(str(item["id"]))
+        for key in self.keys_data:
+            widget = self.key_widgets.get(str(key["id"]))
             if widget:
-                widget.set_status("IN" if item["status"] == 0 else "OUT")
+                widget.set_status("IN" if key["status"] == 0 else "OUT")
 
-    # -----------------------------------------------------
     def unlock_activity_keys(self):
         ams_can = self.manager.ams_can
-        for item in self.keys_data:
-            if item.get("strip") and item.get("position"):
+        for key in self.keys_data:
+            if key.get("strip") and key.get("position"):
                 ams_can.unlock_single_key(
-                    int(item["strip"]),
-                    int(item["position"])
+                    int(key["strip"]),
+                    int(key["position"]),
                 )
 
     # -----------------------------------------------------
+    def go_back(self):
+        self.manager.current = "activity"
+
     def open_done_page(self, key_name, status, key_id):
         self.manager.selected_key_id = key_id
         self.manager.selected_key_name = key_name
         self.manager.current = "activity_done"
 
     # -----------------------------------------------------
-    # EXIT
-    # -----------------------------------------------------
     def on_leave(self, *args):
         if self._can_poll_event:
             self._can_poll_event.cancel()
-
         if self._door_timer_event:
             self._door_timer_event.cancel()
-
         if self._mqtt_client:
             self._mqtt_client.loop_stop()
             self._mqtt_client.disconnect()
-            self._mqtt_client = None
-
-        print("[UI] ◀ Leaving KeyDashboardScreen")
