@@ -248,7 +248,64 @@ class KeyDashboardScreen(BaseScreen):
 
     # -----------------------------------------------------
     def go_back(self):
+        print("[UI] ◀ Back pressed – cleaning up hardware & CAN")
+
+        # 1️⃣ Turn OFF solenoid
+        try:
+            subprocess.Popen(
+                ["sudo", "python3", "solenoid.py", "0"],
+                cwd="/home/rock/Desktop/ams_v2",
+            )
+            print("[HW] Solenoid turned OFF")
+        except Exception as e:
+            print("[HW][ERROR] Solenoid OFF failed:", e)
+
+        # 2️⃣ Stop CAN polling
+        if self._can_poll_event:
+            self._can_poll_event.cancel()
+            self._can_poll_event = None
+
+        # 3️⃣ Stop door timer
+        if self._door_timer_event:
+            self._door_timer_event.cancel()
+            self._door_timer_event = None
+
+        self._door_open = False
+        self._door_timer = 0
+        self.progress_value = 0.0
+        self.time_remaining = str(self.MAX_DOOR_TIME)
+
+        # 4️⃣ Unlock all keys + LEDs OFF
+        try:
+            ams_can = self.manager.ams_can
+            for strip in ams_can.key_lists or [1, 2]:
+                ams_can.unlock_all_positions(strip)
+                ams_can.set_all_LED_OFF(strip)
+            print("[CAN] Keys unlocked & LEDs off")
+        except Exception as e:
+            print("[CAN][WARN] Key unlock failed:", e)
+
+        # 5️⃣ Stop MQTT subscriber
+        if self._mqtt_client:
+            try:
+                self._mqtt_client.loop_stop()
+                self._mqtt_client.disconnect()
+                print("[MQTT] Subscriber stopped")
+            except Exception as e:
+                print("[MQTT][WARN]", e)
+            self._mqtt_client = None
+
+        # 6️⃣ Cleanup CAN (if supported)
+        try:
+            if hasattr(self.manager.ams_can, "cleanup"):
+                self.manager.ams_can.cleanup()
+                print("[CAN] Connection closed")
+        except Exception as e:
+            print("[CAN][WARN] Cleanup failed:", e)
+
+        # 7️⃣ Navigate back
         self.manager.current = "activity"
+
 
     def open_done_page(self, key_name, status, key_id):
         self.manager.selected_key_id = key_id
