@@ -1,15 +1,17 @@
-from kivy.uix.screenmanager import Screen
-from kivy.properties import StringProperty
 from datetime import datetime
 from kivy.clock import Clock
 from components.base_screen import BaseScreen
 
+
 class AuthScreen(BaseScreen):
 
     def on_enter(self):
-        # update time once per second (same pattern as Home)
         self.update_time()
         self._clock = Clock.schedule_interval(self.update_time, 1)
+
+        # reset global auth values
+        self.manager.auth_mode = None
+        self.manager.final_auth_mode = None
 
     def on_leave(self):
         if hasattr(self, "_clock"):
@@ -23,5 +25,24 @@ class AuthScreen(BaseScreen):
 
     def on_biometric(self):
         print("Biometric authentication selected")
+
+        self.manager.auth_mode = 3
+        self.manager.final_auth_mode = "BIOMETRIC"
+
+        # self.manager.current = "biometric"
+
     def on_card(self):
+        print("Card authentication selected")
+
+        self.manager.auth_mode = 2
+        self.manager.final_auth_mode = "CARD"
+
         self.manager.current = "card_scan"
+
+    def on_pin(self):
+        print("PIN authentication selected")
+
+        self.manager.auth_mode = 1
+        self.manager.final_auth_mode = "PIN"
+
+        self.manager.current = "pin"

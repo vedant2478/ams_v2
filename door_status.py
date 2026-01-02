@@ -1,32 +1,13 @@
 #!/usr/bin/env python3
 import time
 import mraa
-
-# 🔴 CHANGE THIS PIN IF NEEDED
-LIMIT_SWITCH_PIN = 36   # example GPIOH_8 (adjust if required)
-
-try:
-    limit_switch = mraa.Gpio(LIMIT_SWITCH_PIN)
-    limit_switch.dir(mraa.DIR_IN)
-except Exception as e:
-    print("-1", flush=True)
-    raise SystemExit(1)
-
-# Convention:
-# 1 = DOOR OPEN
-# 0 = DOOR CLOSED
-
-last_state = None
+from csi_ams.utils.commons import LIMIT_SWITCH, read_limit_switch
 
 while True:
     try:
-        val = limit_switch.read()
+        state = read_limit_switch(LIMIT_SWITCH)
+        print(state, flush=True)
     except Exception:
-        val = -1
+        print(-1, flush=True)
 
-    # Print ONLY when value changes
-    if val != last_state:
-        print(val, flush=True)
-        last_state = val
-
-    time.sleep(0.1)
+    time.sleep(0.2)
