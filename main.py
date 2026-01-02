@@ -22,7 +22,7 @@ if BACKEND_DIR not in sys.path:
 # ================= SQLALCHEMY IMPORTS =================
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from utils.commons import SQLALCHEMY_DATABASE_URI
+from csi_ams.utils.commons import SQLALCHEMY_DATABASE_URI
 
 # ================= COMPONENT IMPORTS =================
 from components.header.header import Header
