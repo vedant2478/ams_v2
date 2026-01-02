@@ -189,6 +189,7 @@ class KeyDashboardScreen(BaseScreen):
 
         if self._door_timer >= self.MAX_DOOR_TIME:
             print("[TIMEOUT] Door open too long")
+            self.go_back()
             self.on_door_closed()
 
     # -----------------------------------------------------
