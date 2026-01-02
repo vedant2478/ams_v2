@@ -83,6 +83,7 @@ class MainApp(App):
         # Authentication state
         sm.auth_mode = None               # 1 = PIN, 2 = CARD, 3 = BIOMETRIC
         sm.final_auth_mode = None         # "PIN", "CARD", "BIOMETRIC"
+        sm.ams_access_log = None        # AMS_Access_Log instance
 
         # User & logging state
         sm.user_id = None
