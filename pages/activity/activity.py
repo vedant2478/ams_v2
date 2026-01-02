@@ -115,6 +115,7 @@ class ActivityCodeScreen(BaseScreen):
                     eventDesc=eventDesc,
                     is_posted=0,
                 )
+                print(ams_event_log)
 
                 session.add(ams_event_log)
                 session.commit()
