@@ -167,3 +167,18 @@ def take_key_pad_input(session, key_pad):
     while key_str is None:
         key_str = key_pad.ReadKey()
     return key_str
+
+def get_event_description(session, event_status):
+    """
+    Fetch event description from DB using event ID
+    """
+    event_type = (
+        session.query(AMS_Event_Types)
+        .filter(AMS_Event_Types.eventId == event_status)
+        .one_or_none()
+    )
+
+    if event_type:
+        return event_type.eventDescription
+
+    return ""
