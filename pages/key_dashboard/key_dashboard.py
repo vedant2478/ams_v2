@@ -1,4 +1,4 @@
-import datetime
+from datetime import datetime
 from time import sleep
 import subprocess
 from csi_ams.model import EVENT_DOOR_OPEN, EVENT_DOOR_OPEN, EVENT_TYPE_EVENT, AMS_Event_Log
