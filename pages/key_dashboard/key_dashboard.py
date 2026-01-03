@@ -64,6 +64,11 @@ class KeyDashboardScreen(BaseScreen):
         # UI
         self.key_widgets = {}
 
+        # Door timing
+        self.door_open_start_time = None   # datetime
+        self.door_open_seconds = 0         # int seconds
+
+
         # CAN
         self._can_poll_event = None
 
@@ -180,6 +185,21 @@ class KeyDashboardScreen(BaseScreen):
         elif value == 0 and self._door_open:
             self.on_door_closed()
 
+    def door_timer_tick(self, dt):
+        self.door_open_seconds += 1   # ✅ UPDATE VARIABLE
+
+        remaining = max(0, self.MAX_DOOR_TIME - self.door_open_seconds)
+        self.time_remaining = str(remaining)
+
+        self.progress_value = self.door_open_seconds / float(self.MAX_DOOR_TIME)
+
+        print(f"[DOOR] Open for {self.door_open_seconds} seconds")
+
+        if self.door_open_seconds >= self.MAX_DOOR_TIME:
+            print("[TIMEOUT] Door open too long")
+            self.go_back()
+            self.on_door_closed()
+
     # -----------------------------------------------------
     # DOOR EVENTS
     # -----------------------------------------------------
@@ -187,7 +207,11 @@ class KeyDashboardScreen(BaseScreen):
         print("[DOOR] OPEN")
 
         self._door_open = True
-        self._door_timer = 0
+
+        # ✅ START TRACKING
+        self.door_open_start_time = datetime.now(TZ_INDIA)
+        self.door_open_seconds = 0
+
         self.progress_value = 0.0
         self.time_remaining = str(self.MAX_DOOR_TIME)
 
@@ -204,6 +228,14 @@ class KeyDashboardScreen(BaseScreen):
 
         self._door_open = False
 
+        # ✅ FINAL DOOR OPEN TIME
+        total_time = self.door_open_seconds
+        print(f"[DOOR] Total open time: {total_time} seconds")
+
+        # Reset trackers
+        self.door_open_start_time = None
+        self.door_open_seconds = 0
+
         if self._can_poll_event:
             self._can_poll_event.cancel()
             self._can_poll_event = None
@@ -211,6 +243,7 @@ class KeyDashboardScreen(BaseScreen):
         if self._door_timer_event:
             self._door_timer_event.cancel()
             self._door_timer_event = None
+
 
     def door_timer_tick(self, dt):
         self._door_timer += 1
