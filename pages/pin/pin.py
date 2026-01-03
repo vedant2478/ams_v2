@@ -127,9 +127,11 @@ class PinScreen(BaseScreen):
         self.message = "PIN VERIFIED"
 
         session = self.manager.db_session
-
-        # USER ID MUST ALREADY BE SET DURING CARD SCAN
-        user_id = self.manager.user_id
+        ams_user = AMS_Users()
+        user_auth = ams_user.get_user_id(
+                                session, self.manager.auth_mode, card_no=self.card_number
+                            )
+        
 
         # --------------------------------------------------
         # 1️⃣ CREATE ACCESS LOG
@@ -139,7 +141,7 @@ class PinScreen(BaseScreen):
             signInMode=self.manager.auth_mode,
             signInFailed=0,
             signInSucceed=1,
-            signInUserId=user_id,
+            signInUserId=user_auth["id"],
 
             activityCodeEntryTime=None,
             activityCode=None,
