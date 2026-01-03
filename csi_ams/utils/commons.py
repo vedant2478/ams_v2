@@ -78,7 +78,7 @@ counter = 0
 
 # ================= DB =================
 SQLALCHEMY_DATABASE_URI = (
-    "sqlite:////home/rock/Desktop/csi_ams/csiams.dev.sqlite"
+    "sqlite:////home/rock/Desktop/ams_v2/csiams.dev.sqlite"
 )
 
 # ================= HELPERS =================
