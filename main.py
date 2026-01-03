@@ -92,7 +92,9 @@ class MainApp(App):
         # Card info
         sm.card_number = None
         sm.card_info = None
-
+        
+        #Activity info
+        sm.activiy_code = None
         # -------------------------------------------------
         # 4️⃣ REGISTER SCREENS
         # -------------------------------------------------

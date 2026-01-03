@@ -87,6 +87,8 @@ class ActivityCodeScreen(BaseScreen):
             ams_access_log = self.manager.ams_access_log
             final_signin_mode = self.manager.final_auth_mode
 
+            self.manager.activity_code = int(entered_code)
+
             try:
                 # --------------------------------------------------
                 # 1️⃣ UPDATE GLOBAL ACCESS LOG
@@ -103,7 +105,8 @@ class ActivityCodeScreen(BaseScreen):
                 eventDesc = get_event_description(
                     session, EVENT_ACTIVITY_CODE_CORRECT
                 )
-
+                card_info = getattr(self.manager, "card_info", None)
+                user_id = card_info["id"]
                 ams_event_log = AMS_Event_Log(
                     userId=user_id,
                     keyId=None,

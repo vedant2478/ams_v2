@@ -1,5 +1,8 @@
+import datetime
 from time import sleep
 import subprocess
+from csi_ams.model import EVENT_DOOR_OPEN, EVENT_DOOR_OPEN, EVENT_TYPE_EVENT, AMS_Event_Log
+from csi_ams.utils.commons import TZ_INDIA, get_event_description, get_event_description
 import paho.mqtt.client as mqtt
 
 from kivy.uix.boxlayout import BoxLayout
@@ -50,7 +53,7 @@ class KeyDashboardScreen(BaseScreen):
     activity_name = StringProperty("")
     time_remaining = StringProperty("30")
     progress_value = NumericProperty(0.0)
-
+    
     keys_data = ListProperty([])
 
     MAX_DOOR_TIME = 30  # seconds
@@ -77,6 +80,9 @@ class KeyDashboardScreen(BaseScreen):
     # -----------------------------------------------------
     def on_enter(self, *args):
         print("[UI] Enter KeyDashboardScreen")
+        session = self.manager.db_session
+        ams_access_log = self.manager.ams_access_log
+        
 
         self.activity_info = getattr(self.manager, "activity_info", None)
         if not self.activity_info:
@@ -89,6 +95,13 @@ class KeyDashboardScreen(BaseScreen):
         self.progress_value = 0.0
 
         self.ensure_can_up()
+        ams_access_log.doorOpenTime = datetime.now(TZ_INDIA)
+        ams_access_log.event_type_id = EVENT_TYPE_EVENT
+        session.commit()
+
+        eventDesc = get_event_description(
+                        session, EVENT_DOOR_OPEN
+                        )
 
         if not hasattr(self.manager, "ams_can"):
             self.manager.ams_can = AMS_CAN()
@@ -97,6 +110,26 @@ class KeyDashboardScreen(BaseScreen):
         self.reload_keys_from_db()
         self.populate_keys()
         self.unlock_activity_keys()
+
+        card_info = getattr(self.manager, "card_info", None)
+        act_code_entered = self.manager.activity_code
+        final_signin_mode = self.manager.final_auth_mode
+        user_id = card_info["id"]
+
+        ams_event_log = AMS_Event_Log(
+                                        userId=user_id,
+                                        keyId=None,
+                                        activityId=act_code_entered,
+                                        eventId=EVENT_DOOR_OPEN,
+                                        loginType=final_signin_mode,
+                                        access_log_id=ams_access_log.id,
+                                        timeStamp=datetime.now(TZ_INDIA),
+                                        event_type=EVENT_TYPE_EVENT,
+                                        eventDesc=eventDesc,
+                                        is_posted=0,
+                                    )
+        session.add(ams_event_log)
+        session.commit()
 
         # 🔓 Trigger solenoid
         subprocess.Popen(
