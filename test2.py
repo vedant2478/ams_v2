@@ -1,60 +1,92 @@
-#!/usr/bin/env python3
-import sys
-import time
-import gpiod
+import sqlite3
+import os
+from datetime import datetime
 
-GPIOCHIP = "gpiochip0"
+# =====================================================
+# DB PATH
+# =====================================================
+BASE_DIR = "D:/vedant/ams_project_v2"   # adjust if needed
+DB_PATH = "csiams.dev.sqlite"
+def add_user(
+    name,
+    card_no,
+    pin_code=None,
+    email=None,
+    mobile=None,
+    role_id=2,
+    is_active=1
+):
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cur = conn.cursor()
 
-BUZZER_LINE = 38
-RL1_LINE    = 39
-RL2_LINE    = 40
+        # ---------------------------------------------
+        # CHECK CARD DUPLICATE
+        # ---------------------------------------------
+        cur.execute("""
+            SELECT id FROM users
+            WHERE cardNo = ? AND deletedAt IS NULL
+        """, (str(card_no),))
 
-chip = gpiod.Chip(GPIOCHIP)
+        if cur.fetchone():
+            print(f"❌ Card {card_no} already exists")
+            conn.close()
+            return False
 
-buzzer = chip.get_line(BUZZER_LINE)
-rl1    = chip.get_line(RL1_LINE)
-rl2    = chip.get_line(RL2_LINE)
+        now = datetime.now()
 
-buzzer.request(
-    consumer="buzzer",
-    type=gpiod.LINE_REQ_DIR_OUT,
-    default_val=0
-)
+        # ---------------------------------------------
+        # INSERT USER (FIXED)
+        # ---------------------------------------------
+        cur.execute("""
+            INSERT INTO users (
+                name,
+                email,
+                mobileNumber,
+                cardNo,
+                pinCode,
+                roleId,
+                isActive,
+                createdAt,
+                updatedAt
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            name,
+            email,
+            mobile,
+            str(card_no),
+            str(pin_code) if pin_code else None,
+            role_id,
+            is_active,
+            now,
+            now
+        ))
 
-rl1.request(
-    consumer="relay1",
-    type=gpiod.LINE_REQ_DIR_OUT,
-    default_val=0
-)
+        conn.commit()
+        user_id = cur.lastrowid
+        conn.close()
 
-rl2.request(
-    consumer="relay2",
-    type=gpiod.LINE_REQ_DIR_OUT,
-    default_val=0
-)
+        print("✅ User added successfully")
+        print(f"   ID      : {user_id}")
+        print(f"   Name    : {name}")
+        print(f"   Card No : {card_no}")
 
-# -------- ARGUMENT CHECK --------
-if len(sys.argv) != 2:
-    print("Usage: python3 solenoid.py <0|1>")
-    sys.exit(1)
+        return user_id
 
-state = int(sys.argv[1])
+    except Exception as e:
+        print("❌ Failed to add user")
+        print(e)
+        return False
 
-# -------- ACTION --------
-if state == 1:
-    print("[GPIO] Activating solenoids")
-    rl1.set_value(1)
-    rl2.set_value(1)
-    buzzer.set_value(1)
-else:
-    print("[GPIO] Deactivating solenoids")
-    rl1.set_value(0)
-    rl2.set_value(0)
-    buzzer.set_value(0)
 
-time.sleep(0.2)
-
-buzzer.release()
-rl1.release()
-rl2.release()
-chip.close()
+if __name__ == "__main__":
+    add_user(
+        name="Test User",
+        card_no=3663674,
+        pin_code=10274,
+        email="testuser@ams.com",
+        mobile="9876543210",
+        role_id=2,
+        is_active=1
+    )
