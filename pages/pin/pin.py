@@ -59,37 +59,104 @@ class PinScreen(BaseScreen):
             else:
                 self.message = f"Enter {self.MAX_PIN} digits"
 
-def validate_pin(self):
-    """Validate PIN and commit LOGIN logs"""
-    entered_pin = "".join(self.pin)
+    def validate_pin(self):
+        """Validate PIN and commit LOGIN logs"""
+        entered_pin = "".join(self.pin)
 
-    # --------------------------------------------------
-    # SAFETY CHECK
-    # --------------------------------------------------
-    if not self.card_number:
-        self.message = "ERROR: No card"
-        self.pin.clear()
-        self.pin_length = 0
-        return
+        # --------------------------------------------------
+        # SAFETY CHECK
+        # --------------------------------------------------
+        if not self.card_number:
+            self.message = "ERROR: No card"
+            self.pin.clear()
+            self.pin_length = 0
+            return
 
-    session = self.manager.db_session  # ✅ DEFINE SESSION EARLY
+        session = self.manager.db_session  # ✅ DEFINE SESSION EARLY
 
-    # --------------------------------------------------
-    # VERIFY PIN
-    # --------------------------------------------------
-    is_valid = verify_card_pin(self.card_number, entered_pin)
+        # --------------------------------------------------
+        # VERIFY PIN
+        # --------------------------------------------------
+        is_valid = verify_card_pin(self.card_number, entered_pin)
 
-    if not is_valid:
-        self.message = "INCORRECT PIN"
-        self.pin.clear()
-        self.pin_length = 0
+        if not is_valid:
+            self.message = "INCORRECT PIN"
+            self.pin.clear()
+            self.pin_length = 0
 
+            ams_access_log = AMS_Access_Log(
+                signInTime=datetime.now(TZ_INDIA),
+                signInMode=self.manager.auth_mode,
+                signInFailed=1,
+                signInSucceed=0,
+                signInUserId=None,
+                activityCodeEntryTime=None,
+                activityCode=None,
+                doorOpenTime=None,
+                keysAllowed=None,
+                keysTaken=None,
+                keysReturned=None,
+                doorCloseTime=None,
+                event_type_id=EVENT_LOGIN_FAILED,
+                is_posted=0,
+            )
+            session.add(ams_access_log)
+            session.commit()
+
+            eventDesc = get_event_description(session, EVENT_LOGIN_FAILED)
+
+            ams_event_log = AMS_Event_Log(
+                userId=0,
+                keyId=None,
+                activityId=None,
+                eventId=EVENT_LOGIN_FAILED,
+                loginType=self.manager.final_auth_mode,
+                access_log_id=ams_access_log.id,
+                timeStamp=datetime.now(TZ_INDIA),
+                event_type=EVENT_TYPE_ALARM,
+                eventDesc=eventDesc,
+                is_posted=0,
+            )
+            session.add(ams_event_log)
+            session.commit()
+            return
+
+        # --------------------------------------------------
+        # PIN SUCCESS
+        # --------------------------------------------------
+        print(f"✓ PIN correct for card {self.card_number}")
+        self.message = "PIN VERIFIED"
+
+        ams_user = AMS_Users()
+        user_auth = ams_user.get_user_id(
+            session,
+            self.manager.auth_mode,
+            card_no=self.card_number
+        )
+
+        # --------------------------------------------------
+        # 🔒 VALIDATE AUTH OBJECT
+        # --------------------------------------------------
+        if (
+            not isinstance(user_auth, dict)
+            or user_auth.get("ResultCode") != AUTH_RESULT_SUCCESS
+            or "id" not in user_auth
+        ):
+            print("❌ Invalid user_auth:", user_auth)
+            self.message = "AUTH ERROR"
+            return
+
+        user_id = user_auth["id"]  # ✅ SAFE NOW
+
+        # --------------------------------------------------
+        # CREATE ACCESS LOG
+        # --------------------------------------------------
         ams_access_log = AMS_Access_Log(
             signInTime=datetime.now(TZ_INDIA),
             signInMode=self.manager.auth_mode,
-            signInFailed=1,
-            signInSucceed=0,
-            signInUserId=None,
+            signInFailed=0,
+            signInSucceed=1,
+            signInUserId=user_id,
             activityCodeEntryTime=None,
             activityCode=None,
             doorOpenTime=None,
@@ -97,108 +164,41 @@ def validate_pin(self):
             keysTaken=None,
             keysReturned=None,
             doorCloseTime=None,
-            event_type_id=EVENT_LOGIN_FAILED,
+            event_type_id=EVENT_LOGIN_SUCCEES,
             is_posted=0,
         )
+
         session.add(ams_access_log)
         session.commit()
 
-        eventDesc = get_event_description(session, EVENT_LOGIN_FAILED)
+        self.manager.ams_access_log = ams_access_log
+        self.manager.access_log_id = ams_access_log.id
+
+        # --------------------------------------------------
+        # CREATE EVENT LOG
+        # --------------------------------------------------
+        eventDesc = get_event_description(session, EVENT_LOGIN_SUCCEES)
 
         ams_event_log = AMS_Event_Log(
-            userId=0,
+            userId=user_id,  # ✅ FIXED
             keyId=None,
             activityId=None,
-            eventId=EVENT_LOGIN_FAILED,
+            eventId=EVENT_LOGIN_SUCCEES,
             loginType=self.manager.final_auth_mode,
             access_log_id=ams_access_log.id,
             timeStamp=datetime.now(TZ_INDIA),
-            event_type=EVENT_TYPE_ALARM,
+            event_type=EVENT_TYPE_EVENT,
             eventDesc=eventDesc,
             is_posted=0,
         )
+
         session.add(ams_event_log)
         session.commit()
-        return
 
-    # --------------------------------------------------
-    # PIN SUCCESS
-    # --------------------------------------------------
-    print(f"✓ PIN correct for card {self.card_number}")
-    self.message = "PIN VERIFIED"
-
-    ams_user = AMS_Users()
-    user_auth = ams_user.get_user_id(
-        session,
-        self.manager.auth_mode,
-        card_no=self.card_number
-    )
-
-    # --------------------------------------------------
-    # 🔒 VALIDATE AUTH OBJECT
-    # --------------------------------------------------
-    if (
-        not isinstance(user_auth, dict)
-        or user_auth.get("ResultCode") != AUTH_RESULT_SUCCESS
-        or "id" not in user_auth
-    ):
-        print("❌ Invalid user_auth:", user_auth)
-        self.message = "AUTH ERROR"
-        return
-
-    user_id = user_auth["id"]  # ✅ SAFE NOW
-
-    # --------------------------------------------------
-    # CREATE ACCESS LOG
-    # --------------------------------------------------
-    ams_access_log = AMS_Access_Log(
-        signInTime=datetime.now(TZ_INDIA),
-        signInMode=self.manager.auth_mode,
-        signInFailed=0,
-        signInSucceed=1,
-        signInUserId=user_id,
-        activityCodeEntryTime=None,
-        activityCode=None,
-        doorOpenTime=None,
-        keysAllowed=None,
-        keysTaken=None,
-        keysReturned=None,
-        doorCloseTime=None,
-        event_type_id=EVENT_LOGIN_SUCCEES,
-        is_posted=0,
-    )
-
-    session.add(ams_access_log)
-    session.commit()
-
-    self.manager.ams_access_log = ams_access_log
-    self.manager.access_log_id = ams_access_log.id
-
-    # --------------------------------------------------
-    # CREATE EVENT LOG
-    # --------------------------------------------------
-    eventDesc = get_event_description(session, EVENT_LOGIN_SUCCEES)
-
-    ams_event_log = AMS_Event_Log(
-        userId=user_id,  # ✅ FIXED
-        keyId=None,
-        activityId=None,
-        eventId=EVENT_LOGIN_SUCCEES,
-        loginType=self.manager.final_auth_mode,
-        access_log_id=ams_access_log.id,
-        timeStamp=datetime.now(TZ_INDIA),
-        event_type=EVENT_TYPE_EVENT,
-        eventDesc=eventDesc,
-        is_posted=0,
-    )
-
-    session.add(ams_event_log)
-    session.commit()
-
-    # --------------------------------------------------
-    # MOVE TO NEXT SCREEN
-    # --------------------------------------------------
-    self.pin.clear()
-    self.pin_length = 0
-    self.manager.transition.direction = "left"
-    self.manager.current = "activity"
+        # --------------------------------------------------
+        # MOVE TO NEXT SCREEN
+        # --------------------------------------------------
+        self.pin.clear()
+        self.pin_length = 0
+        self.manager.transition.direction = "left"
+        self.manager.current = "activity"
