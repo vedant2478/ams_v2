@@ -244,6 +244,8 @@ class KeyDashboardScreen(BaseScreen):
             self._door_timer_event.cancel()
             self._door_timer_event = None
 
+        print("[DOOR] Timers stopped door opended for :- " , total_time , " seconds")
+
 
     def door_timer_tick(self, dt):
         self._door_timer += 1
