@@ -129,8 +129,8 @@ class PinScreen(BaseScreen):
 
         session = self.manager.db_session
 
-        # USER ID MUST ALREADY BE SET DURING CARD SCAN
-        user_id = self.manager.user_id
+        card_info = getattr(self.manager, "card_info", None)
+        user_id = card_info["id"]
         print(f"✓ User ID: {user_id}")
 
         # --------------------------------------------------

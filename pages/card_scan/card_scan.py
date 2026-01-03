@@ -103,7 +103,7 @@ class CardScanScreen(BaseScreen):
             print(f"✓ Card {card_no} detected")
 
             card_info = check_card_exists(card_no)
-            print(card_info)
+            
 
             if card_info["exists"]:
                 print(f"✓ Card found: {card_info['name']}")
