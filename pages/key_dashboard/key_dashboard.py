@@ -300,20 +300,74 @@ class KeyDashboardScreen(BaseScreen):
     def go_back(self):
         print("[UI] ◀ Back pressed – cleaning up hardware & CAN")
 
-        subprocess.Popen(
-            ["sudo", "python3", "solenoid.py", "0"],
-            cwd="/home/rock/Desktop/ams_v2",
-        )
+        # --------------------------------------------------
+        # 1️⃣ Turn OFF door solenoid (close door)
+        # --------------------------------------------------
+        try:
+            subprocess.Popen(
+                ["sudo", "python3", "solenoid.py", "0"],
+                cwd="/home/rock/Desktop/ams_v2",
+            )
+            print("[HW] Door solenoid turned OFF")
+        except Exception as e:
+            print("[HW][ERROR] Solenoid OFF failed:", e)
 
+        # --------------------------------------------------
+        # 2️⃣ Stop timers
+        # --------------------------------------------------
+        if self._door_timer_event:
+            self._door_timer_event.cancel()
+            self._door_timer_event = None
+
+        if self._can_poll_event:
+            self._can_poll_event.cancel()
+            self._can_poll_event = None
+
+        self._door_open = False
+        self.door_open_start_time = None
+        self.door_open_seconds = 0
+        self.progress_value = 0.0
+        self.time_remaining = str(self.MAX_DOOR_TIME)
+
+        # --------------------------------------------------
+        # 3️⃣ Unlock ALL keys + Turn OFF all LEDs
+        # --------------------------------------------------
+        try:
+            ams_can = self.manager.ams_can
+            for strip in ams_can.key_lists or [1, 2]:
+                ams_can.unlock_all_positions(strip)
+                ams_can.set_all_LED_OFF(strip)
+            print("[CAN] All keys unlocked & LEDs turned OFF")
+        except Exception as e:
+            print("[CAN][WARN] Failed to unlock keys / LEDs:", e)
+
+        # --------------------------------------------------
+        # 4️⃣ Stop MQTT subscriber
+        # --------------------------------------------------
         if self._mqtt_client:
-            self._mqtt_client.loop_stop()
-            self._mqtt_client.disconnect()
+            try:
+                self._mqtt_client.loop_stop()
+                self._mqtt_client.disconnect()
+                print("[MQTT] Subscriber stopped")
+            except Exception as e:
+                print("[MQTT][WARN]", e)
             self._mqtt_client = None
 
-        if hasattr(self.manager.ams_can, "cleanup"):
-            self.manager.ams_can.cleanup()
+        # --------------------------------------------------
+        # 5️⃣ Cleanup CAN connection
+        # --------------------------------------------------
+        try:
+            if hasattr(self.manager.ams_can, "cleanup"):
+                self.manager.ams_can.cleanup()
+                print("[CAN] Connection closed")
+        except Exception as e:
+            print("[CAN][WARN] Cleanup failed:", e)
 
+        # --------------------------------------------------
+        # 6️⃣ Navigate back
+        # --------------------------------------------------
         self.manager.current = "activity"
+
 
     def open_done_page(self, key_name, status, key_id):
         self.manager.selected_key_id = key_id
