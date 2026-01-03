@@ -230,7 +230,7 @@ class KeyDashboardScreen(BaseScreen):
 
         # ✅ FINAL DOOR OPEN TIME
         total_time = self.door_open_seconds
-        print(f"[DOOR] Total open time: {total_time} seconds")
+        
 
         # Reset trackers
         self.door_open_start_time = None
