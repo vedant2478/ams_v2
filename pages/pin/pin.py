@@ -72,8 +72,6 @@ class PinScreen(BaseScreen):
             self.pin_length = 0
             return
 
-        session = self.manager.db_session  # ✅ DEFINE SESSION EARLY
-
         # --------------------------------------------------
         # VERIFY PIN
         # --------------------------------------------------
@@ -82,74 +80,59 @@ class PinScreen(BaseScreen):
         if not is_valid:
             self.message = "INCORRECT PIN"
             self.pin.clear()
-            self.pin_length = 0
-
+            self.pin_length = 0 
             ams_access_log = AMS_Access_Log(
-                signInTime=datetime.now(TZ_INDIA),
-                signInMode=self.manager.auth_mode,
-                signInFailed=1,
-                signInSucceed=0,
-                signInUserId=None,
-                activityCodeEntryTime=None,
-                activityCode=None,
-                doorOpenTime=None,
-                keysAllowed=None,
-                keysTaken=None,
-                keysReturned=None,
-                doorCloseTime=None,
-                event_type_id=EVENT_LOGIN_FAILED,
-                is_posted=0,
-            )
+                                signInTime=datetime.now(TZ_INDIA),
+                                signInMode=self.manager.auth_mode,
+                                signInFailed=1,
+                                signInSucceed=0,
+                                signInUserId=None,
+                                activityCodeEntryTime=None,
+                                activityCode=None,
+                                doorOpenTime=None,
+                                keysAllowed=None,
+                                keysTaken=None,
+                                keysReturned=None,
+                                doorCloseTime=None,
+                                event_type_id=EVENT_LOGIN_FAILED,
+                                is_posted=0,
+                            )
             session.add(ams_access_log)
             session.commit()
 
-            eventDesc = get_event_description(session, EVENT_LOGIN_FAILED)
+            eventDesc = get_event_description(
+                                session, EVENT_LOGIN_FAILED
+                            )
 
             ams_event_log = AMS_Event_Log(
-                userId=0,
-                keyId=None,
-                activityId=None,
-                eventId=EVENT_LOGIN_FAILED,
-                loginType=self.manager.final_auth_mode,
-                access_log_id=ams_access_log.id,
-                timeStamp=datetime.now(TZ_INDIA),
-                event_type=EVENT_TYPE_ALARM,
-                eventDesc=eventDesc,
-                is_posted=0,
-            )
+                                userId=0,
+                                keyId=None,
+                                activityId=None,
+                                eventId=EVENT_LOGIN_FAILED,
+                                loginType=self.manager.final_auth_mode,
+                                access_log_id=ams_access_log.id,
+                                timeStamp=datetime.now(TZ_INDIA),
+                                event_type=EVENT_TYPE_ALARM,
+                                eventDesc=eventDesc,
+                                is_posted=0,
+                            )
             session.add(ams_event_log)
             session.commit()
             return
 
         # --------------------------------------------------
-        # PIN SUCCESS
+        # PIN SUCCESS → LOGIN LOGGING
         # --------------------------------------------------
         print(f"✓ PIN correct for card {self.card_number}")
         self.message = "PIN VERIFIED"
 
-        ams_user = AMS_Users()
-        user_auth = ams_user.get_user_id(
-            session,
-            self.manager.auth_mode,
-            card_no=self.card_number
-        )
+        session = self.manager.db_session
+
+        # USER ID MUST ALREADY BE SET DURING CARD SCAN
+        user_id = self.manager.user_id
 
         # --------------------------------------------------
-        # 🔒 VALIDATE AUTH OBJECT
-        # --------------------------------------------------
-        if (
-            not isinstance(user_auth, dict)
-            or user_auth.get("ResultCode") != AUTH_RESULT_SUCCESS
-            or "id" not in user_auth
-        ):
-            print("❌ Invalid user_auth:", user_auth)
-            self.message = "AUTH ERROR"
-            return
-
-        user_id = user_auth["id"]  # ✅ SAFE NOW
-
-        # --------------------------------------------------
-        # CREATE ACCESS LOG
+        # 1️⃣ CREATE ACCESS LOG
         # --------------------------------------------------
         ams_access_log = AMS_Access_Log(
             signInTime=datetime.now(TZ_INDIA),
@@ -157,6 +140,7 @@ class PinScreen(BaseScreen):
             signInFailed=0,
             signInSucceed=1,
             signInUserId=user_id,
+
             activityCodeEntryTime=None,
             activityCode=None,
             doorOpenTime=None,
@@ -164,6 +148,7 @@ class PinScreen(BaseScreen):
             keysTaken=None,
             keysReturned=None,
             doorCloseTime=None,
+
             event_type_id=EVENT_LOGIN_SUCCEES,
             is_posted=0,
         )
@@ -172,19 +157,18 @@ class PinScreen(BaseScreen):
         session.commit()
 
         self.manager.ams_access_log = ams_access_log
+
+        # STORE GLOBALLY
         self.manager.access_log_id = ams_access_log.id
 
-        # --------------------------------------------------
-        # CREATE EVENT LOG
-        # --------------------------------------------------
         eventDesc = get_event_description(session, EVENT_LOGIN_SUCCEES)
 
         ams_event_log = AMS_Event_Log(
-            userId=user_id,  # ✅ FIXED
+            userId=user_id,
             keyId=None,
             activityId=None,
             eventId=EVENT_LOGIN_SUCCEES,
-            loginType=self.manager.final_auth_mode,
+            loginType=self.manager.final_auth_mode,  # "PIN"
             access_log_id=ams_access_log.id,
             timeStamp=datetime.now(TZ_INDIA),
             event_type=EVENT_TYPE_EVENT,
@@ -196,7 +180,7 @@ class PinScreen(BaseScreen):
         session.commit()
 
         # --------------------------------------------------
-        # MOVE TO NEXT SCREEN
+        # 3️⃣ MOVE TO ACTIVITY SCREEN
         # --------------------------------------------------
         self.pin.clear()
         self.pin_length = 0
