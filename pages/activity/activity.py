@@ -74,7 +74,7 @@ class ActivityCodeScreen(BaseScreen):
             return
 
         user_id = self.card_info["id"]
-        print(user_id)
+        
 
         # Verify activity code with database
         result = verify_activity_code(user_id, entered_code)
