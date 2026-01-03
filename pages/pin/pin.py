@@ -62,7 +62,7 @@ class PinScreen(BaseScreen):
     def validate_pin(self):
         """Validate PIN and commit LOGIN logs"""
         entered_pin = "".join(self.pin)
-        ams_user = AMS_Users()
+        
 
         # --------------------------------------------------
         # SAFETY CHECK
@@ -130,9 +130,6 @@ class PinScreen(BaseScreen):
         session = self.manager.db_session
 
         # USER ID MUST ALREADY BE SET DURING CARD SCAN
-        user_auth = ams_user.get_user_id(
-                                session, self.manager.auth_mode, pin_no=entered_pin
-                            )
         user_id = self.manager.user_id
         print(f"✓ User ID: {user_id}")
 
