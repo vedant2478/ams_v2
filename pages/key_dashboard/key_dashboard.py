@@ -1,8 +1,6 @@
 from datetime import datetime
 from time import sleep
 import subprocess
-from csi_ams.model import EVENT_DOOR_OPEN, EVENT_DOOR_OPEN, EVENT_TYPE_EVENT, AMS_Event_Log
-from csi_ams.utils.commons import TZ_INDIA, get_event_description, get_event_description
 import paho.mqtt.client as mqtt
 
 from kivy.uix.boxlayout import BoxLayout
@@ -18,6 +16,13 @@ from kivy.clock import Clock
 from components.base_screen import BaseScreen
 from db import get_keys_for_activity, set_key_status_by_peg_id
 from test import AMS_CAN
+
+from csi_ams.model import (
+    AMS_Event_Log,
+    EVENT_DOOR_OPEN,
+    EVENT_TYPE_EVENT,
+)
+from csi_ams.utils.commons import TZ_INDIA, get_event_description
 
 
 # =========================================================
@@ -48,12 +53,10 @@ class KeyItem(ButtonBehavior, BoxLayout):
 # =========================================================
 class KeyDashboardScreen(BaseScreen):
 
-    # UI bindings
     activity_code = StringProperty("")
     activity_name = StringProperty("")
     time_remaining = StringProperty("30")
     progress_value = NumericProperty(0.0)
-    
     keys_data = ListProperty([])
 
     MAX_DOOR_TIME = 30  # seconds
@@ -64,18 +67,14 @@ class KeyDashboardScreen(BaseScreen):
         # UI
         self.key_widgets = {}
 
-        # Door timing
-        self.door_open_start_time = None   # datetime
-        self.door_open_seconds = 0         # int seconds
-
+        # Door timing (SINGLE SOURCE OF TRUTH)
+        self._door_open = False
+        self.door_open_start_time = None
+        self.door_open_seconds = 0
+        self._door_timer_event = None
 
         # CAN
         self._can_poll_event = None
-
-        # Door timer
-        self._door_open = False
-        self._door_timer = 0
-        self._door_timer_event = None
 
         # MQTT
         self._mqtt_client = None
@@ -85,9 +84,9 @@ class KeyDashboardScreen(BaseScreen):
     # -----------------------------------------------------
     def on_enter(self, *args):
         print("[UI] Enter KeyDashboardScreen")
+
         session = self.manager.db_session
         ams_access_log = self.manager.ams_access_log
-        
 
         self.activity_info = getattr(self.manager, "activity_info", None)
         if not self.activity_info:
@@ -100,13 +99,12 @@ class KeyDashboardScreen(BaseScreen):
         self.progress_value = 0.0
 
         self.ensure_can_up()
+
+        # Log door open time
         ams_access_log.doorOpenTime = datetime.now(TZ_INDIA)
-        ams_access_log.event_type_id = EVENT_TYPE_EVENT
         session.commit()
 
-        eventDesc = get_event_description(
-                        session, EVENT_DOOR_OPEN
-                        )
+        eventDesc = get_event_description(session, EVENT_DOOR_OPEN)
 
         if not hasattr(self.manager, "ams_can"):
             self.manager.ams_can = AMS_CAN()
@@ -116,33 +114,31 @@ class KeyDashboardScreen(BaseScreen):
         self.populate_keys()
         self.unlock_activity_keys()
 
-        card_info = getattr(self.manager, "card_info", None)
-        act_code_entered = self.manager.activity_code
-        final_signin_mode = self.manager.final_auth_mode
+        card_info = self.manager.card_info
         user_id = card_info["id"]
 
         ams_event_log = AMS_Event_Log(
-                                        userId=user_id,
-                                        keyId=None,
-                                        activityId=act_code_entered,
-                                        eventId=EVENT_DOOR_OPEN,
-                                        loginType=final_signin_mode,
-                                        access_log_id=ams_access_log.id,
-                                        timeStamp=datetime.now(TZ_INDIA),
-                                        event_type=EVENT_TYPE_EVENT,
-                                        eventDesc=eventDesc,
-                                        is_posted=0,
-                                    )
+            userId=user_id,
+            keyId=None,
+            activityId=self.activity_info["id"],
+            eventId=EVENT_DOOR_OPEN,
+            loginType=self.manager.final_auth_mode,
+            access_log_id=ams_access_log.id,
+            timeStamp=datetime.now(TZ_INDIA),
+            event_type=EVENT_TYPE_EVENT,
+            eventDesc=eventDesc,
+            is_posted=0,
+        )
         session.add(ams_event_log)
         session.commit()
 
-        # 🔓 Trigger solenoid
+        # 🔓 Activate solenoid
         subprocess.Popen(
             ["sudo", "python3", "solenoid.py", "1"],
             cwd="/home/rock/Desktop/ams_v2",
         )
 
-        # 🚪 Start GPIO subscriber
+        # 🚪 Start GPIO listener
         self.start_gpio_subscriber()
 
     # -----------------------------------------------------
@@ -185,21 +181,6 @@ class KeyDashboardScreen(BaseScreen):
         elif value == 0 and self._door_open:
             self.on_door_closed()
 
-    def door_timer_tick(self, dt):
-        self.door_open_seconds += 1   # ✅ UPDATE VARIABLE
-
-        remaining = max(0, self.MAX_DOOR_TIME - self.door_open_seconds)
-        self.time_remaining = str(remaining)
-
-        self.progress_value = self.door_open_seconds / float(self.MAX_DOOR_TIME)
-
-        print(f"[DOOR] Open for {self.door_open_seconds} seconds")
-
-        if self.door_open_seconds >= self.MAX_DOOR_TIME:
-            print("[TIMEOUT] Door open too long")
-            self.go_back()
-            self.on_door_closed()
-
     # -----------------------------------------------------
     # DOOR EVENTS
     # -----------------------------------------------------
@@ -207,8 +188,6 @@ class KeyDashboardScreen(BaseScreen):
         print("[DOOR] OPEN")
 
         self._door_open = True
-
-        # ✅ START TRACKING
         self.door_open_start_time = datetime.now(TZ_INDIA)
         self.door_open_seconds = 0
 
@@ -223,42 +202,42 @@ class KeyDashboardScreen(BaseScreen):
             self.door_timer_tick, 1
         )
 
+    def door_timer_tick(self, dt):
+        if not self._door_open:
+            return
+
+        self.door_open_seconds += 1
+
+        remaining = max(0, self.MAX_DOOR_TIME - self.door_open_seconds)
+        self.time_remaining = str(remaining)
+        self.progress_value = self.door_open_seconds / float(self.MAX_DOOR_TIME)
+
+        print(f"[DOOR] Open for {self.door_open_seconds} seconds")
+
+        if self.door_open_seconds >= self.MAX_DOOR_TIME:
+            print("[TIMEOUT] Door open too long")
+            self.go_back()
+            self.on_door_closed()
+
     def on_door_closed(self):
         print("[DOOR] CLOSED")
+        print(
+            f"[DOOR] Timers stopped door opened for :- "
+            f"{self.door_open_seconds} seconds"
+        )
 
         self._door_open = False
-
-        # ✅ FINAL DOOR OPEN TIME
-        total_time = self.door_open_seconds
-        
-
-        # Reset trackers
-        self.door_open_start_time = None
-        self.door_open_seconds = 0
-
-        if self._can_poll_event:
-            self._can_poll_event.cancel()
-            self._can_poll_event = None
 
         if self._door_timer_event:
             self._door_timer_event.cancel()
             self._door_timer_event = None
 
-        print("[DOOR] Timers stopped door opended for :- " , total_time , " seconds")
+        if self._can_poll_event:
+            self._can_poll_event.cancel()
+            self._can_poll_event = None
 
-
-    def door_timer_tick(self, dt):
-        self._door_timer += 1
-
-        remaining = max(0, self.MAX_DOOR_TIME - self._door_timer)
-        self.time_remaining = str(remaining)
-
-        self.progress_value = self._door_timer / float(self.MAX_DOOR_TIME)
-
-        if self._door_timer >= self.MAX_DOOR_TIME:
-            print("[TIMEOUT] Door open too long")
-            self.go_back()
-            self.on_door_closed()
+        self.door_open_start_time = None
+        self.door_open_seconds = 0
 
     # -----------------------------------------------------
     # CAN POLLING
@@ -316,77 +295,36 @@ class KeyDashboardScreen(BaseScreen):
                 )
 
     # -----------------------------------------------------
+    # EXIT / CLEANUP
+    # -----------------------------------------------------
     def go_back(self):
         print("[UI] ◀ Back pressed – cleaning up hardware & CAN")
 
-        # 1️⃣ Turn OFF solenoid
-        try:
-            subprocess.Popen(
-                ["sudo", "python3", "solenoid.py", "0"],
-                cwd="/home/rock/Desktop/ams_v2",
-            )
-            print("[HW] Solenoid turned OFF")
-        except Exception as e:
-            print("[HW][ERROR] Solenoid OFF failed:", e)
+        subprocess.Popen(
+            ["sudo", "python3", "solenoid.py", "0"],
+            cwd="/home/rock/Desktop/ams_v2",
+        )
 
-        # 2️⃣ Stop CAN polling
-        if self._can_poll_event:
-            self._can_poll_event.cancel()
-            self._can_poll_event = None
-
-        # 3️⃣ Stop door timer
-        if self._door_timer_event:
-            self._door_timer_event.cancel()
-            self._door_timer_event = None
-
-        self._door_open = False
-        self._door_timer = 0
-        self.progress_value = 0.0
-        self.time_remaining = str(self.MAX_DOOR_TIME)
-
-        # 4️⃣ Unlock all keys + LEDs OFF
-        try:
-            ams_can = self.manager.ams_can
-            for strip in ams_can.key_lists or [1, 2]:
-                ams_can.unlock_all_positions(strip)
-                ams_can.set_all_LED_OFF(strip)
-            print("[CAN] Keys unlocked & LEDs off")
-        except Exception as e:
-            print("[CAN][WARN] Key unlock failed:", e)
-
-        # 5️⃣ Stop MQTT subscriber
         if self._mqtt_client:
-            try:
-                self._mqtt_client.loop_stop()
-                self._mqtt_client.disconnect()
-                print("[MQTT] Subscriber stopped")
-            except Exception as e:
-                print("[MQTT][WARN]", e)
+            self._mqtt_client.loop_stop()
+            self._mqtt_client.disconnect()
             self._mqtt_client = None
 
-        # 6️⃣ Cleanup CAN (if supported)
-        try:
-            if hasattr(self.manager.ams_can, "cleanup"):
-                self.manager.ams_can.cleanup()
-                print("[CAN] Connection closed")
-        except Exception as e:
-            print("[CAN][WARN] Cleanup failed:", e)
+        if hasattr(self.manager.ams_can, "cleanup"):
+            self.manager.ams_can.cleanup()
 
-        # 7️⃣ Navigate back
         self.manager.current = "activity"
-
 
     def open_done_page(self, key_name, status, key_id):
         self.manager.selected_key_id = key_id
         self.manager.selected_key_name = key_name
         self.manager.current = "activity_done"
 
-    # -----------------------------------------------------
     def on_leave(self, *args):
-        if self._can_poll_event:
-            self._can_poll_event.cancel()
         if self._door_timer_event:
             self._door_timer_event.cancel()
+        if self._can_poll_event:
+            self._can_poll_event.cancel()
         if self._mqtt_client:
             self._mqtt_client.loop_stop()
             self._mqtt_client.disconnect()
