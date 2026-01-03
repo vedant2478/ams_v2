@@ -30,22 +30,6 @@ class CardScanScreen(BaseScreen):
         self.instruction_text = "Show your card"
         Clock.schedule_interval(self.update_time, 1)
 
-        # Ask on this screen: testing or real scan?
-        try:
-            ans = input("Are you on testing? (y/n): ").strip().lower()
-        except Exception as e:
-            print(f"Error reading testing input: {e}")
-            ans = "n"
-
-        if ans == "y":
-            # Testing: do NOT open BMS, use default card and skip scanning
-            print("Testing mode ON on CardScanScreen: using card 3663674")
-            self.card_reading = False
-            # Optionally, no progress animation
-            self._event = None
-            Clock.schedule_once(lambda dt: self.handle_card_result("3663674"), 0)
-            return
-
         # Normal procedure: init AMSBMS and start scan
         try:
             self.bms = AMSBMS(port="/dev/ttyAML1", baud=9600)
