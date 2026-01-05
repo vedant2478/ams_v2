@@ -15,7 +15,7 @@ from kivy.clock import Clock
 
 from components.base_screen import BaseScreen
 from db import get_keys_for_activity, set_key_status_by_peg_id
-from test import AMS_CAN
+from amscan import AMS_CAN
 
 from csi_ams.model import (
     EVENT_DOOR_OPEN,
