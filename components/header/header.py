@@ -9,4 +9,4 @@ class Header(BoxLayout):
     time_text = StringProperty("")
 
     def on_kv_post(self, base_widget):
-        self.site_text = get_site_name()
+        self.site_text = get_site_name(session=base_widget.manager.db_session)
