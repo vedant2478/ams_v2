@@ -18,6 +18,7 @@ from db import get_keys_for_activity, set_key_status_by_peg_id
 from test import AMS_CAN
 
 from csi_ams.model import (
+    EVENT_DOOR_OPEN,
     AMS_Keys,
     AMS_Event_Log,
     EVENT_KEY_TAKEN_CORRECT,
