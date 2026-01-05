@@ -229,7 +229,6 @@ class KeyDashboardScreen(BaseScreen):
     # CAN POLLING (FIXED)
     # -----------------------------------------------------
     def poll_can_events(self, dt):
-        print("[CAN] poll_can_events running")
 
         ams_can = self.manager.ams_can
 

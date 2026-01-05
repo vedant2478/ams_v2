@@ -1,378 +1,237 @@
-import sqlite3
+from datetime import datetime
+from sqlalchemy.orm import Session
 
-import os 
+from db_core import SessionLocal
+from model import (
+    AMS_Keys,
+    AMS_Users,
+    AMS_Activities,
+    AMS_Site,
+)
 
-DB_PATH = "csiams.dev.sqlite"
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "csiams.dev.sqlite")
+# --------------------------------------------------
+# SESSION HELPER
+# --------------------------------------------------
+def get_session() -> Session:
+    return SessionLocal()
 
-def set_key_status_by_peg_id(peg_id, status):
+
+# --------------------------------------------------
+# KEY STATUS (BY PEG ID)
+# --------------------------------------------------
+def set_key_status_by_peg_id(peg_id: int, status: int):
     """
     status:
-        0 = IN (key present)
-        1 = OUT (key taken)
+        0 = IN
+        1 = OUT
     """
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-
-    # Find key by peg_id
-    cur.execute("""
-        SELECT id, keyStrip, keyPosition
-        FROM keys
-        WHERE peg_id = ? AND deletedAt IS NULL
-    """, (str(peg_id),))
-
-    row = cur.fetchone()
-
-    if not row:
-        print(f"[DB] ❌ No key found for peg_id={peg_id}")
-        conn.close()
-        return False
-
-    key_id, strip, position = row
-
-    # Update status
-    cur.execute("""
-        UPDATE keys
-        SET keyStatus = ?
-        WHERE id = ?
-    """, (status, key_id))
-
-    conn.commit()
-    conn.close()
-
-    print(
-        f"[DB] ✅ Updated key_id={key_id} "
-        f"(peg_id={peg_id}, strip={strip}, pos={position}) → status={status}"
-    )
-
-    return True
-
-
-def set_key_status_by_peg_id(peg_id, status):
-    """
-    Set keyStatus explicitly using peg_id from CAN.
-    status: 0 = IN, 1 = OUT
-    """
-
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-
-    # Map peg_id → key id
-    cur.execute("""
-        SELECT id FROM keys
-        WHERE peg_id = ? AND deletedAt IS NULL
-    """, (int(peg_id),))
-
-    row = cur.fetchone()
-    if not row:
-        print(f"[DB] ❌ No key found for peg_id={peg_id}")
-        conn.close()
-        return None
-
-    key_id = row[0]
-
-    cur.execute("""
-        UPDATE keys
-        SET keyStatus = ?
-        WHERE id = ?
-    """, (status, key_id))
-
-    conn.commit()
-    conn.close()
-
-    print(f"[DB] ✅ key_id={key_id} set to status={status}")
-    return key_id
-
-
-def get_keys_for_activity(activity_id):
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-
-    cur.execute("""
-        SELECT keys, keyNames
-        FROM activities
-        WHERE id = ? AND deletedAt IS NULL
-    """, (activity_id,))
-
-    activity = cur.fetchone()
-    if not activity or not activity[0]:
-        conn.close()
-        return []
-
-    key_ids = [k.strip() for k in activity[0].split(",")]
-    key_names = activity[1].split(",") if activity[1] else []
-
-    keys_data = []
-    for i, key_id in enumerate(key_ids):
-        cur.execute("""
-            SELECT id, keyName, keyStatus, keyStrip, keyPosition
-            FROM keys
-            WHERE id = ? AND deletedAt IS NULL
-        """, (key_id,))
-
-        row = cur.fetchone()
-        if row:
-            keys_data.append({
-                "id": row[0],
-                "name": row[1],
-                "status": row[2],  # 0=IN, 1=OUT
-                "strip": row[3],
-                "position": row[4],
-            })
-        else:
-            keys_data.append({
-                "id": key_id,
-                "name": key_names[i] if i < len(key_names) else f"Key {key_id}",
-                "status": 0,
-                "strip": None,
-                "position": None,
-            })
-
-    conn.close()
-    return keys_data
-
-
-def get_site_name():
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    cur.execute("SELECT siteName FROM sites LIMIT 1;")
-    row = cur.fetchone()
-    conn.close()
-    return row[0] if row else "SITE"
-
-def check_card_exists(card_number):
-    """Check if card exists in database and return user details"""
+    session = get_session()
     try:
-        conn = sqlite3.connect(DB_PATH)
-        cur = conn.cursor()
-        
-        # Query to check card existence in users table
-        cur.execute("""
-            SELECT id, name, email, mobileNumber, cardNo, pinCode, roleId, isActive
-            FROM users 
-            WHERE cardNo = ? AND deletedAt IS NULL
-        """, (str(card_number),))
-        
-        row = cur.fetchone()
-        conn.close()
-        
-        if row:
-            return {
-                "exists": True,
-                "id": row[0],
-                "name": row[1],
-                "email": row[2],
-                "mobile": row[3],
-                "card_number": row[4],
-                "pin_code": row[5],
-                "role_id": row[6],
-                "is_active": row[7],
-                "pin_required": bool(row[5])  # PIN required if pinCode is set
-            }
-        else:
-            return {"exists": False}
-            
-    except Exception as e:
-        print(f"Error checking card: {e}")
-        return {"exists": False, "error": str(e)}
-
-def verify_card_pin(card_number, pin):
-    """Verify if PIN matches for the card"""
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        cur = conn.cursor()
-        
-        cur.execute("""
-            SELECT pinCode 
-            FROM users 
-            WHERE cardNo = ? AND deletedAt IS NULL
-        """, (str(card_number),))
-        
-        row = cur.fetchone()
-        conn.close()
-        
-        if row and row[0] == str(pin):
-            return True
-        return False
-        
-    except Exception as e:
-        print(f"Error verifying PIN: {e}")
-        return False
-
-def get_user_by_card(card_number):
-    """Get complete user info by card number"""
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        cur = conn.cursor()
-        
-        cur.execute("""
-            SELECT * FROM users 
-            WHERE cardNo = ? AND deletedAt IS NULL
-        """, (str(card_number),))
-        
-        row = cur.fetchone()
-        conn.close()
-        
-        return row
-        
-    except Exception as e:
-        print(f"Error getting user: {e}")
-        return None
-
-def get_user_activities(user_id):
-    """Get all activities assigned to a user"""
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        cur = conn.cursor()
-        
-        cur.execute("""
-            SELECT id, activityName, activityCode, timeLimit, keys, keyNames, users
-            FROM activities 
-            WHERE deletedAt IS NULL
-        """)
-        
-        all_activities = cur.fetchall()
-        conn.close()
-        
-        # Filter activities where user is assigned
-        user_activities = []
-        for activity in all_activities:
-            users_list = activity[6]  # users column
-            if users_list and str(user_id) in users_list.split(','):
-                user_activities.append({
-                    'id': activity[0],
-                    'name': activity[1],
-                    'code': activity[2],
-                    'time_limit': activity[3],
-                    'keys': activity[4],
-                    'key_names': activity[5]
-                })
-        
-        return user_activities
-        
-    except Exception as e:
-        print(f"Error getting user activities: {e}")
-        return []
-
-def verify_activity_code(user_id, activity_code):
-    """Verify if activity code is valid for the user"""
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        cur = conn.cursor()
-        
-        cur.execute("""
-            SELECT id, activityName, activityCode, timeLimit, keys, keyNames, users
-            FROM activities 
-            WHERE activityCode = ? AND deletedAt IS NULL
-        """, (str(activity_code),))
-        
-        activity = cur.fetchone()
-        conn.close()
-        
-        if not activity:
-            return {"valid": False, "message": "Activity code not found"}
-        
-        # Check if user is assigned to this activity
-        users_list = activity[6]
-        if users_list and str(user_id) in users_list.split(','):
-            return {
-                "valid": True,
-                "id": activity[0],
-                "name": activity[1],
-                "code": activity[2],
-                "time_limit": activity[3],
-                "keys": activity[4],
-                "key_names": activity[5]
-            }
-        else:
-            return {"valid": False, "message": "You are not assigned to this activity"}
-        
-    except Exception as e:
-        print(f"Error verifying activity code: {e}")
-        return {"valid": False, "message": str(e)}
-
-def get_keys_for_activity(activity_id):
-    """Get detailed key information for an activity"""
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        cur = conn.cursor()
-
-        # Get activity keys
-        cur.execute("""
-            SELECT keys, keyNames
-            FROM activities
-            WHERE id = ? AND deletedAt IS NULL
-        """, (activity_id,))
-
-        activity = cur.fetchone()
-        if not activity or not activity[0]:
-            conn.close()
-            return []
-
-        key_ids = [k.strip() for k in activity[0].split(',')]
-        key_names_from_activity = (
-            [k.strip() for k in activity[1].split(',')]
-            if activity[1] else []
+        key = (
+            session.query(AMS_Keys)
+            .filter(
+                AMS_Keys.peg_id == peg_id,
+                AMS_Keys.deletedAt == None,
+            )
+            .first()
         )
 
-        keys_list = []
+        if not key:
+            print(f"[DB] ❌ No key found for peg_id={peg_id}")
+            return None
 
-        for i, key_id in enumerate(key_ids):
-            cur.execute("""
-                SELECT
-                    id,
-                    keyName,
-                    description,
-                    color,
-                    keyLocation,
-                    keyStatus,
-                    keyAtDoor,
-                    keyStrip,
-                    keyPosition,
-                    peg_id         
-                FROM keys
-                WHERE id = ? AND deletedAt IS NULL
-            """, (key_id,))
+        key.keyStatus = status
+        key.updatedAt = datetime.now()
 
-            row = cur.fetchone()
+        session.commit()
 
-            if row:
-                keys_list.append({
-                    "id": row[0],
-                    "name": row[1],
-                    "description": row[2],
-                    "color": row[3],
-                    "location": row[4],
-                    "status": row[5],     # 0=IN, 1=OUT
-                    "door": row[6],
-                    "strip": row[7],
-                    "position": row[8],
-                    "peg_id": row[9],     # ✅ use peg_id
-                })
-            else:
-                # fallback if key row missing
-                key_name = (
-                    key_names_from_activity[i]
-                    if i < len(key_names_from_activity)
-                    else f"Key {key_id}"
-                )
-                keys_list.append({
-                    "id": key_id,
-                    "name": key_name,
-                    "description": "",
-                    "color": "",
-                    "location": "",
-                    "status": 0,
-                    "door": None,
-                    "strip": None,
-                    "position": None,
-                    "peg_id": None,
-                })
-
-        conn.close()
-        return keys_list
+        print(
+            f"[DB] ✅ key_id={key.id} "
+            f"(peg_id={peg_id}, strip={key.keyStrip}, pos={key.keyPosition}) "
+            f"→ status={status}"
+        )
+        return key.id
 
     except Exception as e:
-        print(f"[DB][ERROR] get_keys_for_activity: {e}")
+        session.rollback()
+        print("[DB][ERROR] set_key_status_by_peg_id:", e)
+        return None
+
+    finally:
+        session.close()
+
+
+# --------------------------------------------------
+# GET KEYS FOR ACTIVITY
+# --------------------------------------------------
+def get_keys_for_activity(activity_id: int):
+    session = get_session()
+    try:
+        activity = (
+            session.query(AMS_Activities)
+            .filter(
+                AMS_Activities.id == activity_id,
+                AMS_Activities.deletedAt == None,
+            )
+            .first()
+        )
+
+        if not activity or not activity.keys:
+            return []
+
+        key_ids = [int(k) for k in activity.keys.split(",")]
+
+        keys = (
+            session.query(AMS_Keys)
+            .filter(
+                AMS_Keys.id.in_(key_ids),
+                AMS_Keys.deletedAt == None,
+            )
+            .all()
+        )
+
+        return [{
+            "id": k.id,
+            "name": k.keyName,
+            "description": k.description,
+            "color": k.color,
+            "location": k.keyLocation,
+            "status": k.keyStatus,
+            "door": k.keyAtDoor,
+            "strip": k.keyStrip,
+            "position": k.keyPosition,
+            "peg_id": k.peg_id,
+        } for k in keys]
+
+    except Exception as e:
+        print("[DB][ERROR] get_keys_for_activity:", e)
         return []
+
+    finally:
+        session.close()
+
+
+# --------------------------------------------------
+# SITE NAME
+# --------------------------------------------------
+def get_site_name():
+    session = get_session()
+    try:
+        site = session.query(AMS_Site).first()
+        return site.siteName if site else "SITE"
+    finally:
+        session.close()
+
+
+# --------------------------------------------------
+# CARD EXISTS
+# --------------------------------------------------
+def check_card_exists(card_number: str):
+    session = get_session()
+    try:
+        user = (
+            session.query(AMS_Users)
+            .filter(
+                AMS_Users.cardNo == str(card_number),
+                AMS_Users.deletedAt == None,
+            )
+            .first()
+        )
+
+        if not user:
+            return {"exists": False}
+
+        return {
+            "exists": True,
+            "id": user.id,
+            "name": user.name,
+            "email": user.email,
+            "mobile": user.mobileNumber,
+            "card_number": user.cardNo,
+            "pin_code": user.pinCode,
+            "role_id": user.roleId,
+            "is_active": user.isActive,
+            "pin_required": bool(user.pinCode),
+        }
+
+    finally:
+        session.close()
+
+
+# --------------------------------------------------
+# VERIFY CARD PIN
+# --------------------------------------------------
+def verify_card_pin(card_number: str, pin: str) -> bool:
+    session = get_session()
+    try:
+        user = (
+            session.query(AMS_Users)
+            .filter(
+                AMS_Users.cardNo == str(card_number),
+                AMS_Users.deletedAt == None,
+            )
+            .first()
+        )
+        return bool(user and user.pinCode == str(pin))
+    finally:
+        session.close()
+
+
+# --------------------------------------------------
+# USER ACTIVITIES
+# --------------------------------------------------
+def get_user_activities(user_id: int):
+    session = get_session()
+    try:
+        activities = (
+            session.query(AMS_Activities)
+            .filter(AMS_Activities.deletedAt == None)
+            .all()
+        )
+
+        return [{
+            "id": a.id,
+            "name": a.activityName,
+            "code": a.activityCode,
+            "time_limit": a.timeLimit,
+            "keys": a.keys,
+            "key_names": a.keyNames,
+        } for a in activities if a.users and str(user_id) in a.users.split(",")]
+
+    finally:
+        session.close()
+
+
+# --------------------------------------------------
+# VERIFY ACTIVITY CODE
+# --------------------------------------------------
+def verify_activity_code(user_id: int, activity_code: str):
+    session = get_session()
+    try:
+        activity = (
+            session.query(AMS_Activities)
+            .filter(
+                AMS_Activities.activityCode == str(activity_code),
+                AMS_Activities.deletedAt == None,
+            )
+            .first()
+        )
+
+        if not activity:
+            return {"valid": False, "message": "Activity code not found"}
+
+        if activity.users and str(user_id) in activity.users.split(","):
+            return {
+                "valid": True,
+                "id": activity.id,
+                "name": activity.activityName,
+                "code": activity.activityCode,
+                "time_limit": activity.timeLimit,
+                "keys": activity.keys,
+                "key_names": activity.keyNames,
+            }
+
+        return {"valid": False, "message": "User not assigned"}
+
+    finally:
+        session.close()
