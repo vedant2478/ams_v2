@@ -64,12 +64,6 @@ class KeyDashboardScreen(BaseScreen):
     progress_value = NumericProperty(0.0)
     keys_data = ListProperty([])
 
-    solenoid = mraa.Gpio(40)
-    solenoid.dir(mraa.DIR_OUT)
-
-    limit_switch = mraa.Gpio(32)
-    limit_switch.dir(mraa.DIR_IN)
-
     MAX_DOOR_TIME = 30
 
     def __init__(self, **kwargs):
@@ -82,6 +76,12 @@ class KeyDashboardScreen(BaseScreen):
         self._door_timer_event = None
         self._can_poll_event = None
         self._door_gpio_event = None
+        self.solenoid = mraa.Gpio(40)
+        self.solenoid.dir(mraa.DIR_OUT)
+        self.solenoid.write(0)  # ensure OFF initially
+
+        self.limit_switch = mraa.Gpio(32)
+        self.limit_switch.dir(mraa.DIR_IN)
 
     # -----------------------------------------------------
     # SCREEN ENTER
