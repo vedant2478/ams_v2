@@ -38,6 +38,7 @@ class CardScanScreen(BaseScreen):
             self.instruction_text = "Reader error"
             self.bms = None
             self.card_reading = False
+            self.manager.current = "auth"
             return
 
         # Start card reading in background
@@ -102,7 +103,7 @@ class CardScanScreen(BaseScreen):
         if card_no is not None and str(card_no).strip():
             print(f"✓ Card {card_no} detected")
 
-            card_info = check_card_exists(card_no)
+            card_info = check_card_exists(session=self.manager.db_session, card_no=card_no)
             
 
             if card_info["exists"]:

@@ -236,7 +236,7 @@ class KeyDashboardScreen(BaseScreen):
             print(f"[CAN] Key taken | PEG ID = {ams_can.key_taken_id}")
 
             self.handle_key_taken_commit(ams_can.key_taken_id)
-            set_key_status_by_peg_id(ams_can.key_taken_id, 1)
+            set_key_status_by_peg_id(session=self.manager.db_session, peg_id=ams_can.key_taken_id, status=1)
 
             ams_can.key_taken_event = False
             self.reload_keys_from_db()
@@ -245,7 +245,7 @@ class KeyDashboardScreen(BaseScreen):
         if ams_can.key_inserted_event:
             print(f"[CAN] Key inserted | PEG ID = {ams_can.key_inserted_id}")
 
-            set_key_status_by_peg_id(ams_can.key_inserted_id, 0)
+            set_key_status_by_peg_id(session=self.manager.db_session, peg_id=ams_can.key_inserted_id, status=0)
             ams_can.key_inserted_event = False
             print(self.keys_data)
             self.reload_keys_from_db()
@@ -307,7 +307,7 @@ class KeyDashboardScreen(BaseScreen):
     # UI + DB
     # -----------------------------------------------------
     def reload_keys_from_db(self):
-        self.keys_data = get_keys_for_activity(self.activity_info["id"])
+        self.keys_data = get_keys_for_activity(session=self.manager.db_session, activity_id=self.activity_info["id"])
 
     def populate_keys(self):
         grid = self.ids.key_grid

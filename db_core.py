@@ -8,7 +8,7 @@ SQLALCHEMY_DATABASE_URI = (
 engine = create_engine(
     SQLALCHEMY_DATABASE_URI,
     echo=False,
-    connect_args={"check_same_thread": False},  # REQUIRED for threads
+    connect_args={"check_same_thread": False}, 
 )
 
 SessionLocal = sessionmaker(

@@ -1,7 +1,7 @@
 from datetime import datetime
 from kivy.clock import Clock
 from components.base_screen import BaseScreen
-
+from model import AUTH_MODE_CARD , AUTH_MODE_PIN
 
 class AuthScreen(BaseScreen):
 
@@ -34,7 +34,7 @@ class AuthScreen(BaseScreen):
     def on_card(self):
         print("Card authentication selected")
 
-        self.manager.auth_mode = 2
+        self.manager.auth_mode = AUTH_MODE_CARD
         self.manager.final_auth_mode = "CARD"
 
         self.manager.current = "card_scan"
@@ -42,7 +42,7 @@ class AuthScreen(BaseScreen):
     def on_pin(self):
         print("PIN authentication selected")
 
-        self.manager.auth_mode = 1
+        self.manager.auth_mode = AUTH_MODE_PIN
         self.manager.final_auth_mode = "PIN"
 
         self.manager.current = "pin"
