@@ -1,6 +1,6 @@
 from datetime import datetime
 from sqlalchemy.orm import Session
-
+from typing import Optional, Dict
 from model import (
     AMS_Keys,
     AMS_Users,
@@ -29,6 +29,7 @@ def get_event_description(session: Session, event_id: int) -> str:
 # ==================================================
 # ⭐ GENERIC ACCESS + EVENT LOGGER (NEW)
 # ==================================================
+
 def log_access_and_event(
     session: Session,
     *,
@@ -36,10 +37,10 @@ def log_access_and_event(
     event_type: int,
     auth_mode: int,
     login_type: str,
-    user_id: int | None = None,
-    key_id: int | None = None,
-    activity_id: int | None = None,
-    access_log_updates: dict | None = None,
+    user_id: Optional[int] = None,
+    key_id: Optional[int] = None,
+    activity_id: Optional[int] = None,
+    access_log_updates: Optional[Dict] = None,
 ) -> dict:
     """
     Universal logger for:
