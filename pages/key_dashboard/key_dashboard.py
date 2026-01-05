@@ -179,6 +179,10 @@ class KeyDashboardScreen(BaseScreen):
         value = int(msg.payload.decode())
 
         if value == 1 and not self._door_open:
+            subprocess.Popen(
+            ["sudo", "python3", "solenoid.py", "1"],
+            cwd="/home/rock/Desktop/ams_v2",
+        )
             self.on_door_opened()
 
         elif value == 0 and self._door_open:
@@ -336,6 +340,7 @@ class KeyDashboardScreen(BaseScreen):
 
             ams_can.key_inserted_event = False
             self.reload_keys_from_db()
+            print(self.keys_data)
             self.update_key_widgets()
 
 

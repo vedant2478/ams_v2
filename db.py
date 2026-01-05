@@ -330,7 +330,7 @@ def get_keys_for_activity(activity_id):
                     keyAtDoor,
                     keyStrip,
                     keyPosition,
-                    peg_id          -- ✅ CORRECT COLUMN NAME
+                    peg_id         
                 FROM keys
                 WHERE id = ? AND deletedAt IS NULL
             """, (key_id,))
