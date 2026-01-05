@@ -246,10 +246,11 @@ class AMS_CAN(object):
                 self._current_function_response_data = msg.data
                 self.key_taken_event = True
                 result_list = list(self._current_function_response_data)
-                key_fob_id = ""
-                for num in result_list[:5]:
-                    key_fob_id += str(num)
-                self.key_taken_id = int(key_fob_id)
+                key_fob_id = 0
+                for b in result_list[:5]:
+                    key_fob_id = (key_fob_id << 8) | b
+
+                self.key_taken_id = key_fob_id
 
             elif (
                 message_type == CAN_MSG_TYPE_SET
@@ -266,11 +267,12 @@ class AMS_CAN(object):
                 self._current_function_response_data = msg.data
                 self.key_inserted_event = True
                 result_list = list(self._current_function_response_data)
-                key_fob_id = ""
-                for num in result_list[:5]:
-                    key_fob_id += str(num)
-                print("#### AMS_CAN - Key fob id" + key_fob_id)
-                self.key_inserted_id = int(key_fob_id)
+                key_fob_id = 0
+                for b in result_list[:5]:
+                    key_fob_id = (key_fob_id << 8) | b
+
+                self.key_inserted_id = key_fob_id
+
 
     def get_version_number(self, list_ID):
         arb_id = self.create_arbitration_id(
