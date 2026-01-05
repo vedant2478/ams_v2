@@ -469,10 +469,11 @@ class AMS_CAN(object):
         if self._current_function_response:
             if self._current_function_response_data is not None:
                 result_list = list(self._current_function_response_data)
-                key_fob_id = ""
-                for num in result_list[:5]:
-                    key_fob_id += str(num)
-                return int(key_fob_id)
+                key_fob_id = 0
+                for b in result_list[:5]:
+                    key_fob_id = (key_fob_id << 8) | b
+                return key_fob_id
+
         else:
             return False
 
