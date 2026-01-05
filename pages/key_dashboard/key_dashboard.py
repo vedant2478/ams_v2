@@ -248,7 +248,7 @@ class KeyDashboardScreen(BaseScreen):
 
             set_key_status_by_peg_id(ams_can.key_inserted_id, 0)
             ams_can.key_inserted_event = False
-
+            print(self.keys_data)
             self.reload_keys_from_db()
             self.update_key_widgets()
 
