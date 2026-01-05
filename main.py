@@ -6,6 +6,7 @@ Config.set("graphics", "resizable", "0")
 Config.set("graphics", "borderless", "1")
 
 # ================= SAFE TO IMPORT KIVY NOW =================
+
 from kivy.app import App
 from kivy.lang import Builder
 from kivy.uix.screenmanager import ScreenManager, NoTransition
@@ -13,6 +14,7 @@ import os
 import sys
 
 # ================= PATH SETUP =================
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 BACKEND_DIR = os.path.join(BASE_DIR, "reliance_ams_local-master")
 

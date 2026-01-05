@@ -18,10 +18,12 @@ from db import get_keys_for_activity, set_key_status_by_peg_id
 from test import AMS_CAN
 
 from csi_ams.model import (
+    AMS_Keys,
     AMS_Event_Log,
-    EVENT_DOOR_OPEN,
+    EVENT_KEY_TAKEN_CORRECT,
     EVENT_TYPE_EVENT,
 )
+from csi_ams.utils.commons import SLOT_STATUS_KEY_NOT_PRESENT
 from csi_ams.utils.commons import TZ_INDIA, get_event_description
 
 
@@ -238,6 +240,62 @@ class KeyDashboardScreen(BaseScreen):
 
         self.door_open_start_time = None
         self.door_open_seconds = 0
+    def handle_key_taken_commit(self, peg_id):
+        session = self.manager.db_session
+        ams_access_log = self.manager.ams_access_log
+        user_auth = self.manager.card_info
+        
+        # Find key record
+        key_record = (
+            session.query(AMS_Keys)
+            .filter(AMS_Keys.peg_id == peg_id)
+            .first()
+        )
+
+        if not key_record:
+            print("[DB][WARN] Key taken but key record not found")
+            return
+
+        # Update key status
+        session.query(AMS_Keys).filter(
+            AMS_Keys.peg_id == peg_id
+        ).update(
+            {
+                "keyTakenBy": user_auth["id"],
+                "keyTakenByUser": user_auth["name"],
+                "current_pos_strip_id": None,
+                "current_pos_slot_no": None,
+                "keyTakenAtTime": datetime.now(TZ_INDIA),
+                "keyStatus": SLOT_STATUS_KEY_NOT_PRESENT,
+                "color": "White",
+            }
+        )
+
+        # Event description
+        eventDesc = get_event_description(
+            session, EVENT_KEY_TAKEN_CORRECT
+        )
+
+        # Insert event log
+        ams_event_log = AMS_Event_Log(
+            userId=user_auth["id"],
+            keyId=key_record.id,
+            activityId=self.activity_info["id"],
+            eventId=EVENT_KEY_TAKEN_CORRECT,
+            loginType=self.manager.final_auth_mode,
+            access_log_id=ams_access_log.id,
+            timeStamp=datetime.now(TZ_INDIA),
+            event_type=EVENT_TYPE_EVENT,
+            eventDesc=eventDesc,
+            is_posted=0,
+        )
+
+        session.add(ams_event_log)
+        session.commit()
+
+        print(
+            f"[DB] Key taken committed → {key_record.keyName}"
+        )
 
     # -----------------------------------------------------
     # CAN POLLING
@@ -245,17 +303,40 @@ class KeyDashboardScreen(BaseScreen):
     def poll_can_events(self, dt):
         ams_can = self.manager.ams_can
 
+        # ---------------- KEY TAKEN ----------------
         if ams_can.key_taken_event:
-            set_key_status_by_peg_id(ams_can.key_taken_id, 1)
+            print(
+                f"[CAN] Key taken detected | PEG ID = {ams_can.key_taken_id}"
+            )
+
+            # DB commit + event log
+            self.handle_key_taken_commit(
+                ams_can.key_taken_id
+            )
+
+            # UI status update
+            set_key_status_by_peg_id(
+                ams_can.key_taken_id, 1
+            )
+
             ams_can.key_taken_event = False
             self.reload_keys_from_db()
             self.update_key_widgets()
 
+        # ---------------- KEY INSERTED ----------------
         if ams_can.key_inserted_event:
-            set_key_status_by_peg_id(ams_can.key_inserted_id, 0)
+            print(
+                f"[CAN] Key inserted | PEG ID = {ams_can.key_inserted_id}"
+            )
+
+            set_key_status_by_peg_id(
+                ams_can.key_inserted_id, 0
+            )
+
             ams_can.key_inserted_event = False
             self.reload_keys_from_db()
             self.update_key_widgets()
+
 
     # -----------------------------------------------------
     # DATABASE + UI
