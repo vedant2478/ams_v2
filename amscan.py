@@ -273,7 +273,12 @@ class AMS_CAN(object):
 
                 self.key_inserted_id = key_fob_id
 
-
+    def unlock_single_key(self, strip_id, position):
+        print(f"AMS_CAN: unlocking strip {strip_id}, position {position}")
+        led_ok = self.set_single_LED_state(strip_id, position, CAN_LED_STATE_ON)
+        lock_ok = self.set_single_key_lock_state(strip_id, position, CAN_KEY_UNLOCKED)
+        return bool(led_ok and lock_ok)
+    
     def get_version_number(self, list_ID):
         arb_id = self.create_arbitration_id(
             self._can_controller_id, list_ID, CAN_MSG_TYPE_GET, CAN_FUNCTION_VERSION
