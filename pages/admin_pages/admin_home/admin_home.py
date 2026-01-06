@@ -1,35 +1,29 @@
 from kivy.uix.screenmanager import Screen
+from peg_registration import PegRegistrationService
 
 
 class AdminScreen(Screen):
     """
     Admin Configuration Screen
-    Accessible only after Admin PIN validation
-    """
+    Peg registration is triggered directly from here
+    """ 
+
 
     def open_peg_registration(self):
-        """
-        Navigate to Peg Registration flow
-        """
-        print("[ADMIN] Peg Registration selected")
+        print("[ADMIN] Peg Registration clicked")
 
-        # Change screen name if you already have a peg screen
-        self.manager.transition.direction = "left"
-        self.manager.current = "peg_registration"
+        if hasattr(self.manager, "peg_reg_service"):
+            if self.manager.peg_reg_service._active:
+                print("[ADMIN] Peg registration already running")
+                return
+
+        self.manager.peg_reg_service = PegRegistrationService(self.manager)
+        self.manager.peg_reg_service.start()
 
     def open_card_registration(self):
-        """
-        Navigate to Card Registration flow
-        """
         print("[ADMIN] Card Registration selected")
-
-        # Change screen name if you already have a card screen
-        self.manager.transition.direction = "left"
-        self.manager.current = "card_registration"
+        # call CardRegistrationService here later
 
     def go_home(self):
-        """
-        Return to Home Screen
-        """
-        self.manager.transition.direction = "right"
+        print("[ADMIN] Go Home")
         self.manager.current = "home"
