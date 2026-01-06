@@ -72,6 +72,8 @@ class PinScreen(BaseScreen):
         session = self.manager.db_session
 
         # ---------------- SAFETY ----------------
+        if entered_pin == ADMIN_PIN:
+                self.manager.current = "admin"
         if not self.card_number:
             self.message = "ERROR: No card"
             self.reset_pin()
@@ -90,8 +92,6 @@ class PinScreen(BaseScreen):
             self.message = "INCORRECT PIN"
             self.reset_pin()
 
-            if entered_pin == ADMIN_PIN:
-                self.manager.current = "admin"
 
             log_access_and_event(
                 session=session,
