@@ -77,7 +77,7 @@ class ActivityCodeScreen(BaseScreen):
         
 
         # Verify activity code with database
-        result = verify_activity_code(session=self.manager.db_session, user_id=user_id, entered_code=entered_code)
+        result = verify_activity_code(session=self.manager.db_session, user_id=user_id, activity_code=entered_code)
 
         if result["valid"]:
             print(f"✓ Activity code correct: {result['name']}")
