@@ -103,7 +103,7 @@ class CardScanScreen(BaseScreen):
         if card_no is not None and str(card_no).strip():
             print(f"✓ Card {card_no} detected")
 
-            card_info = check_card_exists(session=self.manager.db_session, card_no=card_no)
+            card_info = check_card_exists(session=self.manager.db_session, card_number=card_no)
             
 
             if card_info["exists"]:
