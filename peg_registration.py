@@ -134,6 +134,7 @@ class PegRegistrationService:
             print("[PEG] Door CLOSED → start scan")
             self._scan_started = True
             self._scan_pegs()
+
             self._cleanup()
 
     # --------------------------------------------------
@@ -240,3 +241,5 @@ class PegRegistrationService:
             self._mqtt_client = None
 
         print("========== [PEG] REGISTRATION FINISHED ==========\n")
+
+        self.manager.current = "home"
