@@ -70,6 +70,7 @@ class AMS_CAN(object):
         self.bus = can.Bus(channel="can0", bustype="socketcan", bitrate=125000)
 
         self.buffer = can.BufferedReader()
+    
         self.buffer.on_message_received = self._on_message_received
         self.notifier = can.Notifier(self.bus, [_get_message, self.buffer])
 

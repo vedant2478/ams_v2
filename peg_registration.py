@@ -1,73 +1,69 @@
-from time import sleep, time
+from time import sleep
 import paho.mqtt.client as mqtt
 from kivy.clock import Clock
 
 from csi_ams.model import AMS_Keys, AMS_Key_Pegs
-from amscan import AMS_CAN
 from amscan import CAN_LED_STATE_BLINK, CAN_LED_STATE_OFF
 
 
 class PegRegistrationService:
-
-    INIT_TIMEOUT = 8        # seconds to wait for keylist discovery
-    KEY_READ_RETRIES = 3    # retries per slot
+    """
+    Peg registration using the SAME flow as old LCD code.
+    No discovery. No re-init. Uses existing ams_can.
+    """
 
     def __init__(self, manager):
         self.manager = manager
         self.session = manager.db_session
-        # self.user_auth = manager.user_auth
+        self.user_auth = manager.user_auth
+        self.ams_can = manager.ams_can  # 🔑 reuse existing CAN instance
 
         self._mqtt_client = None
         self._door_open = False
         self._scan_started = False
-        self._active = False
 
-    # -------------------------------------------------
-    # ENTRY POINT
-    # -------------------------------------------------
+    # --------------------------------------------------
+    # ENTRY POINT (ADMIN BUTTON)
+    # --------------------------------------------------
     def start(self):
         print("\n========== [PEG] REGISTRATION START ==========")
 
-        # if self.user_auth["roleId"] != 1:
-        #     print("[PEG][ERROR] Non-admin blocked")
-        #     return False
+        if self.user_auth["roleId"] != 1:
+            print("[PEG][ERROR] Non-admin blocked")
+            return False
 
-        self._active = True
+        # EXACT SAME CHECK AS OLD CODE
+        print(f"[PEG] Keylists available: {self.ams_can.key_lists}")
 
-        # -------- ENSURE CAN --------
-        if not hasattr(self.manager, "ams_can"):
-            self.manager.ams_can = AMS_CAN()
+        if not self.ams_can.key_lists:
+            print("[PEG][ERROR] No keylists present (CAN not initialized earlier)")
+            return False
 
-        ams_can = self.manager.ams_can
+        # Unlock all pegs
+        for keylistid in self.ams_can.key_lists:
+            print(f"[PEG] Unlocking strip {keylistid}")
+            self.ams_can.unlock_all_positions(keylistid)
+            self.ams_can.set_all_LED_ON(keylistid, False)
 
-        # -------- WAIT FOR INIT / KEYLISTS --------
-        print("[PEG] Waiting for keylist discovery...")
-        start = time()
+        # Same DB check as old code
+        missing = (
+            self.session.query(AMS_Keys)
+            .filter(AMS_Keys.keyStatus == 0)
+            .count()
+        )
 
-        while not ams_can.key_lists and (time() - start) < self.INIT_TIMEOUT:
-            sleep(0.2)
-
-        if not ams_can.key_lists:
-            print("[PEG][ERROR] No keylists discovered after timeout")
+        if missing > 0:
+            print(f"[PEG][ABORT] {missing} keys missing. Insert all keys first.")
             self._cleanup()
             return False
 
-        print(f"[PEG] Keylists discovered: {ams_can.key_lists}")
-
-        # -------- UNLOCK PEGS --------
-        for strip in ams_can.key_lists:
-            ams_can.unlock_all_positions(strip)
-            ams_can.set_all_LED_ON(strip, False)
-
-        # -------- START MQTT --------
-        self._start_gpio_subscriber()
         print("[PEG] Waiting for door OPEN")
-
+        self._start_gpio_subscriber()
         return True
 
-    # -------------------------------------------------
-    # MQTT
-    # -------------------------------------------------
+    # --------------------------------------------------
+    # MQTT DOOR HANDLING (REPLACES GPIO LOOP)
+    # --------------------------------------------------
     def _start_gpio_subscriber(self):
         self._mqtt_client = mqtt.Client("peg-reg-subscriber")
         self._mqtt_client.on_connect = lambda c, u, f, r: c.subscribe("gpio/pin32")
@@ -75,81 +71,58 @@ class PegRegistrationService:
         self._mqtt_client.connect("localhost", 1883, 60)
         self._mqtt_client.loop_start()
 
-    def _stop_gpio_subscriber(self):
-        if self._mqtt_client:
-            self._mqtt_client.loop_stop()
-            self._mqtt_client.disconnect()
-
     def _on_mqtt_message(self, client, userdata, msg):
         value = int(msg.payload.decode())
         print(f"[PEG][MQTT] gpio/pin32 = {value}")
 
         if value == 1 and not self._door_open:
-            Clock.schedule_once(lambda dt: self._on_door_opened())
+            self._door_open = True
+            print("[PEG] Door OPENED")
 
         elif value == 0 and self._door_open:
-            Clock.schedule_once(lambda dt: self._on_door_closed())
+            print("[PEG] Door CLOSED → scanning")
+            self._scan_started = True
+            self._scan_pegs()
+            self._cleanup()
 
-    # -------------------------------------------------
-    # DOOR EVENTS
-    # -------------------------------------------------
-    def _on_door_opened(self):
-        print("[PEG] Door OPENED")
-        self._door_open = True
-
-    def _on_door_closed(self):
-        if self._scan_started:
-            return
-
-        print("[PEG] Door CLOSED → scanning")
-        self._scan_started = True
-        self._scan_pegs()
-        self._cleanup()
-
-    # -------------------------------------------------
-    # PEG SCAN (CAN-CORRECT)
-    # -------------------------------------------------
+    # --------------------------------------------------
+    # SCAN (DIRECT TRANSLATION OF OLD CODE)
+    # --------------------------------------------------
     def _scan_pegs(self):
-        ams_can = self.manager.ams_can
-        session = self.session
+        print("[PEG] Scan in progress")
 
         scanned = []
 
-        for strip in ams_can.key_lists:
-            print(f"[PEG] Scanning strip {strip}")
-
+        for keylistid in self.ams_can.key_lists:
             for slot in range(1, 15):
-                ams_can.set_single_LED_state(strip, slot, CAN_LED_STATE_BLINK)
+
+                self.ams_can.set_single_LED_state(
+                    keylistid, slot, CAN_LED_STATE_BLINK
+                )
                 sleep(0.15)
 
-                peg_id = False
-                for attempt in range(self.KEY_READ_RETRIES):
-                    peg_id = ams_can.get_key_id(strip, slot)
-                    print(
-                        f"[PEG][SCAN] strip={strip} slot={slot} "
-                        f"attempt={attempt+1} peg_id={peg_id}"
-                    )
-                    if peg_id:
-                        break
-                    sleep(0.1)
-
-                ams_can.set_single_LED_state(strip, slot, CAN_LED_STATE_OFF)
+                peg_id = self.ams_can.get_key_id(keylistid, slot)
+                print(f"[PEG] strip={keylistid} slot={slot} peg_id={peg_id}")
 
                 if peg_id:
-                    scanned.append((peg_id, strip, slot))
+                    scanned.append((peg_id, keylistid, slot))
+
+                self.ams_can.set_single_LED_state(
+                    keylistid, slot, CAN_LED_STATE_OFF
+                )
 
         if not scanned:
-            print("[PEG][ERROR] No pegs detected → DB untouched")
+            print("[PEG][ERROR] No pegs detected. DB untouched.")
             return
 
-        print(f"[PEG] Pegs detected: {len(scanned)}")
+        print(f"[PEG] {len(scanned)} pegs detected. Updating DB.")
 
-        # -------- SAFE DB UPDATE --------
-        session.query(AMS_Key_Pegs).delete()
-        session.commit()
+        # EXACT OLD BEHAVIOR: delete then insert
+        self.session.query(AMS_Key_Pegs).delete()
+        self.session.commit()
 
         for peg_id, strip, slot in scanned:
-            session.add(
+            self.session.add(
                 AMS_Key_Pegs(
                     peg_id=peg_id,
                     keylist_no=strip,
@@ -157,33 +130,35 @@ class PegRegistrationService:
                 )
             )
 
-            key = session.query(AMS_Keys).filter(
-                AMS_Keys.keyStrip == strip,
-                AMS_Keys.keyPosition == slot,
-            ).first()
+            key = (
+                self.session.query(AMS_Keys)
+                .filter(
+                    AMS_Keys.keyStrip == strip,
+                    AMS_Keys.keyPosition == slot,
+                )
+                .first()
+            )
 
             if key:
                 key.peg_id = peg_id
                 key.current_pos_strip_id = strip
                 key.current_pos_slot_no = slot
 
-        session.commit()
-        print("[PEG] Peg registration SUCCESS")
+        self.session.commit()
+        print("[PEG] Peg registration DONE")
 
-    # -------------------------------------------------
-    # CLEANUP
-    # -------------------------------------------------
+    # --------------------------------------------------
+    # CLEANUP (SAME AS OLD)
+    # --------------------------------------------------
     def _cleanup(self):
         print("[PEG] Cleaning up")
 
-        ams_can = self.manager.ams_can
-        for strip in ams_can.key_lists:
-            ams_can.lock_all_positions(strip)
-            ams_can.set_all_LED_OFF(strip)
+        for keylistid in self.ams_can.key_lists:
+            self.ams_can.lock_all_positions(keylistid)
+            self.ams_can.set_all_LED_OFF(keylistid)
 
-        self._stop_gpio_subscriber()
-        self._active = False
-        self._door_open = False
-        self._scan_started = False
+        if self._mqtt_client:
+            self._mqtt_client.loop_stop()
+            self._mqtt_client.disconnect()
 
         print("========== [PEG] REGISTRATION FINISHED ==========\n")
