@@ -1,137 +1,97 @@
-# test_peg_registration.py
-
-from datetime import datetime
 from time import sleep
+from datetime import datetime
+import pytz
 
-# ================= DB SETUP =================
+from csi_ams.model import AUTH_MODE_PIN, EVENT_PEG_REGISTERATION, EVENT_TYPE_EVENT
+from db_core import SQLALCHEMY_DATABASE_URI
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from csi_ams.utils.commons import (
-    SQLALCHEMY_DATABASE_URI,
-    TZ_INDIA,
-    AUTH_MODE_PIN,
-    EVENT_DOOR_OPEN,
-    EVENT_DOOR_CLOSED,
-    EVENT_PEG_REGISTERATION,
-    EVENT_TYPE_EVENT,
-)
-
-from csi_ams.model import (
-    AMS_Keys,
-    AMS_Key_Pegs,
-    AMS_Access_Log,
-    AMS_Event_Log,
-)
-
+from csi_ams.utils.commons import *
+from amscan import AMS_CAN
+from model import EVENT_DOOR_OPEN, AMS_Keys, AMS_Key_Pegs, AMS_Access_Log, AMS_Event_Log
 from csi_ams.utils.commons import get_event_description
 
-# ================= CAN =================
-from test import AMS_CAN   # adjust import if needed
 
-# ================= INIT =================
-engine = create_engine(SQLALCHEMY_DATABASE_URI)
-Session = sessionmaker(bind=engine)
-session = Session()
+TZ_INDIA = pytz.timezone("Asia/Kolkata")
 
-ams_can = AMS_CAN()
 
-# ================= MOCK USER =================
-USER_ID = 1  # change if required
+def wait_for_keylists(ams_can, timeout=15):
+    print("Waiting for CAN key-lists...")
+    while timeout > 0:
+        if ams_can.key_lists:
+            return True
+        sleep(1)
+        timeout -= 1
+    return False
 
-# =====================================================
-# PEG REGISTRATION TEST
-# =====================================================
 
-def run_peg_registration_test():
-    print("\n========== PEG REGISTRATION TEST START ==========\n")
+def main():
+    # ---------------- DB ----------------
+    engine = create_engine(SQLALCHEMY_DATABASE_URI)
+    Session = sessionmaker(bind=engine)
+    session = Session()
 
-    # -------------------------------------------------
-    # ACCESS LOG (Door Open)
-    # -------------------------------------------------
+    # ---------------- CAN ----------------
+    ams_can = AMS_CAN()
+
+    # Trigger handshake (same as prod)
+    ams_can.get_version_number(1)
+    ams_can.get_version_number(2)
+
+    if not wait_for_keylists(ams_can):
+        print("❌ No key-lists detected from CAN")
+        return
+
+    print(f"✅ Key-lists detected: {ams_can.key_lists}")
+
+    # ---------------- ACCESS LOG ----------------
     access_log = AMS_Access_Log(
         signInTime=datetime.now(TZ_INDIA),
         signInMode=AUTH_MODE_PIN,
         signInFailed=0,
         signInSucceed=1,
-        signInUserId=USER_ID,
-        activityCodeEntryTime=None,
+        signInUserId=1,
         activityCode=1,
         doorOpenTime=datetime.now(TZ_INDIA),
-        keysAllowed=None,
-        keysTaken=None,
-        keysReturned=None,
-        doorCloseTime=None,
         event_type_id=EVENT_DOOR_OPEN,
         is_posted=0,
     )
     session.add(access_log)
     session.commit()
 
-    print(f"[INFO] Door Open Logged | access_log_id={access_log.id}")
-
-    # -------------------------------------------------
-    # EVENT: DOOR OPEN
-    # -------------------------------------------------
-    event_desc = get_event_description(session, EVENT_DOOR_OPEN)
-
-    session.add(
-        AMS_Event_Log(
-            userId=USER_ID,
-            keyId=None,
-            activityId=1,
-            eventId=EVENT_DOOR_OPEN,
-            loginType="PIN",
-            access_log_id=access_log.id,
-            timeStamp=datetime.now(TZ_INDIA),
-            event_type=EVENT_TYPE_EVENT,
-            eventDesc=event_desc,
-            is_posted=0,
-        )
-    )
-    session.commit()
-
-    # -------------------------------------------------
-    # CLEAR OLD PEG DATA
-    # -------------------------------------------------
+    # ---------------- CLEAR OLD PEGS ----------------
     session.query(AMS_Key_Pegs).delete()
     session.commit()
-    print("[INFO] Old peg records cleared")
+    print("Old peg records cleared")
 
-    # -------------------------------------------------
-    # PEG SCAN LOOP
-    # -------------------------------------------------
+    # ---------------- PEG SCAN ----------------
     for keylistid in ams_can.key_lists:
-        print(f"\n--- Scanning Key Strip {keylistid} ---")
+        print(f"\nScanning Strip {keylistid}")
 
         for slot in range(1, 15):
             peg_id = ams_can.get_key_id(keylistid, slot)
+            print(f"Strip {keylistid} Slot {slot} → peg_id = {peg_id}")
 
             if not peg_id:
-                print(f"[EMPTY] Strip {keylistid} Slot {slot}")
                 continue
 
-            key_pos_no = slot + ((keylistid - 1) * 14)
-
-            print(
-                f"[FOUND] Peg ID {peg_id} | Strip {keylistid} Slot {slot} | Key {key_pos_no}"
+            # Insert peg
+            session.add(
+                AMS_Key_Pegs(
+                    peg_id=peg_id,
+                    keylist_no=keylistid,
+                    keyslot_no=slot,
+                )
             )
-
-            # Insert peg table
-            new_peg = AMS_Key_Pegs(
-                peg_id=peg_id,
-                keylist_no=keylistid,
-                keyslot_no=slot,
-            )
-            session.add(new_peg)
             session.commit()
 
             # Update key table
             key = (
                 session.query(AMS_Keys)
                 .filter(
-                    (AMS_Keys.keyStrip == keylistid)
-                    & (AMS_Keys.keyPosition == slot)
+                    AMS_Keys.keyStrip == keylistid,
+                    AMS_Keys.keyPosition == slot,
                 )
                 .first()
             )
@@ -141,59 +101,27 @@ def run_peg_registration_test():
                 key.current_pos_strip_id = keylistid
                 key.current_pos_slot_no = slot
                 session.commit()
-                print(f"[DB] AMS_Keys updated for Key {key_pos_no}")
-            else:
-                print(f"[WARN] AMS_Keys entry missing for strip {keylistid} slot {slot}")
+                print("  → DB updated")
 
             sleep(0.2)
 
-    # -------------------------------------------------
-    # EVENT: PEG REGISTRATION
-    # -------------------------------------------------
-    event_desc = get_event_description(session, EVENT_PEG_REGISTERATION)
-
+    # ---------------- EVENT LOG ----------------
     session.add(
         AMS_Event_Log(
-            userId=USER_ID,
-            keyId=None,
-            activityId=1,
+            userId=1,
             eventId=EVENT_PEG_REGISTERATION,
-            loginType="PIN",
-            access_log_id=access_log.id,
-            timeStamp=datetime.now(TZ_INDIA),
-            event_type=EVENT_PEG_REGISTERATION,
-            eventDesc=event_desc,
-            is_posted=0,
-        )
-    )
-    session.commit()
-
-    # -------------------------------------------------
-    # EVENT: DOOR CLOSED
-    # -------------------------------------------------
-    event_desc = get_event_description(session, EVENT_DOOR_CLOSED)
-
-    session.add(
-        AMS_Event_Log(
-            userId=USER_ID,
-            keyId=None,
-            activityId=1,
-            eventId=EVENT_DOOR_CLOSED,
-            loginType="PIN",
+            loginType="CLI",
             access_log_id=access_log.id,
             timeStamp=datetime.now(TZ_INDIA),
             event_type=EVENT_TYPE_EVENT,
-            eventDesc=event_desc,
+            eventDesc=get_event_description(session, EVENT_PEG_REGISTERATION),
             is_posted=0,
         )
     )
-
-    access_log.doorCloseTime = datetime.now(TZ_INDIA)
     session.commit()
 
-    print("\n========== PEG REGISTRATION TEST COMPLETED ==========\n")
+    print("\n✅ PEG REGISTRATION TEST COMPLETED\n")
 
 
-# =====================================================
 if __name__ == "__main__":
-    run_peg_registration_test()
+    main()
