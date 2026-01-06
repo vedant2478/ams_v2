@@ -36,5 +36,10 @@ class HomeScreen(BaseScreen):
     def update_time(self, *args):
         self.time_text = datetime.now().strftime("%H:%M")
 
+    def open_config(self):
+        # Navigate to PIN screen (admin check happens there)
+        self.manager.transition.direction = "left"
+        self.manager.current = "pin"
+
     def on_start_pressed(self):
         self.manager.current = "auth"
