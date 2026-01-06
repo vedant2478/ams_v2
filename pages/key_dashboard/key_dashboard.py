@@ -216,8 +216,6 @@ class KeyDashboardScreen(BaseScreen):
         self.time_remaining = str(self.MAX_DOOR_TIME)
         self.progress_value = 0.0
 
-        print(self.manager.ams_can.key_lists)
-
         self._door_timer_event = Clock.schedule_interval(
             self.door_timer_tick, 1
         )
@@ -363,19 +361,37 @@ class KeyDashboardScreen(BaseScreen):
     # EXIT
     # -----------------------------------------------------
     def go_back(self):
+        print("[DASHBOARD] Exiting KeyDashboardScreen")
+
+        # ---------------- UNLOCK ALL KEYS ----------------
+        ams_can = getattr(self.manager, "ams_can", None)
+        if ams_can:
+            print("[DASHBOARD] Unlocking all keys before exit")
+            for strip in ams_can.key_lists:
+                ams_can.unlock_all_positions(strip)
+                ams_can.set_all_LED_OFF(strip)
+
+        # ---------------- LOCK DOOR ----------------
         subprocess.Popen(
             ["sudo", "python3", "solenoid.py", "0"],
             cwd="/home/rock/Desktop/ams_v2",
         )
 
+        # ---------------- CLEANUP TIMERS ----------------
         if self._door_timer_event:
             self._door_timer_event.cancel()
+            self._door_timer_event = None
 
         if self._can_poll_event:
             self._can_poll_event.cancel()
+            self._can_poll_event = None
 
+        # ---------------- MQTT CLEANUP ----------------
         if self._mqtt_client:
             self._mqtt_client.loop_stop()
             self._mqtt_client.disconnect()
+            self._mqtt_client = None
 
+        # ---------------- NAVIGATE BACK ----------------
         self.manager.current = "activity"
+
