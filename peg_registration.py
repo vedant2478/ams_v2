@@ -15,7 +15,7 @@ class PegRegistrationService:
     def __init__(self, manager):
         self.manager = manager
         self.session = manager.db_session
-        self.user_auth = manager.user_auth
+        # self.user_auth = manager.user_auth
         self.ams_can = manager.ams_can  # 🔑 reuse existing CAN instance
 
         self._mqtt_client = None
@@ -28,9 +28,9 @@ class PegRegistrationService:
     def start(self):
         print("\n========== [PEG] REGISTRATION START ==========")
 
-        if self.user_auth["roleId"] != 1:
-            print("[PEG][ERROR] Non-admin blocked")
-            return False
+        # if self.user_auth["roleId"] != 1:
+        #     print("[PEG][ERROR] Non-admin blocked")
+        #     return False
 
         # EXACT SAME CHECK AS OLD CODE
         print(f"[PEG] Keylists available: {self.ams_can.key_lists}")
