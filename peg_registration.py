@@ -17,7 +17,7 @@ class PegRegistrationService:
     def __init__(self, manager):
         self.manager = manager
         self.session = manager.db_session
-        self.user_auth = manager.user_auth
+        # self.user_auth = manager.user_auth
 
         self._mqtt_client = None
         self._door_open = False
@@ -30,9 +30,9 @@ class PegRegistrationService:
     def start(self):
         print("\n========== [PEG] REGISTRATION START ==========")
 
-        if self.user_auth["roleId"] != 1:
-            print("[PEG][ERROR] Non-admin access blocked")
-            return False
+        # if self.user_auth["roleId"] != 1:
+        #     print("[PEG][ERROR] Non-admin access blocked")
+        #     return False
 
         self._active = True
         self._door_open = False
