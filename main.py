@@ -46,7 +46,9 @@ Builder.load_file(os.path.join(BASE_DIR, "pages/pin/pin.kv"))
 Builder.load_file(os.path.join(BASE_DIR, "pages/activity/activity.kv"))
 Builder.load_file(os.path.join(BASE_DIR, "pages/key_dashboard/key_dashboard.kv"))
 Builder.load_file(os.path.join(BASE_DIR, "pages/activity_done/activity_done.kv"))
-Builder.load_file(os.path.join(BASE_DIR, "pages/admin_pages/admin_home/admin_home.kv"))
+Builder.load_file(
+    os.path.join(BASE_DIR, "pages/admin_pages/admin_home/admin_home.kv")
+)
 
 # ================= SCREEN PY =================
 from pages.home.home import HomeScreen
@@ -62,6 +64,34 @@ from pages.admin_pages.admin_home.admin_home import AdminScreen
 # ================= MAIN APP =================
 class MainApp(App):
 
+    def _init_can(self, sm):
+        """
+        Initialize CAN and DISCOVER keylists (MANDATORY).
+        This must happen ONCE at app startup.
+        """
+        print("[MAIN] Initializing AMS_CAN...")
+        sm.ams_can = AMS_CAN()
+
+        # 🔑 Trigger discovery (same as legacy app)
+        sm.ams_can.get_version_number(1)
+        sm.ams_can.get_version_number(2)
+
+        sleep(3)
+
+        # Retry once if needed
+        if not sm.ams_can.key_lists:
+            print("[MAIN] Retrying CAN keylist discovery...")
+            sm.ams_can.get_version_number(1)
+            sm.ams_can.get_version_number(2)
+            sleep(2)
+
+        print(f"[MAIN] Keylists discovered: {sm.ams_can.key_lists}")
+
+        if not sm.ams_can.key_lists:
+            print("[WARNING] No keylists detected at startup")
+        else:
+            print("[MAIN] CAN READY")
+
     def build(self):
         print("[MAIN] Starting AMS Application")
 
@@ -70,7 +100,7 @@ class MainApp(App):
         # -------------------------------------------------
         engine = create_engine(
             SQLALCHEMY_DATABASE_URI,
-            connect_args={"check_same_thread": False}
+            connect_args={"check_same_thread": False},
         )
         Session = sessionmaker(bind=engine)
         db_session = Session()
@@ -98,18 +128,9 @@ class MainApp(App):
         sm.activity_info = None
 
         # -------------------------------------------------
-        # 4️⃣ INITIALIZE CAN (ONCE)
+        # 4️⃣ INITIALIZE CAN (ONCE, PROPERLY)
         # -------------------------------------------------
-        print("[MAIN] Initializing AMS_CAN...")
-        sm.ams_can = AMS_CAN()
-
-        # ⏳ Allow keylists to announce themselves
-        sleep(4)
-
-        print(f"[MAIN] Keylists discovered: {sm.ams_can.key_lists}")
-
-        if not sm.ams_can.key_lists:
-            print("[WARNING] No keylists detected at startup")
+        self._init_can(sm)
 
         # -------------------------------------------------
         # 5️⃣ REGISTER SCREENS
