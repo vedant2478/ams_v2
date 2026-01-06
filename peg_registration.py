@@ -1,26 +1,53 @@
 from time import sleep
+from datetime import datetime
+import pytz
 import paho.mqtt.client as mqtt
-from kivy.clock import Clock
 
-from csi_ams.model import AMS_Keys, AMS_Key_Pegs
+from csi_ams.model import (
+    AMS_Keys,
+    AMS_Key_Pegs,
+    AMS_Access_Log,
+    AMS_Event_Log,
+    AUTH_MODE_PIN,
+    EVENT_PEG_REGISTERATION,
+    EVENT_DOOR_OPEN,
+    EVENT_TYPE_EVENT,
+)
+
+from csi_ams.utils.commons import get_event_description
 from amscan import CAN_LED_STATE_BLINK, CAN_LED_STATE_OFF
+
+
+TZ_INDIA = pytz.timezone("Asia/Kolkata")
 
 
 class PegRegistrationService:
     """
-    Peg registration using the SAME flow as old LCD code.
-    No discovery. No re-init. Uses existing ams_can.
+    Peg registration using SAME logic as legacy LCD flow.
+    Triggered from frontend.
     """
 
     def __init__(self, manager):
         self.manager = manager
         self.session = manager.db_session
-        # self.user_auth = manager.user_auth
-        self.ams_can = manager.ams_can  # 🔑 reuse existing CAN instance
+        self.ams_can = manager.ams_can  # reuse existing CAN
 
         self._mqtt_client = None
         self._door_open = False
         self._scan_started = False
+        self._access_log = None
+
+    # --------------------------------------------------
+    # KEYLIST WAIT (SAME AS CLI)
+    # --------------------------------------------------
+    def _wait_for_keylists(self, timeout=10):
+        print("[PEG] Waiting for CAN keylists...")
+        while timeout > 0:
+            if self.ams_can.key_lists:
+                return True
+            sleep(1)
+            timeout -= 1
+        return False
 
     # --------------------------------------------------
     # ENTRY POINT (ADMIN BUTTON)
@@ -28,24 +55,18 @@ class PegRegistrationService:
     def start(self):
         print("\n========== [PEG] REGISTRATION START ==========")
 
-        # if self.user_auth["roleId"] != 1:
-        #     print("[PEG][ERROR] Non-admin blocked")
-        #     return False
-
-        # EXACT SAME CHECK AS OLD CODE
-        print(f"[PEG] Keylists available: {self.ams_can.key_lists}")
-
-        if not self.ams_can.key_lists:
-            print("[PEG][ERROR] No keylists present (CAN not initialized earlier)")
+        if not self._wait_for_keylists():
+            print("[PEG][ERROR] No keylists from CAN")
             return False
 
-        # Unlock all pegs
+        print(f"[PEG] Keylists detected: {self.ams_can.key_lists}")
+
+        # Unlock all positions (same as old)
         for keylistid in self.ams_can.key_lists:
-            print(f"[PEG] Unlocking strip {keylistid}")
             self.ams_can.unlock_all_positions(keylistid)
             self.ams_can.set_all_LED_ON(keylistid, False)
 
-        # Same DB check as old code
+        # Ensure all keys are present
         missing = (
             self.session.query(AMS_Keys)
             .filter(AMS_Keys.keyStatus == 0)
@@ -53,16 +74,31 @@ class PegRegistrationService:
         )
 
         if missing > 0:
-            print(f"[PEG][ABORT] {missing} keys missing. Insert all keys first.")
+            print(f"[PEG][ABORT] {missing} keys missing")
             self._cleanup()
             return False
 
-        print("[PEG] Waiting for door OPEN")
+        # ---------------- ACCESS LOG ----------------
+        self._access_log = AMS_Access_Log(
+            signInTime=datetime.now(TZ_INDIA),
+            signInMode=AUTH_MODE_PIN,
+            signInFailed=0,
+            signInSucceed=1,
+            signInUserId=self.manager.user_id,
+            activityCode=1,
+            doorOpenTime=datetime.now(TZ_INDIA),
+            event_type_id=EVENT_DOOR_OPEN,
+            is_posted=0,
+        )
+        self.session.add(self._access_log)
+        self.session.commit()
+
+        print("[PEG] Waiting for door open (MQTT)")
         self._start_gpio_subscriber()
         return True
 
     # --------------------------------------------------
-    # MQTT DOOR HANDLING (REPLACES GPIO LOOP)
+    # MQTT DOOR HANDLING
     # --------------------------------------------------
     def _start_gpio_subscriber(self):
         self._mqtt_client = mqtt.Client("peg-reg-subscriber")
@@ -73,23 +109,23 @@ class PegRegistrationService:
 
     def _on_mqtt_message(self, client, userdata, msg):
         value = int(msg.payload.decode())
-        print(f"[PEG][MQTT] gpio/pin32 = {value}")
+        print(f"[PEG][MQTT] Door GPIO = {value}")
 
         if value == 1 and not self._door_open:
             self._door_open = True
             print("[PEG] Door OPENED")
 
-        elif value == 0 and self._door_open:
-            print("[PEG] Door CLOSED → scanning")
+        elif value == 0 and self._door_open and not self._scan_started:
+            print("[PEG] Door CLOSED → start scan")
             self._scan_started = True
             self._scan_pegs()
             self._cleanup()
 
     # --------------------------------------------------
-    # SCAN (DIRECT TRANSLATION OF OLD CODE)
+    # PEG SCAN (CLI + OLD LCD MERGED)
     # --------------------------------------------------
     def _scan_pegs(self):
-        print("[PEG] Scan in progress")
+        print("[PEG] Scan started")
 
         scanned = []
 
@@ -112,12 +148,12 @@ class PegRegistrationService:
                 )
 
         if not scanned:
-            print("[PEG][ERROR] No pegs detected. DB untouched.")
+            print("[PEG][ERROR] No pegs detected")
             return
 
-        print(f"[PEG] {len(scanned)} pegs detected. Updating DB.")
+        print(f"[PEG] {len(scanned)} pegs detected")
 
-        # EXACT OLD BEHAVIOR: delete then insert
+        # EXACT LEGACY BEHAVIOR
         self.session.query(AMS_Key_Pegs).delete()
         self.session.commit()
 
@@ -145,13 +181,31 @@ class PegRegistrationService:
                 key.current_pos_slot_no = slot
 
         self.session.commit()
-        print("[PEG] Peg registration DONE")
+
+        # ---------------- EVENT LOG ----------------
+        self.session.add(
+            AMS_Event_Log(
+                userId=self.manager.user_id,
+                eventId=EVENT_PEG_REGISTERATION,
+                loginType="FRONTEND",
+                access_log_id=self._access_log.id,
+                timeStamp=datetime.now(TZ_INDIA),
+                event_type=EVENT_TYPE_EVENT,
+                eventDesc=get_event_description(
+                    self.session, EVENT_PEG_REGISTERATION
+                ),
+                is_posted=0,
+            )
+        )
+        self.session.commit()
+
+        print("[PEG] Peg registration COMPLETED")
 
     # --------------------------------------------------
-    # CLEANUP (SAME AS OLD)
+    # CLEANUP
     # --------------------------------------------------
     def _cleanup(self):
-        print("[PEG] Cleaning up")
+        print("[PEG] Cleanup")
 
         for keylistid in self.ams_can.key_lists:
             self.ams_can.lock_all_positions(keylistid)

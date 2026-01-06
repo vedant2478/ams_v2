@@ -6,8 +6,7 @@ class AdminScreen(Screen):
     """
     Admin Configuration Screen
     Peg registration is triggered directly from here
-    """ 
-
+    """
 
     def open_peg_registration(self):
         print("[ADMIN] Peg Registration clicked")
@@ -22,7 +21,7 @@ class AdminScreen(Screen):
 
     def open_card_registration(self):
         print("[ADMIN] Card Registration selected")
-        # call CardRegistrationService here later
+        # CardRegistrationService will go here later
 
     def go_home(self):
         print("[ADMIN] Go Home")
