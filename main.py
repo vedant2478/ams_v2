@@ -66,19 +66,22 @@ class MainApp(App):
 
     def _init_can(self, sm):
         """
-        Initialize CAN and DISCOVER keylists (MANDATORY).
-        This must happen ONCE at app startup.
+        Initialize CAN and DISCOVER keylists.
+        Listener is started ONLY for discovery and stopped immediately.
         """
         print("[MAIN] Initializing AMS_CAN...")
         sm.ams_can = AMS_CAN()
 
-        # 🔑 Trigger discovery (same as legacy app)
+        # 🔴 START LISTENER TEMPORARILY
+        sm.ams_can.start_listener()
+
+        # 🔑 Trigger discovery (legacy-compatible)
         sm.ams_can.get_version_number(1)
         sm.ams_can.get_version_number(2)
 
         sleep(3)
 
-        # Retry once if needed
+        # Retry once if nothing detected
         if not sm.ams_can.key_lists:
             print("[MAIN] Retrying CAN keylist discovery...")
             sm.ams_can.get_version_number(1)
@@ -91,6 +94,9 @@ class MainApp(App):
             print("[WARNING] No keylists detected at startup")
         else:
             print("[MAIN] CAN READY")
+
+        # 🔴 STOP LISTENER AFTER DISCOVERY
+        sm.ams_can.stop_listener()
 
     def build(self):
         print("[MAIN] Starting AMS Application")
@@ -128,7 +134,7 @@ class MainApp(App):
         sm.activity_info = None
 
         # -------------------------------------------------
-        # 4️⃣ INITIALIZE CAN (ONCE, PROPERLY)
+        # 4️⃣ INITIALIZE CAN (ONCE, SAFE)
         # -------------------------------------------------
         self._init_can(sm)
 

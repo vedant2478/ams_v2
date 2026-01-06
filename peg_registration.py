@@ -15,22 +15,29 @@ from csi_ams.model import (
 )
 
 from csi_ams.utils.commons import get_event_description
-from amscan import CAN_LED_STATE_BLINK, CAN_LED_STATE_OFF
-
+from amscan import (
+    AMS_CAN,
+    CAN_LED_STATE_BLINK,
+    CAN_LED_STATE_OFF,
+)
 
 TZ_INDIA = pytz.timezone("Asia/Kolkata")
 
 
 class PegRegistrationService:
     """
-    Peg registration using SAME logic as legacy LCD flow.
-    Triggered from frontend.
+    Peg registration service.
+    - Own CAN instance
+    - Own MQTT instance
+    - Full cleanup after completion
     """
 
     def __init__(self, manager):
         self.manager = manager
         self.session = manager.db_session
-        self.ams_can = manager.ams_can  # reuse existing CAN
+
+        # 🔴 LOCAL CAN (NOT SHARED)
+        self.ams_can = AMS_CAN()
 
         self._mqtt_client = None
         self._door_open = False
@@ -38,7 +45,7 @@ class PegRegistrationService:
         self._access_log = None
 
     # --------------------------------------------------
-    # KEYLIST WAIT (SAME AS CLI)
+    # WAIT FOR KEYLISTS
     # --------------------------------------------------
     def _wait_for_keylists(self, timeout=10):
         print("[PEG] Waiting for CAN keylists...")
@@ -57,16 +64,17 @@ class PegRegistrationService:
 
         if not self._wait_for_keylists():
             print("[PEG][ERROR] No keylists from CAN")
+            self._cleanup()
             return False
 
         print(f"[PEG] Keylists detected: {self.ams_can.key_lists}")
 
-        # Unlock all positions (same as old)
-        for keylistid in self.ams_can.key_lists:
-            self.ams_can.unlock_all_positions(keylistid)
-            self.ams_can.set_all_LED_ON(keylistid, False)
+        # 🔓 UNLOCK ALL + LED ON
+        for strip in self.ams_can.key_lists:
+            self.ams_can.unlock_all_positions(strip)
+            self.ams_can.set_all_LED_ON(strip, False)
 
-        # Ensure all keys are present
+        # ---------------- ENSURE ALL KEYS PRESENT ----------------
         missing = (
             self.session.query(AMS_Keys)
             .filter(AMS_Keys.keyStatus == 0)
@@ -122,29 +130,29 @@ class PegRegistrationService:
             self._cleanup()
 
     # --------------------------------------------------
-    # PEG SCAN (CLI + OLD LCD MERGED)
+    # PEG SCAN
     # --------------------------------------------------
     def _scan_pegs(self):
         print("[PEG] Scan started")
 
         scanned = []
 
-        for keylistid in self.ams_can.key_lists:
+        for strip in self.ams_can.key_lists:
             for slot in range(1, 15):
 
                 self.ams_can.set_single_LED_state(
-                    keylistid, slot, CAN_LED_STATE_BLINK
+                    strip, slot, CAN_LED_STATE_BLINK
                 )
                 sleep(0.15)
 
-                peg_id = self.ams_can.get_key_id(keylistid, slot)
-                print(f"[PEG] strip={keylistid} slot={slot} peg_id={peg_id}")
+                peg_id = self.ams_can.get_key_id(strip, slot)
+                print(f"[PEG] strip={strip} slot={slot} peg_id={peg_id}")
 
                 if peg_id:
-                    scanned.append((peg_id, keylistid, slot))
+                    scanned.append((peg_id, strip, slot))
 
                 self.ams_can.set_single_LED_state(
-                    keylistid, slot, CAN_LED_STATE_OFF
+                    strip, slot, CAN_LED_STATE_OFF
                 )
 
         if not scanned:
@@ -153,7 +161,7 @@ class PegRegistrationService:
 
         print(f"[PEG] {len(scanned)} pegs detected")
 
-        # EXACT LEGACY BEHAVIOR
+        # ---------------- RESET PEG TABLE ----------------
         self.session.query(AMS_Key_Pegs).delete()
         self.session.commit()
 
@@ -202,17 +210,26 @@ class PegRegistrationService:
         print("[PEG] Peg registration COMPLETED")
 
     # --------------------------------------------------
-    # CLEANUP
+    # CLEANUP (CRITICAL)
     # --------------------------------------------------
     def _cleanup(self):
         print("[PEG] Cleanup")
 
-        for keylistid in self.ams_can.key_lists:
-            self.ams_can.lock_all_positions(keylistid)
-            self.ams_can.set_all_LED_OFF(keylistid)
+        # 🔓 UNLOCK ALL + LED OFF
+        if self.ams_can and self.ams_can.key_lists:
+            for strip in self.ams_can.key_lists:
+                self.ams_can.unlock_all_positions(strip)
+                self.ams_can.set_all_LED_OFF(strip)
 
+        # 🧹 CAN CLEANUP
+        if self.ams_can:
+            self.ams_can.cleanup()
+            self.ams_can = None
+
+        # 🧹 MQTT CLEANUP
         if self._mqtt_client:
             self._mqtt_client.loop_stop()
             self._mqtt_client.disconnect()
+            self._mqtt_client = None
 
         print("========== [PEG] REGISTRATION FINISHED ==========\n")
