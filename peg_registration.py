@@ -242,4 +242,4 @@ class PegRegistrationService:
 
         print("========== [PEG] REGISTRATION FINISHED ==========\n")
 
-        self.manager.current = "home"
+
