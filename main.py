@@ -6,25 +6,27 @@ Config.set("graphics", "resizable", "0")
 Config.set("graphics", "borderless", "1")
 
 # ================= SAFE TO IMPORT KIVY NOW =================
-
 from kivy.app import App
 from kivy.lang import Builder
 from kivy.uix.screenmanager import ScreenManager, NoTransition
 import os
 import sys
+from time import sleep
 
 # ================= PATH SETUP =================
-
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 BACKEND_DIR = os.path.join(BASE_DIR, "reliance_ams_local-master")
 
 if BACKEND_DIR not in sys.path:
     sys.path.append(BACKEND_DIR)
 
-# ================= SQLALCHEMY IMPORTS =================
+# ================= SQLALCHEMY =================
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from csi_ams.utils.commons import SQLALCHEMY_DATABASE_URI
+
+# ================= CAN =================
+from amscan import AMS_CAN
 
 # ================= COMPONENT IMPORTS =================
 from components.header.header import Header
@@ -45,7 +47,8 @@ Builder.load_file(os.path.join(BASE_DIR, "pages/activity/activity.kv"))
 Builder.load_file(os.path.join(BASE_DIR, "pages/key_dashboard/key_dashboard.kv"))
 Builder.load_file(os.path.join(BASE_DIR, "pages/activity_done/activity_done.kv"))
 Builder.load_file(os.path.join(BASE_DIR, "pages/admin_pages/admin_home/admin_home.kv"))
-# ================= SCREEN PY IMPORTS =================
+
+# ================= SCREEN PY =================
 from pages.home.home import HomeScreen
 from pages.auth.auth import AuthScreen
 from pages.card_scan.card_scan import CardScanScreen
@@ -56,16 +59,14 @@ from pages.activity_done.activity_done import ActivityDoneScreen
 from pages.admin_pages.admin_home.admin_home import AdminScreen
 
 
-
 # ================= MAIN APP =================
 class MainApp(App):
-    """
-    Main application class.
-    """
 
     def build(self):
+        print("[MAIN] Starting AMS Application")
+
         # -------------------------------------------------
-        # 1️⃣ CREATE DATABASE SESSION (ONCE)
+        # 1️⃣ DATABASE SESSION (ONCE)
         # -------------------------------------------------
         engine = create_engine(
             SQLALCHEMY_DATABASE_URI,
@@ -80,27 +81,38 @@ class MainApp(App):
         sm = ScreenManager(transition=NoTransition())
 
         # -------------------------------------------------
-        # 3️⃣ GLOBAL SHARED STATE (ACCESSIBLE IN ALL SCREENS)
+        # 3️⃣ GLOBAL SHARED STATE
         # -------------------------------------------------
-        sm.db_session = db_session        # SQLAlchemy session
+        sm.db_session = db_session
 
-        # Authentication state
-        sm.auth_mode = None               # 1 = PIN, 2 = CARD, 3 = BIOMETRIC
-        sm.final_auth_mode = None         # "PIN", "CARD", "BIOMETRIC"
-        sm.ams_access_log = None        # AMS_Access_Log instance
+        sm.auth_mode = None
+        sm.final_auth_mode = None
+        sm.ams_access_log = None
 
-        # User & logging state
         sm.user_id = None
         sm.access_log_id = None
 
-        # Card info
         sm.card_number = None
         sm.card_info = None
-        
-        #Activity info
-        sm.activiy_code = None
+
+        sm.activity_info = None
+
         # -------------------------------------------------
-        # 4️⃣ REGISTER SCREENS
+        # 4️⃣ INITIALIZE CAN (ONCE)
+        # -------------------------------------------------
+        print("[MAIN] Initializing AMS_CAN...")
+        sm.ams_can = AMS_CAN()
+
+        # ⏳ Allow keylists to announce themselves
+        sleep(4)
+
+        print(f"[MAIN] Keylists discovered: {sm.ams_can.key_lists}")
+
+        if not sm.ams_can.key_lists:
+            print("[WARNING] No keylists detected at startup")
+
+        # -------------------------------------------------
+        # 5️⃣ REGISTER SCREENS
         # -------------------------------------------------
         sm.add_widget(HomeScreen(name="home"))
         sm.add_widget(AuthScreen(name="auth"))
@@ -111,16 +123,22 @@ class MainApp(App):
         sm.add_widget(ActivityDoneScreen(name="activity_done"))
         sm.add_widget(AdminScreen(name="admin_home"))
 
-        # -------------------------------------------------
-        # 5️⃣ INITIAL SCREEN
-        # -------------------------------------------------
         sm.current = "home"
         return sm
 
     def on_stop(self):
         """
-        Gracefully close DB session on app exit
+        Global cleanup (ONLY HERE)
         """
+        print("[MAIN] Shutting down application")
+
+        # ---- CAN CLEANUP ----
+        ams_can = getattr(self.root, "ams_can", None)
+        if ams_can:
+            print("[MAIN] Cleaning up AMS_CAN")
+            ams_can.cleanup()
+
+        # ---- DB CLEANUP ----
         try:
             self.root.db_session.close()
         except Exception:
@@ -130,9 +148,3 @@ class MainApp(App):
 # ================= RUN APP =================
 if __name__ == "__main__":
     MainApp().run()
-
-
-# ================= CAN HELPERS (REFERENCE) =================
-# sudo ip link set can0 down
-# sudo ip link set can0 type can bitrate 125000 restart-ms 100
-# sudo ip link set can0 up

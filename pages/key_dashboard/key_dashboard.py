@@ -128,7 +128,7 @@ class KeyDashboardScreen(BaseScreen):
         self.ensure_can_up()
 
         if not hasattr(self.manager, "ams_can"):
-            self.manager.ams_can = AMS_CAN()
+            
             self.lock_all_keys()
 
         self.reload_keys_from_db()
@@ -367,8 +367,9 @@ class KeyDashboardScreen(BaseScreen):
         ams_can = getattr(self.manager, "ams_can", None)
         if ams_can:
             print("[DASHBOARD] Unlocking all keys before exit")
+            print(f"[DASHBOARD] Keylists: {ams_can.key_lists}")
+
             for strip in ams_can.key_lists:
-                print(ams_can.key_lists)
                 ams_can.unlock_all_positions(strip)
                 ams_can.set_all_LED_OFF(strip)
 
@@ -395,4 +396,5 @@ class KeyDashboardScreen(BaseScreen):
 
         # ---------------- NAVIGATE BACK ----------------
         self.manager.current = "activity"
+
 
