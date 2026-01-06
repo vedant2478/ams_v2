@@ -26,9 +26,10 @@ TZ_INDIA = pytz.timezone("Asia/Kolkata")
 
 class PegRegistrationService:
     """
-    Peg registration service.
+    Peg registration service
     - Own CAN instance
     - Own MQTT instance
+    - Explicit CAN discovery
     - Full cleanup after completion
     """
 
@@ -36,7 +37,7 @@ class PegRegistrationService:
         self.manager = manager
         self.session = manager.db_session
 
-        # 🔴 LOCAL CAN (NOT SHARED)
+        # 🔴 LOCAL CAN INSTANCE (NOT SHARED)
         self.ams_can = AMS_CAN()
 
         self._mqtt_client = None
@@ -45,7 +46,7 @@ class PegRegistrationService:
         self._access_log = None
 
     # --------------------------------------------------
-    # WAIT FOR KEYLISTS
+    # WAIT FOR KEYLISTS (AFTER DISCOVERY)
     # --------------------------------------------------
     def _wait_for_keylists(self, timeout=10):
         print("[PEG] Waiting for CAN keylists...")
@@ -57,19 +58,25 @@ class PegRegistrationService:
         return False
 
     # --------------------------------------------------
-    # ENTRY POINT (ADMIN BUTTON)
+    # ENTRY POINT
     # --------------------------------------------------
     def start(self):
         print("\n========== [PEG] REGISTRATION START ==========")
 
+        # 🔑 EXPLICIT CAN DISCOVERY (MANDATORY)
+        print("[PEG] Triggering CAN discovery")
+        self.ams_can.get_version_number(1)
+        self.ams_can.get_version_number(2)
+        sleep(2)
+
         if not self._wait_for_keylists():
-            print("[PEG][ERROR] No keylists from CAN")
+            print("[PEG][ERROR] No keylists detected from CAN")
             self._cleanup()
             return False
 
         print(f"[PEG] Keylists detected: {self.ams_can.key_lists}")
 
-        # 🔓 UNLOCK ALL + LED ON
+        # 🔓 UNLOCK ALL KEYS + LED ON
         for strip in self.ams_can.key_lists:
             self.ams_can.unlock_all_positions(strip)
             self.ams_can.set_all_LED_ON(strip, False)
