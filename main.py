@@ -11,7 +11,6 @@ from kivy.lang import Builder
 from kivy.uix.screenmanager import ScreenManager, NoTransition
 import os
 import sys
-from time import sleep
 
 # ================= PATH SETUP =================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -24,9 +23,6 @@ if BACKEND_DIR not in sys.path:
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from csi_ams.utils.commons import SQLALCHEMY_DATABASE_URI
-
-# ================= CAN =================
-from amscan import AMS_CAN
 
 # ================= COMPONENT IMPORTS =================
 from components.header.header import Header
@@ -64,45 +60,11 @@ from pages.admin_pages.admin_home.admin_home import AdminScreen
 # ================= MAIN APP =================
 class MainApp(App):
 
-    def _init_can(self, sm):
-        """
-        Initialize CAN and DISCOVER keylists.
-        Listener is started ONLY for discovery and stopped immediately.
-        """
-        print("[MAIN] Initializing AMS_CAN...")
-        sm.ams_can = AMS_CAN()
-
-        # 🔴 START LISTENER TEMPORARILY
-        sm.ams_can.start_listener()
-
-        # 🔑 Trigger discovery (legacy-compatible)
-        sm.ams_can.get_version_number(1)
-        sm.ams_can.get_version_number(2)
-
-        sleep(3)
-
-        # Retry once if nothing detected
-        if not sm.ams_can.key_lists:
-            print("[MAIN] Retrying CAN keylist discovery...")
-            sm.ams_can.get_version_number(1)
-            sm.ams_can.get_version_number(2)
-            sleep(2)
-
-        print(f"[MAIN] Keylists discovered: {sm.ams_can.key_lists}")
-
-        if not sm.ams_can.key_lists:
-            print("[WARNING] No keylists detected at startup")
-        else:
-            print("[MAIN] CAN READY")
-
-        # 🔴 STOP LISTENER AFTER DISCOVERY
-        sm.ams_can.stop_listener()
-
     def build(self):
         print("[MAIN] Starting AMS Application")
 
         # -------------------------------------------------
-        # 1️⃣ DATABASE SESSION (ONCE)
+        # DATABASE SESSION (ONLY GLOBAL RESOURCE)
         # -------------------------------------------------
         engine = create_engine(
             SQLALCHEMY_DATABASE_URI,
@@ -112,34 +74,25 @@ class MainApp(App):
         db_session = Session()
 
         # -------------------------------------------------
-        # 2️⃣ SCREEN MANAGER
+        # SCREEN MANAGER
         # -------------------------------------------------
         sm = ScreenManager(transition=NoTransition())
 
         # -------------------------------------------------
-        # 3️⃣ GLOBAL SHARED STATE
+        # SHARED STATE (NO CAN HERE)
         # -------------------------------------------------
         sm.db_session = db_session
-
         sm.auth_mode = None
         sm.final_auth_mode = None
         sm.ams_access_log = None
-
         sm.user_id = None
         sm.access_log_id = None
-
         sm.card_number = None
         sm.card_info = None
-
         sm.activity_info = None
 
         # -------------------------------------------------
-        # 4️⃣ INITIALIZE CAN (ONCE, SAFE)
-        # -------------------------------------------------
-        self._init_can(sm)
-
-        # -------------------------------------------------
-        # 5️⃣ REGISTER SCREENS
+        # REGISTER SCREENS
         # -------------------------------------------------
         sm.add_widget(HomeScreen(name="home"))
         sm.add_widget(AuthScreen(name="auth"))
@@ -154,18 +107,8 @@ class MainApp(App):
         return sm
 
     def on_stop(self):
-        """
-        Global cleanup (ONLY HERE)
-        """
         print("[MAIN] Shutting down application")
 
-        # ---- CAN CLEANUP ----
-        ams_can = getattr(self.root, "ams_can", None)
-        if ams_can:
-            print("[MAIN] Cleaning up AMS_CAN")
-            ams_can.cleanup()
-
-        # ---- DB CLEANUP ----
         try:
             self.root.db_session.close()
         except Exception:
