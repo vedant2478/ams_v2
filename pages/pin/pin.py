@@ -73,7 +73,7 @@ class PinScreen(BaseScreen):
 
         # ---------------- SAFETY ----------------
         if entered_pin == ADMIN_PIN:
-                self.manager.current = "admin"
+                self.manager.current = "admin_home"
         if not self.card_number:
             self.message = "ERROR: No card"
             self.reset_pin()
