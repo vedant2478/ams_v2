@@ -252,7 +252,7 @@ def verify_card_pin(
         )
         .first()
     )
-    return bool(user and user.pinCode == str(pin))
+    return bool(user and user.pinCode == str(pin)) 
 
 
 # ==================================================

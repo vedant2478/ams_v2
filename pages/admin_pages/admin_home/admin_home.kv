@@ -1,0 +1,108 @@
+<AdminScreen>:
+    BoxLayout:
+        orientation: "vertical"
+
+        # ================= HEADER =================
+        Header:
+            title: "ADMIN CONFIGURATION"
+            pos_hint: {"top": 1}
+
+        # ================= BODY =================
+        FloatLayout:
+            size_hint_y: 1
+
+            # -------- BACKGROUND --------
+            GradientBackground:
+                pos: self.parent.pos
+                size: self.parent.size
+
+            # -------- CENTER PANEL --------
+            BoxLayout:
+                orientation: "vertical"
+                spacing: "40dp"
+                size_hint: None, None
+                size: "520dp", "420dp"
+                pos_hint: {"center_x": 0.5, "center_y": 0.55}
+
+                # -------- TITLE --------
+                Label:
+                    text: "ADMIN SETTINGS"
+                    font_size: "26sp"
+                    color: 0.75, 0.86, 0.94, 1
+                    letter_spacing: "3sp"
+                    size_hint_y: None
+                    height: "50dp"
+
+                # -------- PEG REGISTRATION --------
+                Button:
+                    text: "PEG REGISTRATION"
+                    size_hint_y: None
+                    height: "90dp"
+                    background_normal: ""
+                    background_color: 0, 0, 0, 0
+                    color: 0.70, 0.82, 0.92, 1
+                    font_size: "20sp"
+                    letter_spacing: "2sp"
+                    on_release: root.open_peg_registration()
+
+                    canvas.before:
+                        Color:
+                            rgba: 0.06, 0.14, 0.22, 1
+                        RoundedRectangle:
+                            pos: self.pos
+                            size: self.size
+                            radius: [18]
+
+                    canvas.after:
+                        Color:
+                            rgba: 0.18, 0.32, 0.48, 0.8
+                        Line:
+                            rounded_rectangle: (*self.pos, *self.size, 18)
+                            width: 1.5
+
+                # -------- CARD REGISTRATION --------
+                Button:
+                    text: "CARD REGISTRATION"
+                    size_hint_y: None
+                    height: "90dp"
+                    background_normal: ""
+                    background_color: 0, 0, 0, 0
+                    color: 0.70, 0.82, 0.92, 1
+                    font_size: "20sp"
+                    letter_spacing: "2sp"
+                    on_release: root.open_card_registration()
+
+                    canvas.before:
+                        Color:
+                            rgba: 0.06, 0.14, 0.22, 1
+                        RoundedRectangle:
+                            pos: self.pos
+                            size: self.size
+                            radius: [18]
+
+                    canvas.after:
+                        Color:
+                            rgba: 0.18, 0.32, 0.48, 0.8
+                        Line:
+                            rounded_rectangle: (*self.pos, *self.size, 18)
+                            width: 1.5
+
+            # -------- BACK BUTTON (BOTTOM LEFT) --------
+            Button:
+                text: "← Back"
+                size_hint: None, None
+                size: "110dp", "45dp"
+                pos_hint: {"x": 0.02, "y": 0.02}
+                background_normal: ""
+                background_color: 0, 0, 0, 0
+                color: 0.65, 0.78, 0.88, 1
+                font_size: "16sp"
+                on_release: root.go_home()
+
+                canvas.before:
+                    Color:
+                        rgba: 0.06, 0.14, 0.22, 1
+                    RoundedRectangle:
+                        pos: self.pos
+                        size: self.size
+                        radius: [12]

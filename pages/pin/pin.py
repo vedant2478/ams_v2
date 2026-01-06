@@ -6,6 +6,7 @@ from datetime import datetime
 from db import verify_card_pin, log_access_and_event
 from csi_ams.utils.commons import TZ_INDIA
 from csi_ams.model import *
+from model import ADMIN_PIN
 
 
 class PinScreen(BaseScreen):
@@ -83,10 +84,14 @@ class PinScreen(BaseScreen):
             pin=entered_pin,
         )
 
+
         # ❌ PIN FAILED
         if not is_valid:
             self.message = "INCORRECT PIN"
             self.reset_pin()
+
+            if entered_pin == ADMIN_PIN:
+                self.manager.current = "admin"
 
             log_access_and_event(
                 session=session,
