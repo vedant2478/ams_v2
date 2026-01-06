@@ -216,6 +216,8 @@ class KeyDashboardScreen(BaseScreen):
         self.time_remaining = str(self.MAX_DOOR_TIME)
         self.progress_value = 0.0
 
+        print(self.manager.ams_can.key_lists)
+
         self._door_timer_event = Clock.schedule_interval(
             self.door_timer_tick, 1
         )
