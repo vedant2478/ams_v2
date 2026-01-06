@@ -193,9 +193,14 @@ def get_keys_for_activity(
 # ==================================================
 # SITE NAME
 # ==================================================
-def get_site_name(session: Session):
-    site = session.query(AMS_Site).first()
-    return site.siteName if site else "SITE"
+def get_site_name(session: Session) -> str:
+    row = (
+        session.query(AMS_Site.siteName)
+        .filter(AMS_Site.deletedAt == None)
+        .first()
+    )
+    return row[0] if row and row[0] else "SITE"
+
 
 
 # ==================================================
