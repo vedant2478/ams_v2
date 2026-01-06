@@ -368,6 +368,7 @@ class KeyDashboardScreen(BaseScreen):
         if ams_can:
             print("[DASHBOARD] Unlocking all keys before exit")
             for strip in ams_can.key_lists:
+                print(ams_can.key_lists)
                 ams_can.unlock_all_positions(strip)
                 ams_can.set_all_LED_OFF(strip)
 
