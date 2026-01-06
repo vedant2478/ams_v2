@@ -2,7 +2,7 @@ from datetime import datetime
 import paho.mqtt.client as mqtt
 from kivy.clock import Clock
 
-from amscan import AMS_CAN
+from amscan import AMS_CAN, CAN_LED_STATE_BLINK, CAN_LED_STATE_OFF
 from csi_ams.model import AMS_Keys, AMS_Key_Pegs
 from csi_ams.utils.commons import TZ_INDIA
 
@@ -21,7 +21,7 @@ class PegRegistrationService:
         """
         self.manager = manager
         self.session = manager.db_session
-        self.user_auth = manager.user_auth
+        # self.user_auth = manager.user_auth
 
         self._mqtt_client = None
         self._door_open = False
@@ -35,9 +35,9 @@ class PegRegistrationService:
         print("\n[PEG] Peg Registration STARTED")
 
         # -------- ADMIN CHECK --------
-        if self.user_auth["roleId"] != 1:
-            print("[PEG][ERROR] Non-admin blocked")
-            return False
+        # if self.user_auth["roleId"] != 1:
+        #     print("[PEG][ERROR] Non-admin blocked")
+        #     return False
 
         self._active = True
         self._door_open = False
