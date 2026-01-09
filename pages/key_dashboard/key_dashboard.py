@@ -11,7 +11,6 @@ from kivy.properties import (
     ObjectProperty,
     NumericProperty,
 )
-    
 from kivy.clock import Clock
 
 from components.base_screen import BaseScreen
@@ -121,7 +120,7 @@ class KeyDashboardScreen(BaseScreen):
         self.activity_code = self.activity_info["code"]
         self.activity_name = self.activity_info["name"]
 
-        # -------- UI --------
+        # -------- UI (will be reloaded after sync as well) --------
         self.reload_keys_from_db()
         self.populate_keys()
 
@@ -131,19 +130,19 @@ class KeyDashboardScreen(BaseScreen):
         self.ams_can.get_version_number(1)
         self.ams_can.get_version_number(2)
 
-        # Start deterministic CAN sequence
+        # FIRST: sync DB + UI to actual hardware state
+        self.sync_hardware_state_to_db()
+
+        # Start deterministic CAN sequence for activity keys
         Clock.schedule_once(self._can_step_led_on_all, 1.5)
 
-        # -------- DOOR INIT --------
+        # door state
         self._door_open = False
         self.door_open_seconds = 0
         self.time_remaining = str(self.MAX_DOOR_TIME)
         self.progress_value = 0.0
 
-        subprocess.Popen(
-            ["sudo", "python3", "solenoid.py", "1"],  # 1 = unlocked (your wiring)
-            cwd="/home/rock/Desktop/ams_v2",
-        )
+        # DO NOT unlock solenoid here – wait for on_door_opened
 
         # -------- MQTT --------
         self.start_gpio_subscriber()
@@ -152,6 +151,49 @@ class KeyDashboardScreen(BaseScreen):
         self._can_poll_event = Clock.schedule_interval(
             self.poll_can_events, 0.2
         )
+
+    # =====================================================
+    # SYNC HARDWARE -> DB -> UI
+    # =====================================================
+    def sync_hardware_state_to_db(self):
+        """
+        Scan all key strips using AMS_CAN.get_key_id and update AMS_Keys to match
+        actual hardware state, then reload UI.
+        """
+        if not self.ams_can:
+            return
+
+        session = self.manager.db_session
+
+        # 1) reset all keys to OUT
+        session.query(AMS_Keys).update({
+            "keyStatus": SLOT_STATUS_KEY_NOT_PRESENT,
+            "current_pos_strip_id": None,
+            "current_pos_slot_no": None,
+        })
+
+        # 2) scan all strips / positions
+        for strip_id in self.ams_can.key_lists:
+            for pos in range(1, 15):  # slots 1..14
+                key_fob_id = self.ams_can.get_key_id(strip_id, pos)
+                if not key_fob_id:
+                    continue
+
+                key_row = session.query(AMS_Keys).filter(
+                    AMS_Keys.peg_id == int(key_fob_id)
+                ).first()
+                if not key_row:
+                    continue
+
+                key_row.keyStatus = 0  # IN
+                key_row.current_pos_strip_id = strip_id
+                key_row.current_pos_slot_no = pos
+
+        session.commit()
+
+        # 3) refresh UI from DB
+        self.reload_keys_from_db()
+        self.populate_keys()
 
     # =====================================================
     # CAN SEQUENCE
@@ -180,9 +222,7 @@ class KeyDashboardScreen(BaseScreen):
             strip = int(key["strip"])
             pos = int(key["position"])
             self.ams_can.unlock_single_key(strip, pos)
-            self.ams_can.set_single_LED_state(
-                strip, pos, CAN_LED_STATE_ON
-            )
+            self.ams_can.set_single_LED_state(strip, pos, CAN_LED_STATE_ON)
 
     # =====================================================
     # MQTT GPIO
@@ -210,8 +250,9 @@ class KeyDashboardScreen(BaseScreen):
     def on_door_opened(self):
         log.info("[DOOR] Opened")
 
+        # Only now, after CAN init + sync + polling, unlock solenoid
         subprocess.Popen(
-            ["sudo", "python3", "solenoid.py", "0"],
+            ["sudo", "python3", "solenoid.py", "0"],  # adjust 0/1 to wiring
             cwd="/home/rock/Desktop/ams_v2",
         )
 
@@ -261,7 +302,6 @@ class KeyDashboardScreen(BaseScreen):
         )
 
         self._shutdown_can_and_mqtt()
-        # clear events when leaving
         self.key_interactions = []
         self.manager.current = "activity_done"
 
@@ -309,7 +349,7 @@ class KeyDashboardScreen(BaseScreen):
         if not self.ams_can:
             return
 
-        # ---------- KEY TAKEN (removed) ----------
+        # KEY TAKEN (removed)
         if self.ams_can.key_taken_event:
             peg_id = self.ams_can.key_taken_id
             self.handle_key_taken_commit(peg_id)
@@ -317,7 +357,6 @@ class KeyDashboardScreen(BaseScreen):
             key_name = self._get_key_name_by_peg(peg_id)
             taken_time = datetime.now(TZ_INDIA)
 
-            # append a new event when key is removed
             self.key_interactions.append({
                 "key_name": key_name,
                 "peg_id": peg_id,
@@ -330,13 +369,12 @@ class KeyDashboardScreen(BaseScreen):
             self.reload_keys_from_db()
             self.update_key_widgets()
 
-        # ---------- KEY RETURNED (inserted) ----------
+        # KEY RETURNED (inserted)
         if self.ams_can.key_inserted_event:
             peg_id = self.ams_can.key_inserted_id
             key_name = self._get_key_name_by_peg(peg_id)
             returned_time = datetime.now(TZ_INDIA)
 
-            # first try to update an existing event for same key_name
             updated = False
             for ev in reversed(self.key_interactions):
                 if ev["key_name"] == key_name and ev["returned_timestamp"] is None:
@@ -344,7 +382,6 @@ class KeyDashboardScreen(BaseScreen):
                     updated = True
                     break
 
-            # if no event found, append a new one with only returned
             if not updated:
                 self.key_interactions.append({
                     "key_name": key_name,
@@ -453,7 +490,6 @@ class KeyDashboardScreen(BaseScreen):
         )
 
         self._shutdown_can_and_mqtt()
-        # clear events when going to done via tap
         self.key_interactions = []
         self.manager.current = "activity_done"
 
@@ -468,6 +504,5 @@ class KeyDashboardScreen(BaseScreen):
             cwd="/home/rock/Desktop/ams_v2",
         )
 
-        # clear events when leaving to activity screen
         self.key_interactions = []
         self.manager.current = "activity"
