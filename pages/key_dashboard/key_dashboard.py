@@ -142,11 +142,7 @@ class KeyDashboardScreen(BaseScreen):
         self.time_remaining = str(self.MAX_DOOR_TIME)
         self.progress_value = 0.0
 
-        subprocess.Popen(
-            ["sudo", "python3", "solenoid.py", "1"],  # adjust 0/1 to wiring
-            cwd="/home/rock/Desktop/ams_v2",
-        )
-
+        # DO NOT unlock solenoid here – wait for on_door_opened
 
         # -------- MQTT --------
         self.start_gpio_subscriber()
@@ -162,7 +158,7 @@ class KeyDashboardScreen(BaseScreen):
     def sync_hardware_state_to_db(self):
         """
         Scan all key strips using AMS_CAN.get_key_id and update AMS_Keys to match
-        actual hardware state, then reload UI.
+        actual hardware state (present/empty per slot), then reload UI.
         """
         if not self.ams_can:
             log.warning("[SYNC] AMS_CAN not initialised, skipping hardware sync")
@@ -191,13 +187,40 @@ class KeyDashboardScreen(BaseScreen):
                 key_fob_id = self.ams_can.get_key_id(strip_id, pos)
                 log.debug(f"[SYNC] strip={strip_id} pos={pos} get_key_id={key_fob_id}")
 
-                if not key_fob_id:
+                if key_fob_id is False or key_fob_id is None:
+                    # CAN call failed; leave as reset state (OUT)
                     continue
 
+                key_fob_str = str(key_fob_id)
+
+                # -------- CASE 1: NO KEY PRESENT (all zeros) --------
+                if key_fob_str.strip("0") == "":
+                    key_row = session.query(AMS_Keys).filter(
+                        AMS_Keys.current_pos_strip_id == strip_id,
+                        AMS_Keys.current_pos_slot_no == pos,
+                    ).first()
+
+                    if key_row:
+                        key_row.keyStatus = SLOT_STATUS_KEY_NOT_PRESENT
+                        key_row.current_pos_strip_id = None
+                        key_row.current_pos_slot_no = None
+                        log.info(
+                            f"[SYNC] Slot empty, marked OUT: peg_id={key_row.peg_id} "
+                            f"name={getattr(key_row, 'keyName', None)} strip={strip_id} pos={pos}"
+                        )
+                    else:
+                        log.info(
+                            f"[SYNC] Slot empty, no peg mapped in DB (strip={strip_id}, pos={pos})"
+                        )
+                    continue
+
+                # -------- CASE 2: REAL KEY PRESENT --------
                 try:
-                    peg_int = int(key_fob_id)
+                    peg_int = int(key_fob_str)
                 except ValueError:
-                    log.warning(f"[SYNC] Non‑numeric key_fob_id '{key_fob_id}' at strip={strip_id} pos={pos}")
+                    log.warning(
+                        f"[SYNC] Non-numeric key_fob_id '{key_fob_str}' at strip={strip_id} pos={pos}"
+                    )
                     continue
 
                 key_row = session.query(AMS_Keys).filter(
@@ -205,7 +228,10 @@ class KeyDashboardScreen(BaseScreen):
                 ).first()
 
                 if not key_row:
-                    log.warning(f"[SYNC] No AMS_Keys row for peg_id={peg_int} (strip={strip_id}, pos={pos})")
+                    log.warning(
+                        f"[SYNC] Peg not found in DB for peg_id={peg_int} "
+                        f"(strip={strip_id}, pos={pos})"
+                    )
                     continue
 
                 key_row.keyStatus = 0  # IN
@@ -213,8 +239,8 @@ class KeyDashboardScreen(BaseScreen):
                 key_row.current_pos_slot_no = pos
                 present_count += 1
                 log.info(
-                    f"[SYNC] Marked IN: peg_id={peg_int}, name={getattr(key_row, 'keyName', None)} "
-                    f"strip={strip_id} pos={pos}"
+                    f"[SYNC] Marked IN: peg_id={peg_int}, "
+                    f"name={getattr(key_row, 'keyName', None)} strip={strip_id} pos={pos}"
                 )
 
         session.commit()
@@ -225,8 +251,9 @@ class KeyDashboardScreen(BaseScreen):
         log.info(f"[SYNC] Reloaded keys_data from DB: {len(self.keys_data)} records")
         for k in self.keys_data:
             log.debug(
-                f"[SYNC] DB key id={k.get('id')} name={k.get('name')} peg_id={k.get('peg_id')} "
-                f"status={k.get('status')} strip={k.get('strip')} pos={k.get('position')}"
+                f"[SYNC] DB key id={k.get('id')} name={k.get('name')} "
+                f"peg_id={k.get('peg_id')} status={k.get('status')} "
+                f"strip={k.get('strip')} pos={k.get('position')}"
             )
 
         self.populate_keys()
