@@ -142,7 +142,7 @@ class KeyDashboardScreen(BaseScreen):
             self.solenoid_pin2 = mraa.Gpio(41)   # use same pin as solenoid.py
             self.solenoid_pin2.dir(mraa.DIR_OUT)
             self.solenoid_pin1.write(1)          # locked by default
-            # self.solenoid_pin2.write(0)          # locked by default
+            self.solenoid_pin2.write(1)          # locked by default
             log.info("[GPIO] Solenoid initialized on pins 40 and 41")
         except Exception as e:
             log.error(f"[GPIO] Failed to init solenoid pin: {e}")
