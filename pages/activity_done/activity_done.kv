@@ -1,8 +1,7 @@
-#:kivy 2.2.0
+#:kivy 2.3.0
 #:import dp kivy.metrics.dp
 
-
-<ActivityCard@BoxLayout>:
+<ActivityCard>:
     key_name: ""
     taken_text: ""
     returned_text: ""
@@ -51,7 +50,6 @@
         text_size: self.size
 
 
-
 <ActivityDoneScreen>:
     name: "activity_done"
 
@@ -72,7 +70,7 @@
             padding: "30dp"
             spacing: "18dp"
 
-            # Big green check
+            # Big check
             Widget:
                 size_hint_y: None
                 height: "170dp"
@@ -86,7 +84,6 @@
                         points: self.center_x - 35, self.center_y, self.center_x - 5, self.center_y - 35, self.center_x + 45, self.center_y + 35
                         width: 6
 
-            # Title
             Label:
                 text: "ACTIVITY\nCOMPLETED"
                 font_size: "30sp"
@@ -98,7 +95,7 @@
                 size_hint_y: None
                 height: "80dp"
 
-            # ===== CARDS PANEL =====
+            # Cards panel
             BoxLayout:
                 orientation: "vertical"
                 size_hint_y: None
@@ -113,9 +110,9 @@
                         size: self.size
                         radius: [22, 22, 22, 22]
 
-                # Scrollable list of key cards
                 ScrollView:
-                    size_hint_y: 1
+                    size_hint_y: None
+                    height: "260dp"
                     do_scroll_x: False
 
                     BoxLayout:
@@ -125,7 +122,6 @@
                         padding: "8dp"
                         spacing: "10dp"
                         height: self.minimum_height
-
 
             Widget:
                 size_hint_y: None

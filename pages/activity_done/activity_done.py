@@ -1,7 +1,17 @@
+from datetime import datetime
+
+from kivy.uix.boxlayout import BoxLayout
 from kivy.properties import StringProperty, NumericProperty, ListProperty
 from kivy.clock import Clock
-from kivy.lang import Builder
+
 from components.base_screen import BaseScreen
+from csi_ams.utils.commons import TZ_INDIA
+
+
+class ActivityCard(BoxLayout):
+    key_name = StringProperty("")
+    taken_text = StringProperty("")
+    returned_text = StringProperty("")
 
 
 class ActivityDoneScreen(BaseScreen):
@@ -10,11 +20,11 @@ class ActivityDoneScreen(BaseScreen):
     timestamp_text = StringProperty("")
     countdown = NumericProperty(5)
 
-    # list of dicts for demo
-    cards = ListProperty()
+    # list of dicts: [{"key_name":..., "taken_text":..., "returned_text":...}, ...]
+    cards = ListProperty([])
 
     def on_pre_enter(self, *args):
-        # demo data
+        # demo data – later you can overwrite from dashboard
         self.cards = [
             {
                 "key_name": "Master Key 1",
@@ -32,6 +42,9 @@ class ActivityDoneScreen(BaseScreen):
                 "returned_text": "2025-07-25 14:59:09",
             },
         ]
+        self.timestamp_text = datetime.now(TZ_INDIA).strftime(
+            "%Y-%m-%d %H:%M:%S %Z"
+        )
         self.populate_cards()
 
     def on_enter(self, *args):
@@ -58,8 +71,7 @@ class ActivityDoneScreen(BaseScreen):
         container = self.ids.cards_container
         container.clear_widgets()
         for data in self.cards:
-            card = Builder.template(
-                "ActivityCard",
+            card = ActivityCard(
                 key_name=data["key_name"],
                 taken_text=data["taken_text"],
                 returned_text=data["returned_text"],
