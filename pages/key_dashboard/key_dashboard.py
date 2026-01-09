@@ -140,7 +140,7 @@ class KeyDashboardScreen(BaseScreen):
         self.progress_value = 0.0
 
         subprocess.Popen(
-            ["sudo", "python3", "solenoid.py", "0"],  # 0 = locked
+            ["sudo", "python3", "solenoid.py", "1"],  # 1 = unlocked
             cwd="/home/rock/Desktop/ams_v2",
         )
 
@@ -210,7 +210,7 @@ class KeyDashboardScreen(BaseScreen):
         log.info("[DOOR] Opened")
         # unlock solenoid
         subprocess.Popen(
-            ["sudo", "python3", "solenoid.py", "1"],  # 1 = unlock
+            ["sudo", "python3", "solenoid.py", "0"], 
             cwd="/home/rock/Desktop/ams_v2",
         )
 
