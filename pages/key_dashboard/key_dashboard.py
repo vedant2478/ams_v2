@@ -142,7 +142,11 @@ class KeyDashboardScreen(BaseScreen):
         self.time_remaining = str(self.MAX_DOOR_TIME)
         self.progress_value = 0.0
 
-        # DO NOT unlock solenoid here – wait for on_door_opened
+        subprocess.Popen(
+            ["sudo", "python3", "solenoid.py", "1"],  # adjust 0/1 to wiring
+            cwd="/home/rock/Desktop/ams_v2",
+        )
+
 
         # -------- MQTT --------
         self.start_gpio_subscriber()
