@@ -75,7 +75,7 @@ class KeyDashboardScreen(BaseScreen):
     progress_value = NumericProperty(0.0)
     keys_data = ListProperty([])
     key_interactions = ListProperty([])
-
+    
     MAX_DOOR_TIME = 30
 
     def __init__(self, **kwargs):
@@ -132,9 +132,10 @@ class KeyDashboardScreen(BaseScreen):
 
         # Start deterministic CAN sequence
         Clock.schedule_once(self._can_step_led_on_all, 1.5)
-
+        self.solenoid_pin = None
         # -------- DOOR UNLOCK --------
         try:
+            
             self.solenoid_pin = mraa.Gpio(40)   # use same pin as solenoid.py
             self.solenoid_pin.dir(mraa.DIR_OUT)
             self.solenoid_pin.write(0)          # locked by default
