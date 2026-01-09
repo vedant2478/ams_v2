@@ -134,10 +134,13 @@ class KeyDashboardScreen(BaseScreen):
         Clock.schedule_once(self._can_step_led_on_all, 1.5)
 
         # -------- DOOR UNLOCK --------
-        subprocess.Popen(
-            ["sudo", "python3", "solenoid.py", "1"],
-            cwd="/home/rock/Desktop/ams_v2",
-        )
+        try:
+            self.solenoid_pin = mraa.Gpio(40)   # use same pin as solenoid.py
+            self.solenoid_pin.dir(mraa.DIR_OUT)
+            self.solenoid_pin.write(0)          # locked by default
+            log.info("[GPIO] Solenoid initialized on pin 32")
+        except Exception as e:
+            log.error(f"[GPIO] Failed to init solenoid pin: {e}")
 
         # -------- MQTT --------
         self.start_gpio_subscriber()
