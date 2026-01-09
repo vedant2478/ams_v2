@@ -120,7 +120,7 @@ class KeyDashboardScreen(BaseScreen):
         self.activity_code = self.activity_info["code"]
         self.activity_name = self.activity_info["name"]
 
-        # -------- UI (will be reloaded after sync as well) --------
+        # Load current static mapping (strip/position for each activity key)
         self.reload_keys_from_db()
         self.populate_keys()
 
@@ -142,8 +142,6 @@ class KeyDashboardScreen(BaseScreen):
         self.time_remaining = str(self.MAX_DOOR_TIME)
         self.progress_value = 0.0
 
-        # DO NOT unlock solenoid here – wait for on_door_opened
-
         # -------- MQTT --------
         self.start_gpio_subscriber()
 
@@ -159,6 +157,9 @@ class KeyDashboardScreen(BaseScreen):
         """
         Scan all key strips using AMS_CAN.get_key_id and update AMS_Keys to match
         actual hardware state (present/empty per slot), then reload UI.
+
+        IMPORTANT: does NOT reset current_pos_* before scan so that
+        activity mapping (strip/position) remains available.
         """
         if not self.ams_can:
             log.warning("[SYNC] AMS_CAN not initialised, skipping hardware sync")
@@ -167,43 +168,42 @@ class KeyDashboardScreen(BaseScreen):
         log.info("[SYNC] Starting hardware → DB sync")
         session = self.manager.db_session
 
-        # 1) reset all keys to OUT
+        # Reset only keyStatus; keep mapping so we know which key belongs to which slot.
         updated = session.query(AMS_Keys).update({
             "keyStatus": SLOT_STATUS_KEY_NOT_PRESENT,
-            "current_pos_strip_id": None,
-            "current_pos_slot_no": None,
         })
-        log.info(f"[SYNC] Reset {updated} keys in DB to OUT")
+        log.info(f"[SYNC] Reset {updated} keys in DB to OUT (status only)")
 
-        # 2) scan all strips / positions
         if not self.ams_can.key_lists:
             log.warning("[SYNC] ams_can.key_lists is empty; no strips detected")
         else:
             log.info(f"[SYNC] Scanning strips: {self.ams_can.key_lists}")
 
         present_count = 0
+
+        # Helper: map (strip,pos) → AMS_Keys row using static location mapping
+        def get_key_for_slot(strip_id, pos):
+            return session.query(AMS_Keys).filter(
+                AMS_Keys.current_pos_strip_id == strip_id,
+                AMS_Keys.current_pos_slot_no == pos,
+            ).first()
+
         for strip_id in self.ams_can.key_lists:
             for pos in range(1, 15):  # slots 1..14
                 key_fob_id = self.ams_can.get_key_id(strip_id, pos)
                 log.debug(f"[SYNC] strip={strip_id} pos={pos} get_key_id={key_fob_id}")
 
                 if key_fob_id is False or key_fob_id is None:
-                    # CAN call failed; leave as reset state (OUT)
                     continue
 
                 key_fob_str = str(key_fob_id)
 
                 # -------- CASE 1: NO KEY PRESENT (all zeros) --------
                 if key_fob_str.strip("0") == "":
-                    key_row = session.query(AMS_Keys).filter(
-                        AMS_Keys.current_pos_strip_id == strip_id,
-                        AMS_Keys.current_pos_slot_no == pos,
-                    ).first()
-
+                    key_row = get_key_for_slot(strip_id, pos)
                     if key_row:
                         key_row.keyStatus = SLOT_STATUS_KEY_NOT_PRESENT
-                        key_row.current_pos_strip_id = None
-                        key_row.current_pos_slot_no = None
+                        # Leave mapping intact; cabinet layout is static
                         log.info(
                             f"[SYNC] Slot empty, marked OUT: peg_id={key_row.peg_id} "
                             f"name={getattr(key_row, 'keyName', None)} strip={strip_id} pos={pos}"
@@ -287,6 +287,11 @@ class KeyDashboardScreen(BaseScreen):
             pos = int(key["position"])
             self.ams_can.unlock_single_key(strip, pos)
             self.ams_can.set_single_LED_state(strip, pos, CAN_LED_STATE_ON)
+        subprocess.Popen(
+            ["sudo", "python3", "solenoid.py", "0"],
+            cwd="/home/rock/Desktop/ams_v2",
+        )
+
 
     # =====================================================
     # MQTT GPIO
@@ -314,9 +319,8 @@ class KeyDashboardScreen(BaseScreen):
     def on_door_opened(self):
         log.info("[DOOR] Opened")
 
-        # Only now, after CAN init + sync + polling, unlock solenoid
         subprocess.Popen(
-            ["sudo", "python3", "solenoid.py", "0"],  # adjust 0/1 to wiring
+            ["sudo", "python3", "solenoid.py", "0"],
             cwd="/home/rock/Desktop/ams_v2",
         )
 
@@ -349,7 +353,6 @@ class KeyDashboardScreen(BaseScreen):
             self._door_timer_event.cancel()
             self._door_timer_event = None
 
-        # build cards list from key_interactions
         cards = []
         for inter in self.key_interactions:
             taken_ts = inter.get("taken_timestamp")
@@ -536,7 +539,6 @@ class KeyDashboardScreen(BaseScreen):
                     "IN" if key["status"] == 0 else "OUT"
                 )
 
-    # manual open if needed
     def open_done_page(self, key_name: str, status: str, key_id: str):
         cards = []
         for inter in self.key_interactions:
