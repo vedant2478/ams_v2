@@ -16,7 +16,7 @@ from kivy.clock import Clock
 
 from components.base_screen import BaseScreen
 from db import get_keys_for_activity, set_key_status_by_peg_id
-from amscan import AMS_CAN, CAN_LED_STATE_ON, CAN_LED_STATE_OFF
+from amscan import AMS_CAN, CAN_LED_STATE_ON
 
 from csi_ams.model import (
     AMS_Keys,
@@ -58,7 +58,6 @@ class KeyItem(ButtonBehavior, BoxLayout):
 
     def on_release(self):
         if self.dashboard:
-            log.info(f"[UI] Key clicked: {self.key_name}")
             self.dashboard.open_done_page(
                 self.key_name,
                 self.status_text,
@@ -82,7 +81,6 @@ class KeyDashboardScreen(BaseScreen):
         super().__init__(**kwargs)
 
         self.key_widgets = {}
-
         self._door_open = False
         self.door_open_seconds = 0
 
@@ -100,7 +98,7 @@ class KeyDashboardScreen(BaseScreen):
 
         session = self.manager.db_session
 
-        # ---------- ACCESS LOG ----------
+        # -------- ACCESS LOG --------
         access_log = AMS_Access_Log(
             signInTime=datetime.now(TZ_INDIA),
             signInMode=self.manager.auth_mode,
@@ -114,19 +112,17 @@ class KeyDashboardScreen(BaseScreen):
         session.add(access_log)
         session.commit()
         self.manager.ams_access_log = access_log
-        log.info("[DB] Access log created")
 
-        # ---------- ACTIVITY ----------
+        # -------- ACTIVITY --------
         self.activity_info = self.manager.activity_info
         self.activity_code = self.activity_info["code"]
         self.activity_name = self.activity_info["name"]
-        log.info(f"[ACTIVITY] {self.activity_name} ({self.activity_code})")
 
-        # ---------- UI ----------
+        # -------- UI --------
         self.reload_keys_from_db()
         self.populate_keys()
 
-        # ---------- CAN INIT ----------
+        # -------- CAN INIT --------
         log.info("[CAN] Initializing AMS_CAN")
         self.ams_can = AMS_CAN()
 
@@ -136,28 +132,27 @@ class KeyDashboardScreen(BaseScreen):
         # Start deterministic CAN sequence
         Clock.schedule_once(self._can_step_led_on_all, 1.5)
 
-        # ---------- DOOR UNLOCK ----------
+        # -------- DOOR UNLOCK --------
         subprocess.Popen(
             ["sudo", "python3", "solenoid.py", "1"],
             cwd="/home/rock/Desktop/ams_v2",
         )
-        log.info("[DOOR] Door unlocked")
 
-        # ---------- MQTT ----------
+        # -------- MQTT --------
         self.start_gpio_subscriber()
 
-        # ---------- CAN POLLING ----------
+        # -------- CAN POLLING --------
         self._can_poll_event = Clock.schedule_interval(
             self.poll_can_events, 0.2
         )
 
     # =====================================================
-    # CAN SEQUENCE (STRICT ORDER)
+    # CAN SEQUENCE (CORRECT API USAGE)
     # =====================================================
     def _can_step_led_on_all(self, dt):
         log.info("[CAN-1] LED ON (ALL)")
         for strip in self.ams_can.key_lists:
-            self.ams_can.set_all_LED_ON(strip)
+            self.ams_can.set_all_LED_ON(strip, False)  # ✅ FIX
         Clock.schedule_once(self._can_step_lock_all, 1.0)
 
     def _can_step_lock_all(self, dt):
@@ -177,8 +172,6 @@ class KeyDashboardScreen(BaseScreen):
         for key in self.keys_data:
             strip = int(key["strip"])
             pos = int(key["position"])
-
-            log.debug(f"[CAN] Unlock strip={strip} pos={pos}")
             self.ams_can.unlock_single_key(strip, pos)
             self.ams_can.set_single_LED_state(
                 strip, pos, CAN_LED_STATE_ON
@@ -188,8 +181,6 @@ class KeyDashboardScreen(BaseScreen):
     # MQTT GPIO
     # =====================================================
     def start_gpio_subscriber(self):
-        log.info("[MQTT] Starting GPIO subscriber")
-
         self._mqtt_client = mqtt.Client("kivy-door-subscriber")
         self._mqtt_client.on_connect = self.on_mqtt_connect
         self._mqtt_client.on_message = self.on_mqtt_message
@@ -197,13 +188,10 @@ class KeyDashboardScreen(BaseScreen):
         self._mqtt_client.loop_start()
 
     def on_mqtt_connect(self, client, userdata, flags, rc):
-        log.info(f"[MQTT] Connected rc={rc}")
         client.subscribe("gpio/pin32")
 
     def on_mqtt_message(self, client, userdata, msg):
         value = int(msg.payload.decode())
-        log.debug(f"[MQTT] pin32={value}")
-
         if value == 1 and not self._door_open:
             Clock.schedule_once(lambda dt: self.on_door_opened())
         elif value == 0 and self._door_open:
@@ -213,7 +201,6 @@ class KeyDashboardScreen(BaseScreen):
     # DOOR EVENTS
     # =====================================================
     def on_door_opened(self):
-        log.info("[DOOR] Door opened")
         self._door_open = True
         self.door_open_seconds = 0
         self.time_remaining = str(self.MAX_DOOR_TIME)
@@ -233,11 +220,9 @@ class KeyDashboardScreen(BaseScreen):
         )
 
         if self.door_open_seconds >= self.MAX_DOOR_TIME:
-            log.warning("[DOOR] Timeout reached")
             self.go_back()
 
     def on_door_closed(self):
-        log.info("[DOOR] Door closed")
         self._door_open = False
         if self._door_timer_event:
             self._door_timer_event.cancel()
@@ -252,25 +237,19 @@ class KeyDashboardScreen(BaseScreen):
 
         if self.ams_can.key_taken_event:
             peg_id = self.ams_can.key_taken_id
-            log.info(f"[CAN] Key taken peg_id={peg_id}")
-
             self.handle_key_taken_commit(peg_id)
             set_key_status_by_peg_id(
                 self.manager.db_session, peg_id, 1
             )
-
             self.ams_can.key_taken_event = False
             self.reload_keys_from_db()
             self.update_key_widgets()
 
         if self.ams_can.key_inserted_event:
             peg_id = self.ams_can.key_inserted_id
-            log.info(f"[CAN] Key inserted peg_id={peg_id}")
-
             set_key_status_by_peg_id(
                 self.manager.db_session, peg_id, 0
             )
-
             self.ams_can.key_inserted_event = False
             self.reload_keys_from_db()
             self.update_key_widgets()
@@ -285,9 +264,7 @@ class KeyDashboardScreen(BaseScreen):
         key_record = session.query(AMS_Keys).filter(
             AMS_Keys.peg_id == peg_id
         ).first()
-
         if not key_record:
-            log.error("[DB] Key record not found")
             return
 
         session.query(AMS_Keys).filter(
@@ -320,7 +297,6 @@ class KeyDashboardScreen(BaseScreen):
             )
         )
         session.commit()
-        log.info("[DB] Key taken committed")
 
     # =====================================================
     # UI HELPERS
@@ -359,8 +335,6 @@ class KeyDashboardScreen(BaseScreen):
     # EXIT CLEANUP
     # =====================================================
     def go_back(self):
-        log.warning("[EXIT] Cleaning up")
-
         if self._can_poll_event:
             self._can_poll_event.cancel()
 
@@ -382,6 +356,5 @@ class KeyDashboardScreen(BaseScreen):
             ["sudo", "python3", "solenoid.py", "0"],
             cwd="/home/rock/Desktop/ams_v2",
         )
-        log.info("[DOOR] Door locked")
 
         self.manager.current = "activity"
