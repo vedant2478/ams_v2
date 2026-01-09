@@ -165,39 +165,72 @@ class KeyDashboardScreen(BaseScreen):
         actual hardware state, then reload UI.
         """
         if not self.ams_can:
+            log.warning("[SYNC] AMS_CAN not initialised, skipping hardware sync")
             return
 
+        log.info("[SYNC] Starting hardware → DB sync")
         session = self.manager.db_session
 
         # 1) reset all keys to OUT
-        session.query(AMS_Keys).update({
+        updated = session.query(AMS_Keys).update({
             "keyStatus": SLOT_STATUS_KEY_NOT_PRESENT,
             "current_pos_strip_id": None,
             "current_pos_slot_no": None,
         })
+        log.info(f"[SYNC] Reset {updated} keys in DB to OUT")
 
         # 2) scan all strips / positions
+        if not self.ams_can.key_lists:
+            log.warning("[SYNC] ams_can.key_lists is empty; no strips detected")
+        else:
+            log.info(f"[SYNC] Scanning strips: {self.ams_can.key_lists}")
+
+        present_count = 0
         for strip_id in self.ams_can.key_lists:
             for pos in range(1, 15):  # slots 1..14
                 key_fob_id = self.ams_can.get_key_id(strip_id, pos)
+                log.debug(f"[SYNC] strip={strip_id} pos={pos} get_key_id={key_fob_id}")
+
                 if not key_fob_id:
                     continue
 
+                try:
+                    peg_int = int(key_fob_id)
+                except ValueError:
+                    log.warning(f"[SYNC] Non‑numeric key_fob_id '{key_fob_id}' at strip={strip_id} pos={pos}")
+                    continue
+
                 key_row = session.query(AMS_Keys).filter(
-                    AMS_Keys.peg_id == int(key_fob_id)
+                    AMS_Keys.peg_id == peg_int
                 ).first()
+
                 if not key_row:
+                    log.warning(f"[SYNC] No AMS_Keys row for peg_id={peg_int} (strip={strip_id}, pos={pos})")
                     continue
 
                 key_row.keyStatus = 0  # IN
                 key_row.current_pos_strip_id = strip_id
                 key_row.current_pos_slot_no = pos
+                present_count += 1
+                log.info(
+                    f"[SYNC] Marked IN: peg_id={peg_int}, name={getattr(key_row, 'keyName', None)} "
+                    f"strip={strip_id} pos={pos}"
+                )
 
         session.commit()
+        log.info(f"[SYNC] Hardware sync complete. Marked {present_count} keys as IN")
 
         # 3) refresh UI from DB
         self.reload_keys_from_db()
+        log.info(f"[SYNC] Reloaded keys_data from DB: {len(self.keys_data)} records")
+        for k in self.keys_data:
+            log.debug(
+                f"[SYNC] DB key id={k.get('id')} name={k.get('name')} peg_id={k.get('peg_id')} "
+                f"status={k.get('status')} strip={k.get('strip')} pos={k.get('position')}"
+            )
+
         self.populate_keys()
+        log.info("[SYNC] UI widgets repopulated from synced DB")
 
     # =====================================================
     # CAN SEQUENCE
