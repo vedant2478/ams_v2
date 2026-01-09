@@ -41,6 +41,7 @@ logging.basicConfig(
 )
 log = logging.getLogger("KEY_DASHBOARD")
 
+
 # =========================================================
 # KEY ITEM
 # =========================================================
@@ -57,13 +58,15 @@ class KeyItem(ButtonBehavior, BoxLayout):
         log.debug(f"[UI] Key {self.key_name} status → {status}")
 
     def on_release(self):
-        # Called when the card is tapped
+        # still available if you want manual navigation
         if self.dashboard:
-            self.dashboard.open_done_page(
+            self.dashboard.open_done_page_from_manual(
                 self.key_name,
                 self.status_text,
                 self.key_id,
             )
+
+
 # =========================================================
 # DASHBOARD SCREEN
 # =========================================================
@@ -75,7 +78,7 @@ class KeyDashboardScreen(BaseScreen):
     progress_value = NumericProperty(0.0)
     keys_data = ListProperty([])
     key_interactions = ListProperty([])
-    
+
     MAX_DOOR_TIME = 30
 
     def __init__(self, **kwargs):
@@ -90,6 +93,18 @@ class KeyDashboardScreen(BaseScreen):
         self._mqtt_client = None
 
         self.ams_can = None
+
+        # (optional) solenoid via MRAA instead of subprocess later
+        self.solenoid_pin = None
+        try:
+            # set to the correct GPIO index for your hardware
+            self.solenoid_pin = mraa.Gpio(32)
+            self.solenoid_pin.dir(mraa.DIR_OUT)
+            self.solenoid_pin.write(0)   # locked by default
+            log.info("[GPIO] Solenoid initialised on pin 32")
+        except Exception as e:
+            log.error(f"[GPIO] Failed to init solenoid pin: {e}")
+            self.solenoid_pin = None
 
     # =====================================================
     # SCREEN ENTER
@@ -126,26 +141,26 @@ class KeyDashboardScreen(BaseScreen):
         # -------- CAN INIT --------
         log.info("[CAN] Initializing AMS_CAN")
         self.ams_can = AMS_CAN()
-
         self.ams_can.get_version_number(1)
         self.ams_can.get_version_number(2)
 
         # Start deterministic CAN sequence
         Clock.schedule_once(self._can_step_led_on_all, 1.5)
-        self.solenoid_pin1 = None
-        self.solenoid_pin2 = None
-        # -------- DOOR UNLOCK --------
-        try:
 
-            self.solenoid_pin1 = mraa.Gpio(40)   # use same pin as solenoid.py
-            self.solenoid_pin1.dir(mraa.DIR_OUT)
-            self.solenoid_pin2 = mraa.Gpio(41)   # use same pin as solenoid.py
-            self.solenoid_pin2.dir(mraa.DIR_OUT)
-            self.solenoid_pin1.write(1)          # locked by default
-            self.solenoid_pin2.write(1)          # locked by default
-            log.info("[GPIO] Solenoid initialized on pins 40 and 41")
-        except Exception as e:
-            log.error(f"[GPIO] Failed to init solenoid pin: {e}")
+        # -------- DOOR INIT: keep closed/locked --------
+        self._door_open = False
+        self.door_open_seconds = 0
+        self.time_remaining = str(self.MAX_DOOR_TIME)
+        self.progress_value = 0.0
+
+        # lock via solenoid script or GPIO
+        if self.solenoid_pin is not None:
+            self.solenoid_pin.write(0)
+        else:
+            subprocess.Popen(
+                ["sudo", "python3", "solenoid.py", "0"],
+                cwd="/home/rock/Desktop/ams_v2",
+            )
 
         # -------- MQTT --------
         self.start_gpio_subscriber()
@@ -156,12 +171,12 @@ class KeyDashboardScreen(BaseScreen):
         )
 
     # =====================================================
-    # CAN SEQUENCE (CORRECT API USAGE)
+    # CAN SEQUENCE
     # =====================================================
     def _can_step_led_on_all(self, dt):
         log.info("[CAN-1] LED ON (ALL)")
         for strip in self.ams_can.key_lists:
-            self.ams_can.set_all_LED_ON(strip, False)  # ✅ FIX
+            self.ams_can.set_all_LED_ON(strip, False)
         Clock.schedule_once(self._can_step_lock_all, 1.0)
 
     def _can_step_lock_all(self, dt):
@@ -210,6 +225,16 @@ class KeyDashboardScreen(BaseScreen):
     # DOOR EVENTS
     # =====================================================
     def on_door_opened(self):
+        log.info("[DOOR] Opened")
+        # unlock solenoid
+        if self.solenoid_pin is not None:
+            self.solenoid_pin.write(1)
+        else:
+            subprocess.Popen(
+                ["sudo", "python3", "solenoid.py", "1"],
+                cwd="/home/rock/Desktop/ams_v2",
+            )
+
         self._door_open = True
         self.door_open_seconds = 0
         self.time_remaining = str(self.MAX_DOOR_TIME)
@@ -229,20 +254,56 @@ class KeyDashboardScreen(BaseScreen):
         )
 
         if self.door_open_seconds >= self.MAX_DOOR_TIME:
-            self.go_back()
+            # force close flow
+            self.on_door_closed()
 
     def on_door_closed(self):
+        log.info("[DOOR] Closed")
         self._door_open = False
+
         if self._door_timer_event:
             self._door_timer_event.cancel()
             self._door_timer_event = None
 
+        # lock solenoid again
+        if self.solenoid_pin is not None:
+            self.solenoid_pin.write(0)
+        else:
+            subprocess.Popen(
+                ["sudo", "python3", "solenoid.py", "0"],
+                cwd="/home/rock/Desktop/ams_v2",
+            )
 
+        # -------- build cards list on ScreenManager --------
+        cards = []
+        for inter in self.key_interactions:
+            cards.append({
+                "key_name": inter["key_name"],
+                "taken_text": inter["timestamp"].strftime("%Y-%m-%d %H:%M:%S")
+                              if inter["action"] == "TAKEN" else "",
+                "returned_text": inter["timestamp"].strftime("%Y-%m-%d %H:%M:%S")
+                                if inter["action"] == "RETURNED" else "",
+            })
+
+        self.manager.cards = cards
+        self.manager.timestamp_text = datetime.now(TZ_INDIA).strftime(
+            "%Y-%m-%d %H:%M:%S %Z"
+        )
+
+        # go to done page
+        self.manager.current = "activity_done"
+
+    # =====================================================
+    # NAME LOOKUP
+    # =====================================================
     def _get_key_name_by_peg(self, peg_id):
-        print(self.keys_data)
+        log.debug(f"keys_data for lookup: {self.keys_data}")
         for k in self.keys_data:
             if str(k.get("peg_id")) == str(peg_id):
-                return k.get("description", f"Key {peg_id}")
+                desc = k.get("description") or k.get("name")
+                if desc:
+                    return desc
+                break
         return f"Key {peg_id}"
 
     # =====================================================
@@ -256,7 +317,6 @@ class KeyDashboardScreen(BaseScreen):
             peg_id = self.ams_can.key_taken_id
             self.handle_key_taken_commit(peg_id)
 
-            # --- NEW: record interaction ---
             self.key_interactions.append({
                 "key_name": self._get_key_name_by_peg(peg_id),
                 "peg_id": peg_id,
@@ -271,12 +331,9 @@ class KeyDashboardScreen(BaseScreen):
             self.reload_keys_from_db()
             self.update_key_widgets()
 
-            
-
         if self.ams_can.key_inserted_event:
             peg_id = self.ams_can.key_inserted_id
 
-            # --- NEW: record interaction ---
             self.key_interactions.append({
                 "key_name": self._get_key_name_by_peg(peg_id),
                 "peg_id": peg_id,
@@ -290,7 +347,6 @@ class KeyDashboardScreen(BaseScreen):
             self.ams_can.key_inserted_event = False
             self.reload_keys_from_db()
             self.update_key_widgets()
-
 
     # =====================================================
     # DB COMMIT
@@ -369,32 +425,17 @@ class KeyDashboardScreen(BaseScreen):
                     "IN" if key["status"] == 0 else "OUT"
                 )
 
-    def open_done_page(self, key_name: str, status: str, key_id: str):
-        # build list in the exact format ActivityDoneScreen expects
-        cards = []
-
-        # simple example: last N interactions -> one card
-        # you can customize this logic as needed
-        for inter in self.key_interactions:
-            cards.append({
-                "key_name": inter["key_name"],
-                "taken_text": inter["timestamp"].strftime("%Y-%m-%d %H:%M:%S")
-                            if inter["action"] == "TAKEN" else "",
-                "returned_text": inter["timestamp"].strftime("%Y-%m-%d %H:%M:%S")
-                                if inter["action"] == "RETURNED" else "",
-            })
-
-        # expose to ScreenManager so done screen can read it
-        self.manager.cards = cards
-
-        # also expose timestamp text in the same place
+    # optional manual navigation using card tap
+    def open_done_page_from_manual(self, key_name: str, status: str, key_id: str):
+        self.manager.cards = [{
+            "key_name": key_name,
+            "taken_text": "",
+            "returned_text": "",
+        }]
         self.manager.timestamp_text = datetime.now(TZ_INDIA).strftime(
             "%Y-%m-%d %H:%M:%S %Z"
         )
-
-        # only change screen
         self.manager.current = "activity_done"
-
 
     # =====================================================
     # EXIT CLEANUP
@@ -417,9 +458,13 @@ class KeyDashboardScreen(BaseScreen):
         if self._door_timer_event:
             self._door_timer_event.cancel()
 
-        subprocess.Popen(
-            ["sudo", "python3", "solenoid.py", "0"],
-            cwd="/home/rock/Desktop/ams_v2",
-        )
+        # ensure door locked
+        if self.solenoid_pin is not None:
+            self.solenoid_pin.write(0)
+        else:
+            subprocess.Popen(
+                ["sudo", "python3", "solenoid.py", "0"],
+                cwd="/home/rock/Desktop/ams_v2",
+            )
 
         self.manager.current = "activity"
