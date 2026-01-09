@@ -331,6 +331,10 @@ class KeyDashboardScreen(BaseScreen):
                     "IN" if key["status"] == 0 else "OUT"
                 )
 
+
+    def go_done(self):
+        self.manager.current = "activity_done"
+
     # =====================================================
     # EXIT CLEANUP
     # =====================================================
