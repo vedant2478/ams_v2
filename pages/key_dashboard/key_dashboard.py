@@ -231,6 +231,7 @@ class KeyDashboardScreen(BaseScreen):
 
 
     def _get_key_name_by_peg(self, peg_id):
+        print(self.keys_data)
         for k in self.keys_data:
             if str(k.get("peg_id")) == str(peg_id):
                 return k.get("name", f"Key {peg_id}")
