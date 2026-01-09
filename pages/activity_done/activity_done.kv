@@ -1,20 +1,69 @@
-#:kivy 2.1.0
+#:kivy 2.2.0
+#:import dp kivy.metrics.dp
+
+
+<ActivityCard@BoxLayout>:
+    key_name: ""
+    taken_text: ""
+    returned_text: ""
+    orientation: "vertical"
+    size_hint_y: None
+    height: "90dp"
+    padding: "10dp"
+    spacing: "4dp"
+    canvas.before:
+        Color:
+            rgba: 0.08, 0.16, 0.26, 1
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [15, 15, 15, 15]
+
+    Label:
+        text: root.key_name
+        font_size: "18sp"
+        bold: True
+        color: 1, 1, 1, 1
+        size_hint_y: None
+        height: "26dp"
+        halign: "left"
+        valign: "middle"
+        text_size: self.size
+
+    Label:
+        text: "Taken    :  " + root.taken_text
+        font_size: "14sp"
+        color: 0.85, 0.9, 0.95, 1
+        size_hint_y: None
+        height: "22dp"
+        halign: "left"
+        valign: "middle"
+        text_size: self.size
+
+    Label:
+        text: "Returned :  " + root.returned_text
+        font_size: "14sp"
+        color: 0.85, 0.9, 0.95, 1
+        size_hint_y: None
+        height: "22dp"
+        halign: "left"
+        valign: "middle"
+        text_size: self.size
+
+
 
 <ActivityDoneScreen>:
     name: "activity_done"
 
     FloatLayout:
 
-        # ===== HEADER =====
         Header:
             pos_hint: {"top": 1}
 
-        # ===== BACKGROUND =====
         GradientBackground:
             pos: self.parent.pos
             size: self.parent.size
 
-        # ===== MAIN CARD =====
         BoxLayout:
             orientation: "vertical"
             size_hint: None, None
@@ -49,42 +98,44 @@
                 size_hint_y: None
                 height: "80dp"
 
-            # Operation details
-            Label:
-                text: "Operation Details"
-                font_size: "18sp"
-                color: 0.85, 0.9, 0.95, 1
+            # ===== CARDS PANEL =====
+            BoxLayout:
+                orientation: "vertical"
                 size_hint_y: None
-                height: "32dp"
+                height: self.minimum_height
+                padding: "14dp"
+                spacing: "10dp"
+                canvas.before:
+                    Color:
+                        rgba: 0.05, 0.12, 0.22, 1
+                    RoundedRectangle:
+                        pos: self.pos
+                        size: self.size
+                        radius: [22, 22, 22, 22]
 
-            Label:
-                text: "Retrieved :  " + root.retrieved_text
-                font_size: "16sp"
-                color: 0.9, 0.93, 0.97, 1
-                size_hint_y: None
-                height: "26dp"
+                ScrollView:
+                    size_hint_y: None
+                    height: "260dp"
+                    do_scroll_x: False
 
-            Label:
-                text: "Returned  :  " + root.returned_text
-                font_size: "16sp"
-                color: 0.9, 0.93, 0.97, 1
-                size_hint_y: None
-                height: "26dp"
+                    BoxLayout:
+                        id: cards_container
+                        orientation: "vertical"
+                        size_hint_y: None
+                        padding: "8dp"
+                        spacing: "10dp"
+                        height: self.minimum_height
+
+                        # create one card for each dict in root.cards
+                        ActivityCard:
+                            key_name: card["key_name"]
+                            taken_text: card["taken_text"]
+                            returned_text: card["returned_text"]
+                        for card in root.cards
 
             Widget:
                 size_hint_y: None
                 height: "10dp"
-
-            Label:
-                text: "TimeStamp: " + root.timestamp_text
-                font_size: "15sp"
-                color: 0.8, 0.86, 0.93, 1
-                size_hint_y: None
-                height: "24dp"
-
-            Widget:
-                size_hint_y: None
-                height: "20dp"
 
             Label:
                 text: "Auto-dismissing in [b]" + str(root.countdown) + "[/b] seconds..."
@@ -109,7 +160,6 @@
                 color: 1, 1, 1, 1
                 on_release: root.on_return_pressed()
 
-        # ===== FOOTER =====
         Footer:
             pos_hint: {"y": 0}
             version_text: "Version: 12.9.3"
