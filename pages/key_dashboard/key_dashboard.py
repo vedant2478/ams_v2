@@ -288,7 +288,7 @@ class KeyDashboardScreen(BaseScreen):
             self.ams_can.unlock_single_key(strip, pos)
             self.ams_can.set_single_LED_state(strip, pos, CAN_LED_STATE_ON)
         subprocess.Popen(
-            ["sudo", "python3", "solenoid.py", "0"],
+            ["sudo", "python3", "solenoid.py", "1"],
             cwd="/home/rock/Desktop/ams_v2",
         )
 
