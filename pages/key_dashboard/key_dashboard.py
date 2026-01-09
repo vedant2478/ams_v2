@@ -1,6 +1,7 @@
 from datetime import datetime
 import subprocess
 import paho.mqtt.client as mqtt
+import mraa
 
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.behaviors import ButtonBehavior
@@ -14,7 +15,7 @@ from kivy.clock import Clock
 
 from components.base_screen import BaseScreen
 from db import get_keys_for_activity, set_key_status_by_peg_id
-from amscan import AMS_CAN
+from amscan import AMS_CAN, CAN_LED_STATE_ON
 
 from csi_ams.model import (
     AMS_Keys,
@@ -120,6 +121,11 @@ class KeyDashboardScreen(BaseScreen):
         # Allow discovery
         self.ams_can.get_version_number(1)
         self.ams_can.get_version_number(2)
+
+        for strip in self.ams_can.key_lists:
+            self.ams_can.lock_all_positions(strip)
+            self.ams_can.set_all_LED_OFF(strip)
+
 
         # Unlock activity keys
         self.unlock_activity_keys()
@@ -313,7 +319,7 @@ class KeyDashboardScreen(BaseScreen):
                 int(key["strip"]),
                 int(key["position"]),
             )
-
+            self.ams_can.set_single_LED_state(int(key["strip"]), int(key["position"]) , CAN_LED_STATE_ON)
     # -----------------------------------------------------
     # EXIT CLEANUP (CRITICAL)
     # -----------------------------------------------------
