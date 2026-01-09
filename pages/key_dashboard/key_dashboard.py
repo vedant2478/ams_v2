@@ -288,8 +288,11 @@ class KeyDashboardScreen(BaseScreen):
             peg_id = self.ams_can.key_taken_id
             self.handle_key_taken_commit(peg_id)
 
+            key_name = self._get_key_name_by_peg(peg_id)
+
+            # NEW/EXISTING: append a TAKEN entry
             self.key_interactions.append({
-                "key_name": self._get_key_name_by_peg(peg_id),
+                "key_name": key_name,
                 "peg_id": peg_id,
                 "action": "TAKEN",
                 "timestamp": datetime.now(TZ_INDIA),
@@ -304,13 +307,26 @@ class KeyDashboardScreen(BaseScreen):
 
         if self.ams_can.key_inserted_event:
             peg_id = self.ams_can.key_inserted_id
+            key_name = self._get_key_name_by_peg(peg_id)
 
-            self.key_interactions.append({
-                "key_name": self._get_key_name_by_peg(peg_id),
-                "peg_id": peg_id,
-                "action": "RETURNED",
-                "timestamp": datetime.now(TZ_INDIA),
-            })
+            # ========= ONLY THIS PART CHANGED =========
+            # Try to update an existing TAKEN record for this key_name
+            returned_ts = datetime.now(TZ_INDIA)
+            for inter in reversed(self.key_interactions):
+                if inter["key_name"] == key_name and inter["action"] == "TAKEN":
+                    # store returned time alongside the taken entry
+                    inter["returned_timestamp"] = returned_ts
+                    inter["action"] = "TAKEN_RETURNED"
+                    break
+            else:
+                # no existing TAKEN found → fall back to appending a RETURNED entry
+                self.key_interactions.append({
+                    "key_name": key_name,
+                    "peg_id": peg_id,
+                    "action": "RETURNED",
+                    "timestamp": returned_ts,
+                })
+            # ==========================================
 
             set_key_status_by_peg_id(
                 self.manager.db_session, peg_id, 0
@@ -400,18 +416,36 @@ class KeyDashboardScreen(BaseScreen):
     def open_done_page(self, key_name: str, status: str, key_id: str):
         cards = []
         for inter in self.key_interactions:
-            cards.append({
-                "key_name": inter["key_name"],
-                "taken_text": inter["timestamp"].strftime("%Y-%m-%d %H:%M:%S")
-                              if inter["action"] == "TAKEN" else "",
-                "returned_text": inter["timestamp"].strftime("%Y-%m-%d %H:%M:%S")
-                                if inter["action"] == "RETURNED" else "",
-            })
+            if inter["action"] in ("TAKEN", "TAKEN_RETURNED"):
+                taken_ts = inter["timestamp"].strftime("%Y-%m-%d %H:%M:%S")
+                returned_ts = inter.get("returned_timestamp")
+                cards.append({
+                    "key_name": inter["key_name"],
+                    "taken_text": taken_ts,
+                    "returned_text": returned_ts.strftime("%Y-%m-%d %H:%M:%S")
+                                    if returned_ts else "",
+                })
 
         self.manager.cards = cards
         self.manager.timestamp_text = datetime.now(TZ_INDIA).strftime(
             "%Y-%m-%d %H:%M:%S %Z"
         )
+        if self._can_poll_event:
+            self._can_poll_event.cancel()
+
+        if self.ams_can:
+            for strip in self.ams_can.key_lists:
+                self.ams_can.unlock_all_positions(strip)
+                self.ams_can.set_all_LED_OFF(strip)
+            self.ams_can.cleanup()
+            self.ams_can = None
+
+        if self._mqtt_client:
+            self._mqtt_client.loop_stop()
+            self._mqtt_client.disconnect()
+
+        if self._door_timer_event:
+            self._door_timer_event.cancel()
         self.manager.current = "activity_done"
 
     # =====================================================
