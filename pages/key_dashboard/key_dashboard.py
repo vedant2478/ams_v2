@@ -1,8 +1,8 @@
 from datetime import datetime
 import subprocess
+import logging
 import paho.mqtt.client as mqtt
 import mraa
-import logging
 
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.behaviors import ButtonBehavior
@@ -33,7 +33,7 @@ from csi_ams.utils.commons import (
 )
 
 # =========================================================
-# LOGGING SETUP
+# LOGGING
 # =========================================================
 logging.basicConfig(
     level=logging.DEBUG,
@@ -54,11 +54,11 @@ class KeyItem(ButtonBehavior, BoxLayout):
     def set_status(self, status):
         self.status_text = status
         self.status_color = [0, 1, 0, 1] if status == "IN" else [1, 0, 0, 1]
-        log.debug(f"[UI] Key {self.key_name} status set to {status}")
+        log.debug(f"[UI] Key {self.key_name} status → {status}")
 
     def on_release(self):
         if self.dashboard:
-            log.info(f"[UI] Key pressed: {self.key_name}")
+            log.info(f"[UI] Key clicked: {self.key_name}")
             self.dashboard.open_done_page(
                 self.key_name,
                 self.status_text,
@@ -82,6 +82,7 @@ class KeyDashboardScreen(BaseScreen):
         super().__init__(**kwargs)
 
         self.key_widgets = {}
+
         self._door_open = False
         self.door_open_seconds = 0
 
@@ -91,15 +92,15 @@ class KeyDashboardScreen(BaseScreen):
 
         self.ams_can = None
 
-    # -----------------------------------------------------
+    # =====================================================
     # SCREEN ENTER
-    # -----------------------------------------------------
+    # =====================================================
     def on_enter(self, *args):
         log.info("[ENTER] KeyDashboard entered")
 
         session = self.manager.db_session
 
-        # -------- ACCESS LOG --------
+        # ---------- ACCESS LOG ----------
         access_log = AMS_Access_Log(
             signInTime=datetime.now(TZ_INDIA),
             signInMode=self.manager.auth_mode,
@@ -115,91 +116,143 @@ class KeyDashboardScreen(BaseScreen):
         self.manager.ams_access_log = access_log
         log.info("[DB] Access log created")
 
-        # -------- ACTIVITY --------
+        # ---------- ACTIVITY ----------
         self.activity_info = self.manager.activity_info
         self.activity_code = self.activity_info["code"]
         self.activity_name = self.activity_info["name"]
         log.info(f"[ACTIVITY] {self.activity_name} ({self.activity_code})")
 
-        # -------- LOAD UI --------
+        # ---------- UI ----------
         self.reload_keys_from_db()
         self.populate_keys()
 
-        # -------- INIT CAN --------
+        # ---------- CAN INIT ----------
         log.info("[CAN] Initializing AMS_CAN")
         self.ams_can = AMS_CAN()
 
-        log.debug("[CAN] Requesting version numbers")
         self.ams_can.get_version_number(1)
         self.ams_can.get_version_number(2)
 
-        # IMPORTANT: Start controlled CAN sequence
+        # Start deterministic CAN sequence
         Clock.schedule_once(self._can_step_led_on_all, 1.5)
 
-        # -------- UNLOCK DOOR --------
+        # ---------- DOOR UNLOCK ----------
         subprocess.Popen(
             ["sudo", "python3", "solenoid.py", "1"],
             cwd="/home/rock/Desktop/ams_v2",
         )
         log.info("[DOOR] Door unlocked")
 
-        # -------- MQTT --------
+        # ---------- MQTT ----------
         self.start_gpio_subscriber()
 
-        # -------- CAN POLLING --------
+        # ---------- CAN POLLING ----------
         self._can_poll_event = Clock.schedule_interval(
             self.poll_can_events, 0.2
         )
 
     # =====================================================
-    # CAN INITIALIZATION SEQUENCE (STRICT ORDER)
+    # CAN SEQUENCE (STRICT ORDER)
     # =====================================================
     def _can_step_led_on_all(self, dt):
-        log.info("[CAN-STEP-1] Turning ON all LEDs")
+        log.info("[CAN-1] LED ON (ALL)")
         for strip in self.ams_can.key_lists:
-            log.debug(f"[CAN] LED ON strip {strip}")
             self.ams_can.set_all_LED_ON(strip)
-
         Clock.schedule_once(self._can_step_lock_all, 1.0)
 
     def _can_step_lock_all(self, dt):
-        log.info("[CAN-STEP-2] Locking ALL keys")
+        log.info("[CAN-2] LOCK ALL KEYS")
         for strip in self.ams_can.key_lists:
-            log.debug(f"[CAN] Lock strip {strip}")
             self.ams_can.lock_all_positions(strip)
-
         Clock.schedule_once(self._can_step_led_off_all, 1.0)
 
     def _can_step_led_off_all(self, dt):
-        log.info("[CAN-STEP-3] Turning OFF all LEDs")
+        log.info("[CAN-3] LED OFF (ALL)")
         for strip in self.ams_can.key_lists:
-            log.debug(f"[CAN] LED OFF strip {strip}")
             self.ams_can.set_all_LED_OFF(strip)
-
         Clock.schedule_once(self._can_step_unlock_activity, 1.0)
 
     def _can_step_unlock_activity(self, dt):
-        log.info("[CAN-STEP-4] Unlocking ACTIVITY keys")
+        log.info("[CAN-4] UNLOCK ACTIVITY KEYS")
         for key in self.keys_data:
             strip = int(key["strip"])
             pos = int(key["position"])
 
-            log.debug(f"[CAN] Unlock key strip={strip} pos={pos}")
+            log.debug(f"[CAN] Unlock strip={strip} pos={pos}")
             self.ams_can.unlock_single_key(strip, pos)
             self.ams_can.set_single_LED_state(
                 strip, pos, CAN_LED_STATE_ON
             )
 
-    # -----------------------------------------------------
+    # =====================================================
+    # MQTT GPIO
+    # =====================================================
+    def start_gpio_subscriber(self):
+        log.info("[MQTT] Starting GPIO subscriber")
+
+        self._mqtt_client = mqtt.Client("kivy-door-subscriber")
+        self._mqtt_client.on_connect = self.on_mqtt_connect
+        self._mqtt_client.on_message = self.on_mqtt_message
+        self._mqtt_client.connect("localhost", 1883, 60)
+        self._mqtt_client.loop_start()
+
+    def on_mqtt_connect(self, client, userdata, flags, rc):
+        log.info(f"[MQTT] Connected rc={rc}")
+        client.subscribe("gpio/pin32")
+
+    def on_mqtt_message(self, client, userdata, msg):
+        value = int(msg.payload.decode())
+        log.debug(f"[MQTT] pin32={value}")
+
+        if value == 1 and not self._door_open:
+            Clock.schedule_once(lambda dt: self.on_door_opened())
+        elif value == 0 and self._door_open:
+            Clock.schedule_once(lambda dt: self.on_door_closed())
+
+    # =====================================================
+    # DOOR EVENTS
+    # =====================================================
+    def on_door_opened(self):
+        log.info("[DOOR] Door opened")
+        self._door_open = True
+        self.door_open_seconds = 0
+        self.time_remaining = str(self.MAX_DOOR_TIME)
+        self.progress_value = 0.0
+
+        self._door_timer_event = Clock.schedule_interval(
+            self.door_timer_tick, 1
+        )
+
+    def door_timer_tick(self, dt):
+        self.door_open_seconds += 1
+        remaining = max(0, self.MAX_DOOR_TIME - self.door_open_seconds)
+
+        self.time_remaining = str(remaining)
+        self.progress_value = (
+            self.door_open_seconds / float(self.MAX_DOOR_TIME)
+        )
+
+        if self.door_open_seconds >= self.MAX_DOOR_TIME:
+            log.warning("[DOOR] Timeout reached")
+            self.go_back()
+
+    def on_door_closed(self):
+        log.info("[DOOR] Door closed")
+        self._door_open = False
+        if self._door_timer_event:
+            self._door_timer_event.cancel()
+            self._door_timer_event = None
+
+    # =====================================================
     # CAN POLLING
-    # -----------------------------------------------------
+    # =====================================================
     def poll_can_events(self, dt):
         if not self.ams_can:
             return
 
         if self.ams_can.key_taken_event:
             peg_id = self.ams_can.key_taken_id
-            log.info(f"[CAN] Key taken event: peg_id={peg_id}")
+            log.info(f"[CAN] Key taken peg_id={peg_id}")
 
             self.handle_key_taken_commit(peg_id)
             set_key_status_by_peg_id(
@@ -212,7 +265,7 @@ class KeyDashboardScreen(BaseScreen):
 
         if self.ams_can.key_inserted_event:
             peg_id = self.ams_can.key_inserted_id
-            log.info(f"[CAN] Key inserted event: peg_id={peg_id}")
+            log.info(f"[CAN] Key inserted peg_id={peg_id}")
 
             set_key_status_by_peg_id(
                 self.manager.db_session, peg_id, 0
@@ -222,14 +275,12 @@ class KeyDashboardScreen(BaseScreen):
             self.reload_keys_from_db()
             self.update_key_widgets()
 
-    # -----------------------------------------------------
+    # =====================================================
     # DB COMMIT
-    # -----------------------------------------------------
+    # =====================================================
     def handle_key_taken_commit(self, peg_id):
         session = self.manager.db_session
         user = self.manager.card_info
-
-        log.info(f"[DB] Committing key taken: peg_id={peg_id}")
 
         key_record = session.query(AMS_Keys).filter(
             AMS_Keys.peg_id == peg_id
@@ -269,20 +320,18 @@ class KeyDashboardScreen(BaseScreen):
             )
         )
         session.commit()
-        log.info("[DB] Key taken committed successfully")
+        log.info("[DB] Key taken committed")
 
-    # -----------------------------------------------------
+    # =====================================================
     # UI HELPERS
-    # -----------------------------------------------------
+    # =====================================================
     def reload_keys_from_db(self):
-        log.debug("[DB] Reloading keys from DB")
         self.keys_data = get_keys_for_activity(
             self.manager.db_session,
             self.activity_info["id"],
         )
 
     def populate_keys(self):
-        log.debug("[UI] Populating key widgets")
         grid = self.ids.key_grid
         grid.clear_widgets()
         self.key_widgets.clear()
@@ -299,27 +348,26 @@ class KeyDashboardScreen(BaseScreen):
         self.update_key_widgets()
 
     def update_key_widgets(self):
-        log.debug("[UI] Updating key widgets")
         for key in self.keys_data:
             widget = self.key_widgets.get(str(key["id"]))
             if widget:
-                widget.set_status("IN" if key["status"] == 0 else "OUT")
+                widget.set_status(
+                    "IN" if key["status"] == 0 else "OUT"
+                )
 
-    # -----------------------------------------------------
+    # =====================================================
     # EXIT CLEANUP
-    # -----------------------------------------------------
+    # =====================================================
     def go_back(self):
-        log.warning("[EXIT] Cleaning up dashboard")
+        log.warning("[EXIT] Cleaning up")
 
         if self._can_poll_event:
             self._can_poll_event.cancel()
 
         if self.ams_can:
             for strip in self.ams_can.key_lists:
-                log.debug(f"[CAN] Unlock all + LED off strip {strip}")
                 self.ams_can.unlock_all_positions(strip)
                 self.ams_can.set_all_LED_OFF(strip)
-
             self.ams_can.cleanup()
             self.ams_can = None
 
