@@ -113,9 +113,9 @@
                         size: self.size
                         radius: [22, 22, 22, 22]
 
+                # Scrollable list of key cards
                 ScrollView:
-                    size_hint_y: None
-                    height: "260dp"
+                    size_hint_y: 1
                     do_scroll_x: False
 
                     BoxLayout:
@@ -126,12 +126,6 @@
                         spacing: "10dp"
                         height: self.minimum_height
 
-                        # create one card for each dict in root.cards
-                        ActivityCard:
-                            key_name: card["key_name"]
-                            taken_text: card["taken_text"]
-                            returned_text: card["returned_text"]
-                        for card in root.cards
 
             Widget:
                 size_hint_y: None
