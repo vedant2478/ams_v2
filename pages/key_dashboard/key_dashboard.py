@@ -141,7 +141,7 @@ class KeyDashboardScreen(BaseScreen):
         self.progress_value = 0.0
 
         subprocess.Popen(
-            ["sudo", "python3", "solenoid.py", "1"],  # 1 = unlocked (your current logic)
+            ["sudo", "python3", "solenoid.py", "1"],  # 1 = unlocked (your wiring)
             cwd="/home/rock/Desktop/ams_v2",
         )
 
@@ -244,28 +244,23 @@ class KeyDashboardScreen(BaseScreen):
             self._door_timer_event.cancel()
             self._door_timer_event = None
 
-        # build cards list on ScreenManager
+        # build cards list from key_interactions
         cards = []
         for inter in self.key_interactions:
-            if inter["action"] in ("TAKEN", "TAKEN_RETURNED"):
-                taken_ts = inter["timestamp"].strftime("%Y-%m-%d %H:%M:%S")
-                returned_ts = inter.get("returned_timestamp")
-                cards.append({
-                    "key_name": inter["key_name"],
-                    "taken_text": taken_ts,
-                    "returned_text": returned_ts.strftime("%Y-%m-%d %H:%M:%S")
-                                    if returned_ts else "",
-                })
+            taken_ts = inter.get("taken_timestamp")
+            returned_ts = inter.get("returned_timestamp")
+            cards.append({
+                "key_name": inter["key_name"],
+                "taken_text": taken_ts.strftime("%Y-%m-%d %H:%M:%S") if taken_ts else "",
+                "returned_text": returned_ts.strftime("%Y-%m-%d %H:%M:%S") if returned_ts else "",
+            })
 
         self.manager.cards = cards
         self.manager.timestamp_text = datetime.now(TZ_INDIA).strftime(
             "%Y-%m-%d %H:%M:%S %Z"
         )
 
-        # FULL CLEANUP before changing screen
         self._shutdown_can_and_mqtt()
-
-        # now go to done page
         self.manager.current = "activity_done"
 
     # =====================================================
@@ -312,61 +307,44 @@ class KeyDashboardScreen(BaseScreen):
         if not self.ams_can:
             return
 
-        # KEY TAKEN
+        # ---------- KEY TAKEN ----------
         if self.ams_can.key_taken_event:
             peg_id = self.ams_can.key_taken_id
             self.handle_key_taken_commit(peg_id)
 
-            key_name = self._get_key_name_by_peg(peg_id)
-            log.debug(f"[INTERACT] TAKEN peg={peg_id} name={key_name}")
-
-            self.key_interactions.append({
-                "key_name": key_name,
-                "peg_id": peg_id,
-                "action": "TAKEN",
-                "timestamp": datetime.now(TZ_INDIA),
-            })
-
-            set_key_status_by_peg_id(
-                self.manager.db_session, peg_id, 1
-            )
+            set_key_status_by_peg_id(self.manager.db_session, peg_id, 1)
             self.ams_can.key_taken_event = False
             self.reload_keys_from_db()
             self.update_key_widgets()
 
-        # KEY RETURNED
+        # ---------- KEY RETURNED ----------
         if self.ams_can.key_inserted_event:
             peg_id = self.ams_can.key_inserted_id
-            key_name = self._get_key_name_by_peg(peg_id)
-            log.debug(f"[INTERACT] RETURNED peg={peg_id} name={key_name}")
-            log.debug(f"[INTERACT] Before update: {self.key_interactions}")
+            session = self.manager.db_session
 
-            returned_ts = datetime.now(TZ_INDIA)
-            updated = False
+            key_record = session.query(AMS_Keys).filter(
+                AMS_Keys.peg_id == peg_id
+            ).first()
 
-            for inter in reversed(self.key_interactions):
-                if inter.get("peg_id") == peg_id and inter["action"] == "TAKEN":
-                    inter["returned_timestamp"] = returned_ts
-                    inter["action"] = "TAKEN_RETURNED"
-                    updated = True
-                    log.debug(f"[INTERACT] Updated existing TAKEN for peg={peg_id}")
-                    break
+            if key_record:
+                # adjust field name if different in your model
+                key_name = getattr(key_record, "keyName", None) or self._get_key_name_by_peg(peg_id)
+                taken_time = key_record.keyTakenAtTime
+            else:
+                key_name = self._get_key_name_by_peg(peg_id)
+                taken_time = None
 
-            if not updated:
-                self.key_interactions.append({
-                    "key_name": key_name,
-                    "peg_id": peg_id,
-                    "action": "TAKEN_RETURNED",
-                    "timestamp": returned_ts,
-                    "returned_timestamp": returned_ts,
-                })
-                log.debug(f"[INTERACT] Appended TAKEN_RETURNED for peg={peg_id}")
+            returned_time = datetime.now(TZ_INDIA)
 
-            log.debug(f"[INTERACT] After update: {self.key_interactions}")
+            # only append once per return
+            self.key_interactions.append({
+                "key_name": key_name,
+                "peg_id": peg_id,
+                "taken_timestamp": taken_time,
+                "returned_timestamp": returned_time,
+            })
 
-            set_key_status_by_peg_id(
-                self.manager.db_session, peg_id, 0
-            )
+            set_key_status_by_peg_id(session, peg_id, 0)
             self.ams_can.key_inserted_event = False
             self.reload_keys_from_db()
             self.update_key_widgets()
@@ -452,15 +430,13 @@ class KeyDashboardScreen(BaseScreen):
     def open_done_page(self, key_name: str, status: str, key_id: str):
         cards = []
         for inter in self.key_interactions:
-            if inter["action"] in ("TAKEN", "TAKEN_RETURNED"):
-                taken_ts = inter["timestamp"].strftime("%Y-%m-%d %H:%M:%S")
-                returned_ts = inter.get("returned_timestamp")
-                cards.append({
-                    "key_name": inter["key_name"],
-                    "taken_text": taken_ts,
-                    "returned_text": returned_ts.strftime("%Y-%m-%d %H:%M:%S")
-                                    if returned_ts else "",
-                })
+            taken_ts = inter.get("taken_timestamp")
+            returned_ts = inter.get("returned_timestamp")
+            cards.append({
+                "key_name": inter["key_name"],
+                "taken_text": taken_ts.strftime("%Y-%m-%d %H:%M:%S") if taken_ts else "",
+                "returned_text": returned_ts.strftime("%Y-%m-%d %H:%M:%S") if returned_ts else "",
+            })
 
         self.manager.cards = cards
         self.manager.timestamp_text = datetime.now(TZ_INDIA).strftime(
