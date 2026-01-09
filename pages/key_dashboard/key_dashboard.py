@@ -74,6 +74,7 @@ class KeyDashboardScreen(BaseScreen):
     time_remaining = StringProperty("30")
     progress_value = NumericProperty(0.0)
     keys_data = ListProperty([])
+    key_interactions = ListProperty([])
 
     MAX_DOOR_TIME = 30
 
@@ -228,6 +229,13 @@ class KeyDashboardScreen(BaseScreen):
             self._door_timer_event.cancel()
             self._door_timer_event = None
 
+
+    def _get_key_name_by_peg(self, peg_id):
+        for k in self.keys_data:
+            if str(k.get("peg_id")) == str(peg_id):
+                return k.get("name", f"Key {peg_id}")
+        return f"Key {peg_id}"
+
     # =====================================================
     # CAN POLLING
     # =====================================================
@@ -238,6 +246,15 @@ class KeyDashboardScreen(BaseScreen):
         if self.ams_can.key_taken_event:
             peg_id = self.ams_can.key_taken_id
             self.handle_key_taken_commit(peg_id)
+
+            # --- NEW: record interaction ---
+            self.key_interactions.append({
+                "key_name": self._get_key_name_by_peg(peg_id),
+                "peg_id": peg_id,
+                "action": "TAKEN",
+                "timestamp": datetime.now(TZ_INDIA),
+            })
+
             set_key_status_by_peg_id(
                 self.manager.db_session, peg_id, 1
             )
@@ -245,14 +262,26 @@ class KeyDashboardScreen(BaseScreen):
             self.reload_keys_from_db()
             self.update_key_widgets()
 
+            
+
         if self.ams_can.key_inserted_event:
             peg_id = self.ams_can.key_inserted_id
+
+            # --- NEW: record interaction ---
+            self.key_interactions.append({
+                "key_name": self._get_key_name_by_peg(peg_id),
+                "peg_id": peg_id,
+                "action": "RETURNED",
+                "timestamp": datetime.now(TZ_INDIA),
+            })
+
             set_key_status_by_peg_id(
                 self.manager.db_session, peg_id, 0
             )
             self.ams_can.key_inserted_event = False
             self.reload_keys_from_db()
             self.update_key_widgets()
+
 
     # =====================================================
     # DB COMMIT
@@ -332,19 +361,32 @@ class KeyDashboardScreen(BaseScreen):
                 )
 
     def open_done_page(self, key_name: str, status: str, key_id: str):
-    
-        # get the done screen from the ScreenManager
-        done_screen = self.manager.get_screen("activity_done")
+        # build list in the exact format ActivityDoneScreen expects
+        cards = []
 
-        # set its labels
-        done_screen.retrieved_text = f"{key_name} ({status})"
-        done_screen.returned_text = f"{key_name} ({'OUT' if status == 'IN' else 'IN'})"
-        done_screen.timestamp_text = datetime.now(TZ_INDIA).strftime(
+        # simple example: last N interactions -> one card
+        # you can customize this logic as needed
+        for inter in self.key_interactions:
+            cards.append({
+                "key_name": inter["key_name"],
+                "taken_text": inter["timestamp"].strftime("%Y-%m-%d %H:%M:%S")
+                            if inter["action"] == "TAKEN" else "",
+                "returned_text": inter["timestamp"].strftime("%Y-%m-%d %H:%M:%S")
+                                if inter["action"] == "RETURNED" else "",
+            })
+
+        # expose to ScreenManager so done screen can read it
+        self.manager.cards = cards
+
+        # also expose timestamp text in the same place
+        self.manager.timestamp_text = datetime.now(TZ_INDIA).strftime(
             "%Y-%m-%d %H:%M:%S %Z"
         )
 
-        # switch screen
+        # only change screen
         self.manager.current = "activity_done"
+
+
     # =====================================================
     # EXIT CLEANUP
     # =====================================================

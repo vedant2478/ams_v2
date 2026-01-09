@@ -25,26 +25,9 @@ class ActivityDoneScreen(BaseScreen):
 
     def on_pre_enter(self, *args):
         # demo data – later you can overwrite from dashboard
-        self.cards = [
-            {
-                "key_name": "Master Key 1",
-                "taken_text": "2025-07-25 14:32:09",
-                "returned_text": "2025-07-25 14:59:09",
-            },
-            {
-                "key_name": "Master Key 1",
-                "taken_text": "2025-07-25 14:32:09",
-                "returned_text": "2025-07-25 14:59:09",
-            },
-            {
-                "key_name": "Master Key 1",
-                "taken_text": "2025-07-25 14:32:09",
-                "returned_text": "2025-07-25 14:59:09",
-            },
-        ]
-        self.timestamp_text = datetime.now(TZ_INDIA).strftime(
-            "%Y-%m-%d %H:%M:%S %Z"
-        )
+        self.cards = self.manager.cards
+        self.timestamp_text = self.manager.timestamp_text
+
         self.populate_cards()
 
     def on_enter(self, *args):
