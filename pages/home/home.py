@@ -39,7 +39,7 @@ class HomeScreen(BaseScreen):
     def open_config(self):
         # Navigate to PIN screen (admin check happens there)
         self.manager.transition.direction = "left"
-        self.manager.current = "pin"
+        self.manager.current = "home"
 
     def on_start_pressed(self):
         self.manager.current = "auth"

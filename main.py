@@ -118,3 +118,6 @@ class MainApp(App):
 # ================= RUN APP =================
 if __name__ == "__main__":
     MainApp().run()
+
+# sudo ip link set can0 up type can bitrate 125000
+# sudo ip link set can0 up
