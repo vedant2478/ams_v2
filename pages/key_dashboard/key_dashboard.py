@@ -234,7 +234,7 @@ class KeyDashboardScreen(BaseScreen):
         print(self.keys_data)
         for k in self.keys_data:
             if str(k.get("peg_id")) == str(peg_id):
-                return k.get("name", f"Key {peg_id}")
+                return k.get("description", f"Key {peg_id}")
         return f"Key {peg_id}"
 
     # =====================================================
