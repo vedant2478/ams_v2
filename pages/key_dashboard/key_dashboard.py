@@ -11,6 +11,7 @@ from kivy.properties import (
     ObjectProperty,
     NumericProperty,
 )
+    
 from kivy.clock import Clock
 
 from components.base_screen import BaseScreen
@@ -30,7 +31,6 @@ from csi_ams.utils.commons import (
     TZ_INDIA,
     get_event_description,
 )
-
 
 # =========================================================
 # LOGGING
@@ -261,6 +261,8 @@ class KeyDashboardScreen(BaseScreen):
         )
 
         self._shutdown_can_and_mqtt()
+        # clear events when leaving
+        self.key_interactions = []
         self.manager.current = "activity_done"
 
     # =====================================================
@@ -307,44 +309,51 @@ class KeyDashboardScreen(BaseScreen):
         if not self.ams_can:
             return
 
-        # ---------- KEY TAKEN ----------
+        # ---------- KEY TAKEN (removed) ----------
         if self.ams_can.key_taken_event:
             peg_id = self.ams_can.key_taken_id
             self.handle_key_taken_commit(peg_id)
+
+            key_name = self._get_key_name_by_peg(peg_id)
+            taken_time = datetime.now(TZ_INDIA)
+
+            # append a new event when key is removed
+            self.key_interactions.append({
+                "key_name": key_name,
+                "peg_id": peg_id,
+                "taken_timestamp": taken_time,
+                "returned_timestamp": None,
+            })
 
             set_key_status_by_peg_id(self.manager.db_session, peg_id, 1)
             self.ams_can.key_taken_event = False
             self.reload_keys_from_db()
             self.update_key_widgets()
 
-        # ---------- KEY RETURNED ----------
+        # ---------- KEY RETURNED (inserted) ----------
         if self.ams_can.key_inserted_event:
             peg_id = self.ams_can.key_inserted_id
-            session = self.manager.db_session
-
-            key_record = session.query(AMS_Keys).filter(
-                AMS_Keys.peg_id == peg_id
-            ).first()
-
-            if key_record:
-                # adjust field name if different in your model
-                key_name = getattr(key_record, "keyName", None) or self._get_key_name_by_peg(peg_id)
-                taken_time = key_record.keyTakenAtTime
-            else:
-                key_name = self._get_key_name_by_peg(peg_id)
-                taken_time = None
-
+            key_name = self._get_key_name_by_peg(peg_id)
             returned_time = datetime.now(TZ_INDIA)
 
-            # only append once per return
-            self.key_interactions.append({
-                "key_name": key_name,
-                "peg_id": peg_id,
-                "taken_timestamp": taken_time,
-                "returned_timestamp": returned_time,
-            })
+            # first try to update an existing event for same key_name
+            updated = False
+            for ev in reversed(self.key_interactions):
+                if ev["key_name"] == key_name and ev["returned_timestamp"] is None:
+                    ev["returned_timestamp"] = returned_time
+                    updated = True
+                    break
 
-            set_key_status_by_peg_id(session, peg_id, 0)
+            # if no event found, append a new one with only returned
+            if not updated:
+                self.key_interactions.append({
+                    "key_name": key_name,
+                    "peg_id": peg_id,
+                    "taken_timestamp": None,
+                    "returned_timestamp": returned_time,
+                })
+
+            set_key_status_by_peg_id(self.manager.db_session, peg_id, 0)
             self.ams_can.key_inserted_event = False
             self.reload_keys_from_db()
             self.update_key_widgets()
@@ -444,6 +453,8 @@ class KeyDashboardScreen(BaseScreen):
         )
 
         self._shutdown_can_and_mqtt()
+        # clear events when going to done via tap
+        self.key_interactions = []
         self.manager.current = "activity_done"
 
     # =====================================================
@@ -457,4 +468,6 @@ class KeyDashboardScreen(BaseScreen):
             cwd="/home/rock/Desktop/ams_v2",
         )
 
+        # clear events when leaving to activity screen
+        self.key_interactions = []
         self.manager.current = "activity"
