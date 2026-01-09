@@ -132,14 +132,18 @@ class KeyDashboardScreen(BaseScreen):
 
         # Start deterministic CAN sequence
         Clock.schedule_once(self._can_step_led_on_all, 1.5)
-        self.solenoid_pin = None
+        self.solenoid_pin1 = None
+        self.solenoid_pin2 = None
         # -------- DOOR UNLOCK --------
         try:
-            
-            self.solenoid_pin = mraa.Gpio(40)   # use same pin as solenoid.py
-            self.solenoid_pin.dir(mraa.DIR_OUT)
-            self.solenoid_pin.write(0)          # locked by default
-            log.info("[GPIO] Solenoid initialized on pin 32")
+
+            self.solenoid_pin1 = mraa.Gpio(40)   # use same pin as solenoid.py
+            self.solenoid_pin1.dir(mraa.DIR_OUT)
+            self.solenoid_pin2 = mraa.Gpio(41)   # use same pin as solenoid.py
+            self.solenoid_pin2.dir(mraa.DIR_OUT)
+            self.solenoid_pin1.write(1)          # locked by default
+            # self.solenoid_pin2.write(0)          # locked by default
+            log.info("[GPIO] Solenoid initialized on pins 40 and 41")
         except Exception as e:
             log.error(f"[GPIO] Failed to init solenoid pin: {e}")
 
