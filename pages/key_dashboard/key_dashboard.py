@@ -49,7 +49,7 @@ class KeyItem(ButtonBehavior, BoxLayout):
     key_name = StringProperty("")
     status_text = StringProperty("IN")
     status_color = ListProperty([0, 1, 0, 1])
-    dashboard = ObjectProperty(None)
+    dashboard = ObjectProperty(None)   # set from KeyDashboardScreen
 
     def set_status(self, status):
         self.status_text = status
@@ -57,16 +57,13 @@ class KeyItem(ButtonBehavior, BoxLayout):
         log.debug(f"[UI] Key {self.key_name} status → {status}")
 
     def on_release(self):
+        # Called when the card is tapped
         if self.dashboard:
             self.dashboard.open_done_page(
                 self.key_name,
                 self.status_text,
                 self.key_id,
             )
-    
-    def go_done(self):
-        self.manager.current = "activity_done"
-
 # =========================================================
 # DASHBOARD SCREEN
 # =========================================================
