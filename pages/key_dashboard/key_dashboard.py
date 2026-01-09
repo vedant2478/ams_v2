@@ -2,7 +2,6 @@ from datetime import datetime
 import subprocess
 import logging
 import paho.mqtt.client as mqtt
-import mraa
 
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.behaviors import ButtonBehavior
@@ -58,9 +57,8 @@ class KeyItem(ButtonBehavior, BoxLayout):
         log.debug(f"[UI] Key {self.key_name} status → {status}")
 
     def on_release(self):
-        # still available if you want manual navigation
         if self.dashboard:
-            self.dashboard.open_done_page_from_manual(
+            self.dashboard.open_done_page(
                 self.key_name,
                 self.status_text,
                 self.key_id,
@@ -93,18 +91,6 @@ class KeyDashboardScreen(BaseScreen):
         self._mqtt_client = None
 
         self.ams_can = None
-
-        # (optional) solenoid via MRAA instead of subprocess later
-        self.solenoid_pin = None
-        try:
-            # set to the correct GPIO index for your hardware
-            self.solenoid_pin = mraa.Gpio(32)
-            self.solenoid_pin.dir(mraa.DIR_OUT)
-            self.solenoid_pin.write(0)   # locked by default
-            log.info("[GPIO] Solenoid initialised on pin 32")
-        except Exception as e:
-            log.error(f"[GPIO] Failed to init solenoid pin: {e}")
-            self.solenoid_pin = None
 
     # =====================================================
     # SCREEN ENTER
@@ -147,20 +133,16 @@ class KeyDashboardScreen(BaseScreen):
         # Start deterministic CAN sequence
         Clock.schedule_once(self._can_step_led_on_all, 1.5)
 
-        # -------- DOOR INIT: keep closed/locked --------
+        # -------- DOOR INIT: keep locked --------
         self._door_open = False
         self.door_open_seconds = 0
         self.time_remaining = str(self.MAX_DOOR_TIME)
         self.progress_value = 0.0
 
-        # lock via solenoid script or GPIO
-        if self.solenoid_pin is not None:
-            self.solenoid_pin.write(0)
-        else:
-            subprocess.Popen(
-                ["sudo", "python3", "solenoid.py", "0"],
-                cwd="/home/rock/Desktop/ams_v2",
-            )
+        subprocess.Popen(
+            ["sudo", "python3", "solenoid.py", "0"],  # 0 = locked
+            cwd="/home/rock/Desktop/ams_v2",
+        )
 
         # -------- MQTT --------
         self.start_gpio_subscriber()
@@ -227,13 +209,10 @@ class KeyDashboardScreen(BaseScreen):
     def on_door_opened(self):
         log.info("[DOOR] Opened")
         # unlock solenoid
-        if self.solenoid_pin is not None:
-            self.solenoid_pin.write(1)
-        else:
-            subprocess.Popen(
-                ["sudo", "python3", "solenoid.py", "1"],
-                cwd="/home/rock/Desktop/ams_v2",
-            )
+        subprocess.Popen(
+            ["sudo", "python3", "solenoid.py", "1"],  # 1 = unlock
+            cwd="/home/rock/Desktop/ams_v2",
+        )
 
         self._door_open = True
         self.door_open_seconds = 0
@@ -254,7 +233,7 @@ class KeyDashboardScreen(BaseScreen):
         )
 
         if self.door_open_seconds >= self.MAX_DOOR_TIME:
-            # force close flow
+            # if time exceeded, treat as door closed
             self.on_door_closed()
 
     def on_door_closed(self):
@@ -266,15 +245,12 @@ class KeyDashboardScreen(BaseScreen):
             self._door_timer_event = None
 
         # lock solenoid again
-        if self.solenoid_pin is not None:
-            self.solenoid_pin.write(0)
-        else:
-            subprocess.Popen(
-                ["sudo", "python3", "solenoid.py", "0"],
-                cwd="/home/rock/Desktop/ams_v2",
-            )
+        subprocess.Popen(
+            ["sudo", "python3", "solenoid.py", "0"],
+            cwd="/home/rock/Desktop/ams_v2",
+        )
 
-        # -------- build cards list on ScreenManager --------
+        # build cards list on ScreenManager
         cards = []
         for inter in self.key_interactions:
             cards.append({
@@ -425,13 +401,19 @@ class KeyDashboardScreen(BaseScreen):
                     "IN" if key["status"] == 0 else "OUT"
                 )
 
-    # optional manual navigation using card tap
-    def open_done_page_from_manual(self, key_name: str, status: str, key_id: str):
-        self.manager.cards = [{
-            "key_name": key_name,
-            "taken_text": "",
-            "returned_text": "",
-        }]
+    # manual open if needed
+    def open_done_page(self, key_name: str, status: str, key_id: str):
+        cards = []
+        for inter in self.key_interactions:
+            cards.append({
+                "key_name": inter["key_name"],
+                "taken_text": inter["timestamp"].strftime("%Y-%m-%d %H:%M:%S")
+                              if inter["action"] == "TAKEN" else "",
+                "returned_text": inter["timestamp"].strftime("%Y-%m-%d %H:%M:%S")
+                                if inter["action"] == "RETURNED" else "",
+            })
+
+        self.manager.cards = cards
         self.manager.timestamp_text = datetime.now(TZ_INDIA).strftime(
             "%Y-%m-%d %H:%M:%S %Z"
         )
@@ -458,13 +440,9 @@ class KeyDashboardScreen(BaseScreen):
         if self._door_timer_event:
             self._door_timer_event.cancel()
 
-        # ensure door locked
-        if self.solenoid_pin is not None:
-            self.solenoid_pin.write(0)
-        else:
-            subprocess.Popen(
-                ["sudo", "python3", "solenoid.py", "0"],
-                cwd="/home/rock/Desktop/ams_v2",
-            )
+        subprocess.Popen(
+            ["sudo", "python3", "solenoid.py", "0"],
+            cwd="/home/rock/Desktop/ams_v2",
+        )
 
         self.manager.current = "activity"
