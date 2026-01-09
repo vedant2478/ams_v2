@@ -18,7 +18,7 @@ class ActivityDoneScreen(BaseScreen):
     retrieved_text = StringProperty("")
     returned_text = StringProperty("")
     timestamp_text = StringProperty("")
-    countdown = NumericProperty(5)
+    countdown = NumericProperty(30)
 
     # list of dicts: [{"key_name":..., "taken_text":..., "returned_text":...}, ...]
     cards = ListProperty([])
@@ -31,7 +31,7 @@ class ActivityDoneScreen(BaseScreen):
         self.populate_cards()
 
     def on_enter(self, *args):
-        self.countdown = 5
+        self.countdown = 30
         self._event = Clock.schedule_interval(self._tick, 1)
 
     def on_leave(self, *args):
