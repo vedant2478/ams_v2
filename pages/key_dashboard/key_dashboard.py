@@ -31,6 +31,7 @@ from csi_ams.utils.commons import (
     get_event_description,
 )
 
+
 # =========================================================
 # LOGGING
 # =========================================================
@@ -133,14 +134,14 @@ class KeyDashboardScreen(BaseScreen):
         # Start deterministic CAN sequence
         Clock.schedule_once(self._can_step_led_on_all, 1.5)
 
-        # -------- DOOR INIT: keep locked --------
+        # -------- DOOR INIT --------
         self._door_open = False
         self.door_open_seconds = 0
         self.time_remaining = str(self.MAX_DOOR_TIME)
         self.progress_value = 0.0
 
         subprocess.Popen(
-            ["sudo", "python3", "solenoid.py", "1"],  # 1 = unlocked
+            ["sudo", "python3", "solenoid.py", "1"],  # 1 = unlocked (your current logic)
             cwd="/home/rock/Desktop/ams_v2",
         )
 
@@ -208,9 +209,9 @@ class KeyDashboardScreen(BaseScreen):
     # =====================================================
     def on_door_opened(self):
         log.info("[DOOR] Opened")
-        # unlock solenoid
+
         subprocess.Popen(
-            ["sudo", "python3", "solenoid.py", "0"], 
+            ["sudo", "python3", "solenoid.py", "0"],
             cwd="/home/rock/Desktop/ams_v2",
         )
 
@@ -233,7 +234,6 @@ class KeyDashboardScreen(BaseScreen):
         )
 
         if self.door_open_seconds >= self.MAX_DOOR_TIME:
-            # if time exceeded, treat as door closed
             print("[DOOR] Max time exceeded, auto-closing door")
 
     def on_door_closed(self):
@@ -244,25 +244,53 @@ class KeyDashboardScreen(BaseScreen):
             self._door_timer_event.cancel()
             self._door_timer_event = None
 
-
         # build cards list on ScreenManager
         cards = []
         for inter in self.key_interactions:
-            cards.append({
-                "key_name": inter["key_name"],
-                "taken_text": inter["timestamp"].strftime("%Y-%m-%d %H:%M:%S")
-                              if inter["action"] == "TAKEN" else "",
-                "returned_text": inter["timestamp"].strftime("%Y-%m-%d %H:%M:%S")
-                                if inter["action"] == "RETURNED" else "",
-            })
+            if inter["action"] in ("TAKEN", "TAKEN_RETURNED"):
+                taken_ts = inter["timestamp"].strftime("%Y-%m-%d %H:%M:%S")
+                returned_ts = inter.get("returned_timestamp")
+                cards.append({
+                    "key_name": inter["key_name"],
+                    "taken_text": taken_ts,
+                    "returned_text": returned_ts.strftime("%Y-%m-%d %H:%M:%S")
+                                    if returned_ts else "",
+                })
 
         self.manager.cards = cards
         self.manager.timestamp_text = datetime.now(TZ_INDIA).strftime(
             "%Y-%m-%d %H:%M:%S %Z"
         )
 
-        # go to done page
+        # FULL CLEANUP before changing screen
+        self._shutdown_can_and_mqtt()
+
+        # now go to done page
         self.manager.current = "activity_done"
+
+    # =====================================================
+    # SHUTDOWN HELPER
+    # =====================================================
+    def _shutdown_can_and_mqtt(self):
+        if self._can_poll_event:
+            self._can_poll_event.cancel()
+            self._can_poll_event = None
+
+        if self.ams_can:
+            for strip in self.ams_can.key_lists:
+                self.ams_can.unlock_all_positions(strip)
+                self.ams_can.set_all_LED_OFF(strip)
+            self.ams_can.cleanup()
+            self.ams_can = None
+
+        if self._mqtt_client:
+            self._mqtt_client.loop_stop()
+            self._mqtt_client.disconnect()
+            self._mqtt_client = None
+
+        if self._door_timer_event:
+            self._door_timer_event.cancel()
+            self._door_timer_event = None
 
     # =====================================================
     # NAME LOOKUP
@@ -284,13 +312,14 @@ class KeyDashboardScreen(BaseScreen):
         if not self.ams_can:
             return
 
+        # KEY TAKEN
         if self.ams_can.key_taken_event:
             peg_id = self.ams_can.key_taken_id
             self.handle_key_taken_commit(peg_id)
 
             key_name = self._get_key_name_by_peg(peg_id)
+            log.debug(f"[INTERACT] TAKEN peg={peg_id} name={key_name}")
 
-            # NEW/EXISTING: append a TAKEN entry
             self.key_interactions.append({
                 "key_name": key_name,
                 "peg_id": peg_id,
@@ -305,28 +334,35 @@ class KeyDashboardScreen(BaseScreen):
             self.reload_keys_from_db()
             self.update_key_widgets()
 
+        # KEY RETURNED
         if self.ams_can.key_inserted_event:
             peg_id = self.ams_can.key_inserted_id
             key_name = self._get_key_name_by_peg(peg_id)
+            log.debug(f"[INTERACT] RETURNED peg={peg_id} name={key_name}")
+            log.debug(f"[INTERACT] Before update: {self.key_interactions}")
 
-            # ========= ONLY THIS PART CHANGED =========
-            # Try to update an existing TAKEN record for this key_name
             returned_ts = datetime.now(TZ_INDIA)
+            updated = False
+
             for inter in reversed(self.key_interactions):
-                if inter["key_name"] == key_name and inter["action"] == "TAKEN":
-                    # store returned time alongside the taken entry
+                if inter.get("peg_id") == peg_id and inter["action"] == "TAKEN":
                     inter["returned_timestamp"] = returned_ts
                     inter["action"] = "TAKEN_RETURNED"
+                    updated = True
+                    log.debug(f"[INTERACT] Updated existing TAKEN for peg={peg_id}")
                     break
-            else:
-                # no existing TAKEN found → fall back to appending a RETURNED entry
+
+            if not updated:
                 self.key_interactions.append({
                     "key_name": key_name,
                     "peg_id": peg_id,
-                    "action": "RETURNED",
+                    "action": "TAKEN_RETURNED",
                     "timestamp": returned_ts,
+                    "returned_timestamp": returned_ts,
                 })
-            # ==========================================
+                log.debug(f"[INTERACT] Appended TAKEN_RETURNED for peg={peg_id}")
+
+            log.debug(f"[INTERACT] After update: {self.key_interactions}")
 
             set_key_status_by_peg_id(
                 self.manager.db_session, peg_id, 0
@@ -430,44 +466,15 @@ class KeyDashboardScreen(BaseScreen):
         self.manager.timestamp_text = datetime.now(TZ_INDIA).strftime(
             "%Y-%m-%d %H:%M:%S %Z"
         )
-        if self._can_poll_event:
-            self._can_poll_event.cancel()
 
-        if self.ams_can:
-            for strip in self.ams_can.key_lists:
-                self.ams_can.unlock_all_positions(strip)
-                self.ams_can.set_all_LED_OFF(strip)
-            self.ams_can.cleanup()
-            self.ams_can = None
-
-        if self._mqtt_client:
-            self._mqtt_client.loop_stop()
-            self._mqtt_client.disconnect()
-
-        if self._door_timer_event:
-            self._door_timer_event.cancel()
+        self._shutdown_can_and_mqtt()
         self.manager.current = "activity_done"
 
     # =====================================================
     # EXIT CLEANUP
     # =====================================================
     def go_back(self):
-        if self._can_poll_event:
-            self._can_poll_event.cancel()
-
-        if self.ams_can:
-            for strip in self.ams_can.key_lists:
-                self.ams_can.unlock_all_positions(strip)
-                self.ams_can.set_all_LED_OFF(strip)
-            self.ams_can.cleanup()
-            self.ams_can = None
-
-        if self._mqtt_client:
-            self._mqtt_client.loop_stop()
-            self._mqtt_client.disconnect()
-
-        if self._door_timer_event:
-            self._door_timer_event.cancel()
+        self._shutdown_can_and_mqtt()
 
         subprocess.Popen(
             ["sudo", "python3", "solenoid.py", "0"],
