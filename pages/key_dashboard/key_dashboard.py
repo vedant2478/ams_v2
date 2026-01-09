@@ -331,7 +331,20 @@ class KeyDashboardScreen(BaseScreen):
                     "IN" if key["status"] == 0 else "OUT"
                 )
 
+    def open_done_page(self, key_name: str, status: str, key_id: str):
+    
+        # get the done screen from the ScreenManager
+        done_screen = self.manager.get_screen("activity_done")
 
+        # set its labels
+        done_screen.retrieved_text = f"{key_name} ({status})"
+        done_screen.returned_text = f"{key_name} ({'OUT' if status == 'IN' else 'IN'})"
+        done_screen.timestamp_text = datetime.now(TZ_INDIA).strftime(
+            "%Y-%m-%d %H:%M:%S %Z"
+        )
+
+        # switch screen
+        self.manager.current = "activity_done"
     # =====================================================
     # EXIT CLEANUP
     # =====================================================
