@@ -6,7 +6,7 @@ import logging
 from sqlalchemy.orm import sessionmaker
 
 # import your existing engine / Session / models / AMS_CAN
-from csi_ams.model import AMS_Keys, TZ_INDIA  # adjust import if needed
+from model import AMS_Keys, TZ_INDIA  # adjust import if needed
 from db import engine                # or wherever your engine is
 from amscan import AMS_CAN
 from csi_ams.utils.commons import SLOT_STATUS_KEY_NOT_PRESENT
