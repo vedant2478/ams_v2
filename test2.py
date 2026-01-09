@@ -2,20 +2,25 @@
 
 from datetime import datetime
 import logging
-
+from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 # import your existing engine / Session / models / AMS_CAN
 from model import AMS_Keys  # adjust import if needed
 from db import engine                # or wherever your engine is
 from amscan import AMS_CAN
-from csi_ams.utils.commons import SLOT_STATUS_KEY_NOT_PRESENT
+from csi_ams.utils.commons import SLOT_STATUS_KEY_NOT_PRESENT, SQLALCHEMY_DATABASE_URI
 
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
 log = logging.getLogger("TEST_SYNC")
+
+engine = create_engine(
+            SQLALCHEMY_DATABASE_URI,
+            connect_args={"check_same_thread": False},
+        )
 
 SessionLocal = sessionmaker(bind=engine)
 
