@@ -77,7 +77,7 @@ class KeyDashboardScreen(BaseScreen):
     keys_data = ListProperty([])
     key_interactions = ListProperty([])
 
-    MAX_DOOR_TIME = 30
+    MAX_DOOR_TIME = 60
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -234,7 +234,7 @@ class KeyDashboardScreen(BaseScreen):
 
         if self.door_open_seconds >= self.MAX_DOOR_TIME:
             # if time exceeded, treat as door closed
-            self.on_door_closed()
+            print("[DOOR] Max time exceeded, auto-closing door")
 
     def on_door_closed(self):
         log.info("[DOOR] Closed")
@@ -244,11 +244,6 @@ class KeyDashboardScreen(BaseScreen):
             self._door_timer_event.cancel()
             self._door_timer_event = None
 
-        # lock solenoid again
-        subprocess.Popen(
-            ["sudo", "python3", "solenoid.py", "0"],
-            cwd="/home/rock/Desktop/ams_v2",
-        )
 
         # build cards list on ScreenManager
         cards = []
