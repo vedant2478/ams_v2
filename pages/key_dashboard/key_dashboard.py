@@ -63,6 +63,9 @@ class KeyItem(ButtonBehavior, BoxLayout):
                 self.status_text,
                 self.key_id,
             )
+    
+    def go_done(self):
+        self.manager.current = "activity_done"
 
 # =========================================================
 # DASHBOARD SCREEN
@@ -331,9 +334,6 @@ class KeyDashboardScreen(BaseScreen):
                     "IN" if key["status"] == 0 else "OUT"
                 )
 
-
-    def go_done(self):
-        self.manager.current = "activity_done"
 
     # =====================================================
     # EXIT CLEANUP
