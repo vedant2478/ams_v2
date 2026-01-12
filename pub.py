@@ -2,13 +2,11 @@
 import time
 import mraa
 import paho.mqtt.client as mqtt
-from queue import Queue
 
 
 # Config
 GPIO_PIN = 32
 MQTT_TOPIC = "gpio/pin32"
-event_queue = Queue()
 
 
 # MQTT
@@ -23,30 +21,32 @@ gpio.dir(mraa.DIR_IN)
 
 
 print(f"✓ Monitoring GPIO pin {GPIO_PIN}")
+print(f"Initial pin state: {gpio.read()}\n")
 
 
-# Callback function for GPIO interrupt
-def gpio_callback(gpio_obj):
-    state = gpio_obj.read()
-    event_queue.put(state)
+# Track previous state to detect changes
+previous_state = gpio.read()
 
 
-# Setup interrupt on both edges
-gpio.isr(mraa.EDGE_BOTH, gpio_callback, gpio)
-
-
-# Keep running
+# Keep running with polling
 try:
     print("Press Ctrl+C to exit\n")
     while True:
-        if not event_queue.empty():
-            state = event_queue.get()
-            client.publish(MQTT_TOPIC, str(state), qos=1)
-            status = "OPEN" if state == 1 else "CLOSED"
-            print(f"📢 Door {status} (state={state})")
-        time.sleep(0.01)
+        current_state = gpio.read()
+        
+        # Display current state continuously
+        print(f"Pin {GPIO_PIN} state: {current_state}", end='\r')
+        
+        # Detect state change and publish
+        if current_state != previous_state:
+            client.publish(MQTT_TOPIC, str(current_state), qos=1)
+            status = "OPEN" if current_state == 1 else "CLOSED"
+            print(f"\n📢 Door {status} (state={current_state})")
+            previous_state = current_state
+        
+        time.sleep(0.1)  # Poll every 100ms
+        
 except KeyboardInterrupt:
-    print("\nStopping...")
-    gpio.isrExit()
+    print("\n\nStopping...")
     client.disconnect()
     print("✓ Cleanup completed")
