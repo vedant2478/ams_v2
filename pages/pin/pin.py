@@ -60,6 +60,9 @@ class PinScreen(BaseScreen):
 
         elif value == "ENTER":
             if len(self.pin) == self.MAX_PIN:
+                if self.manager.card_registration_mode:
+                    print("→ Card registration mode active, going to Admin screen",self.card_number)
+                    self.manager.current = "admin_home"
                 self.validate_pin()
             else:
                 self.message = f"Enter {self.MAX_PIN} digits"
