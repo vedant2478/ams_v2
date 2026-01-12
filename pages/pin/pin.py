@@ -84,7 +84,7 @@ class PinScreen(BaseScreen):
                         else:
                             print(f"✗ Registration failed: {result['error']}")
                             self.message = result['error']
-                        
+                        self.manager.card_registration_mode = False
                         # Navigate to admin screen
                         self.manager.current = "admin_home"
                     else:
