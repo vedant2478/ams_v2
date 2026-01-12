@@ -12,6 +12,7 @@ class CardScanScreen(BaseScreen):
     progress = NumericProperty(0)
     instruction_text = StringProperty("Show your card")
     time_text = StringProperty("")
+    
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -116,7 +117,11 @@ class CardScanScreen(BaseScreen):
             else:
                 print(f"✗ Card {card_no} not found in database")
                 self.instruction_text = "INVALID CARD!"
+                self.manager.card_number = str(card_no)
                 self.progress = 0
+                if self.manager.card_registration_mode:
+                    print("→ Card registration mode active, going to PIN screen")
+                    Clock.schedule_once(self.go_to_pin, 1.0)
         else:
             print("No card detected within timeout, returning to previous screen")
             self.instruction_text = "No card detected"

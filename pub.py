@@ -1,70 +1,40 @@
 #!/usr/bin/env python3
-"""
-Door Latch Monitor - MRAA + MQTT
-Monitors GPIO using MRAA library and publishes to MQTT
-"""
-
 import time
 import mraa
 import paho.mqtt.client as mqtt
 
-# =========================================================
-# CONFIGURATION
-# =========================================================
-GPIO_PIN = 32  # Physical pin number
-MQTT_BROKER = "localhost"
-MQTT_PORT = 1883
+# Config
+GPIO_PIN = 32
 MQTT_TOPIC = "gpio/pin32"
-MQTT_CLIENT_ID = "door-publisher-mraa"
 
-# =========================================================
-# SETUP MQTT
-# =========================================================
-client = mqtt.Client(MQTT_CLIENT_ID)
-
-def on_connect(client, userdata, flags, rc):
-    if rc == 0:
-        print("? Connected to MQTT broker")
-    else:
-        print(f"? Connection failed: {rc}")
-
-client.on_connect = on_connect
-client.connect(MQTT_BROKER, MQTT_PORT, 60)
+# MQTT
+client = mqtt.Client("door-publisher-mraa")
+client.connect("localhost", 1883, 60)
 client.loop_start()
 
-# =========================================================
-# SETUP GPIO (MRAA)
-# =========================================================
-# Initialize GPIO pin as input
+# GPIO with MRAA
 gpio = mraa.Gpio(GPIO_PIN)
 gpio.dir(mraa.DIR_IN)
 
-print(f"? Monitoring GPIO pin {GPIO_PIN} using MRAA")
-print(f"? Publishing to topic: {MQTT_TOPIC}")
-print("Press Ctrl+C to exit\n")
+print(f"✓ Monitoring GPIO pin {GPIO_PIN}")
 
-# =========================================================
-# MAIN LOOP
-# =========================================================
-last_state = None
+# Callback function for GPIO interrupt
+def gpio_callback(args):
+    state = gpio.read()
+    client.publish(MQTT_TOPIC, str(state), qos=1)
+    status = "OPEN" if state == 1 else "CLOSED"
+    print(f"📢 Door {status} (state={state})")
 
+# Setup interrupt on both edges
+gpio.isr(mraa.EDGE_BOTH, gpio_callback, None)
+
+# Keep running
 try:
+    print("Press Ctrl+C to exit\n")
     while True:
-        # Read GPIO pin state
-        state = gpio.read()
-        
-        # Publish if state changed
-        if state != last_state:
-            client.publish(MQTT_TOPIC, str(state), qos=1, retain=True)
-            status = "OPEN" if state == 1 else "CLOSED"
-            print(f"?? Door {status} (state={state})")
-            last_state = state
-        
-        time.sleep(0.1)  # Poll every 100ms
-        
+        time.sleep(1)
 except KeyboardInterrupt:
-    print("\n\nStopping...")
+    print("\nStopping...")
+    gpio.isrExit()
     client.disconnect()
-    print("? MQTT disconnected")
-    print("? Cleanup complete")
-
+    print("✓ Cleanup completed")
