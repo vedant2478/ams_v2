@@ -3,7 +3,7 @@
 from datetime import datetime
 import pytz
 from sqlalchemy.orm import Session
-from models import AMS_Users, AMS_Event_Log
+from model import AMS_Users, AMS_Event_Log
 
 
 class UserRegistrationService:
