@@ -7,6 +7,7 @@ from db import verify_card_pin, log_access_and_event
 from csi_ams.utils.commons import TZ_INDIA
 from csi_ams.model import *
 from model import ADMIN_PIN
+from user_registration_service import UserRegistrationService
 
 
 class PinScreen(BaseScreen):
@@ -59,13 +60,37 @@ class PinScreen(BaseScreen):
                 self.message = ""
 
         elif value == "ENTER":
-            if len(self.pin) == self.MAX_PIN:
-                if self.manager.card_registration_mode:
-                    print("→ Card registration mode active, going to Admin screen",self.card_number)
-                    self.manager.current = "admin_home"
-                self.validate_pin()
-            else:
-                self.message = f"Enter {self.MAX_PIN} digits"
+                if len(self.pin) == self.MAX_PIN:
+                    if self.manager.card_registration_mode:
+                        print("→ Card registration mode active", self.card_number)
+                        
+                        # Create the registration service
+                        reg_service = UserRegistrationService(self.manager.db_session)
+                        
+                        # Register the new user
+                        result = reg_service.create_new_user(
+                            card_number=self.card_number,
+                            pin="".join(self.pin),
+                            name=None,  # Will use default name
+                            role='user'
+                        )
+                        
+                        # Store result in manager for admin screen to access
+                        self.manager.registration_result = result
+                        
+                        if result["success"]:
+                            print(f"✓ User registered: {result['name']} (ID: {result['user_id']})")
+                            self.message = "Registration successful!"
+                        else:
+                            print(f"✗ Registration failed: {result['error']}")
+                            self.message = result['error']
+                        
+                        # Navigate to admin screen
+                        self.manager.current = "admin_home"
+                    else:
+                        self.validate_pin()
+                else:
+                    self.message = f"Enter {self.MAX_PIN} digits"
 
     # --------------------------------------------------
     # PIN VALIDATION
