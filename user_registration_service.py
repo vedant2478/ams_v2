@@ -3,7 +3,7 @@
 from datetime import datetime
 import pytz
 from sqlalchemy.orm import Session
-from model import AMS_Users, AMS_Event_Log
+from models import AMS_Users, AMS_Event_Log
 
 
 class UserRegistrationService:
@@ -74,20 +74,23 @@ class UserRegistrationService:
             validity_from = datetime.now(self.TZ_INDIA)
             validity_to = datetime.now(self.TZ_INDIA).replace(year=validity_from.year + 1)
             
-            # Create new user
+            # Get default roleId (use 1 as default or fetch from database)
+            default_role_id = kwargs.get('roleId', 1)
+            
+            # Create new user with required fields
             new_user = AMS_Users(
                 cardNo=str(card_number),
                 pinCode=str(pin),
                 name=kwargs.get('name', f'User_{card_number}'),
-                email=kwargs.get('email', None),
-                mobileNumber=kwargs.get('mobileNumber', None),
+                email=kwargs.get('email', ''),
+                mobileNumber=kwargs.get('mobileNumber', ''),
                 validityFrom=validity_from,
                 validityTo=validity_to,
-                roleId=kwargs.get('roleId', None),
+                roleId=default_role_id,  # Required field, default to 1
                 lastLoginDate=None,
                 isActive=kwargs.get('isActive', '1'),  # String '1' for active
                 isActiveInt=kwargs.get('isActiveInt', 1),  # Integer 1 for active
-                cabinetId=kwargs.get('cabinetId', None),
+                cabinetId=kwargs.get('cabinetId', 1),  # Set default cabinet ID
                 createdAt=datetime.now(self.TZ_INDIA),
                 updatedAt=datetime.now(self.TZ_INDIA),
                 deletedAt=None,
