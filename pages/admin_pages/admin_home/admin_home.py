@@ -21,7 +21,8 @@ class AdminScreen(Screen):
 
     def open_card_registration(self):
         print("[ADMIN] Card Registration selected")
-        # CardRegistrationService will go here later
+        self.manager.card_registration_mode = True
+        self.manager.current = "card_scan"
 
     def go_home(self):
         print("[ADMIN] Go Home")

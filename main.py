@@ -92,6 +92,8 @@ class MainApp(App):
         sm.activity_info = None
         sm.key_interactions = []
         sm.timestamp_text = ""
+        sm.card_registration_mode = False
+        sm.card_number = None
 
         # -------------------------------------------------
         # REGISTER SCREENS
