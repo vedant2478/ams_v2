@@ -86,7 +86,7 @@ class PinScreen(BaseScreen):
                             self.message = result['error']
                         self.manager.card_registration_mode = False
                         # Navigate to admin screen
-                        self.manager.current = "admin_home"
+                        self.manager.current = "home"
                     else:
                         self.validate_pin()
                 else:
