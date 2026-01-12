@@ -59,7 +59,7 @@ class UserRegistrationService:
             
             # Check if PIN already exists
             existing_pin = self.session.query(AMS_Users).filter(
-                AMS_Users.pinNo == str(pin),
+                AMS_Users.pinCode == str(pin),
                 AMS_Users.deletedAt == None
             ).first()
             
@@ -70,17 +70,28 @@ class UserRegistrationService:
                     "error": "This PIN is already in use"
                 }
             
+            # Set default validity dates (1 year from now)
+            validity_from = datetime.now(self.TZ_INDIA)
+            validity_to = datetime.now(self.TZ_INDIA).replace(year=validity_from.year + 1)
+            
             # Create new user
             new_user = AMS_Users(
                 cardNo=str(card_number),
-                pinNo=str(pin),
+                pinCode=str(pin),
                 name=kwargs.get('name', f'User_{card_number}'),
                 email=kwargs.get('email', None),
-                role=kwargs.get('role', 'user'),
-                isActive=kwargs.get('isActive', True),
+                mobileNumber=kwargs.get('mobileNumber', None),
+                validityFrom=validity_from,
+                validityTo=validity_to,
+                roleId=kwargs.get('roleId', None),
+                lastLoginDate=None,
+                isActive=kwargs.get('isActive', '1'),  # String '1' for active
+                isActiveInt=kwargs.get('isActiveInt', 1),  # Integer 1 for active
+                cabinetId=kwargs.get('cabinetId', None),
                 createdAt=datetime.now(self.TZ_INDIA),
                 updatedAt=datetime.now(self.TZ_INDIA),
-                deletedAt=None
+                deletedAt=None,
+                fpTemplate=None
             )
             
             self.session.add(new_user)
@@ -95,7 +106,7 @@ class UserRegistrationService:
                 loginType="CARD_PIN",
                 access_log_id=None,
                 timeStamp=datetime.now(self.TZ_INDIA),
-                event_type="EVENT",
+                event_type=1,  # EVENT_TYPE_EVENT
                 eventDesc=f"New user registered - Card: {card_number}",
                 is_posted=0
             )
@@ -116,6 +127,8 @@ class UserRegistrationService:
         except Exception as e:
             self.session.rollback()
             print(f"[USER_REG] ✗ Registration failed: {e}")
+            import traceback
+            traceback.print_exc()
             
             # Log failure event
             try:
@@ -127,15 +140,15 @@ class UserRegistrationService:
                     loginType="CARD_PIN",
                     access_log_id=None,
                     timeStamp=datetime.now(self.TZ_INDIA),
-                    event_type="ALARM",
+                    event_type=2,  # EVENT_TYPE_ALARM
                     eventDesc=f"User registration failed - Card: {card_number}, Error: {str(e)}",
                     is_posted=0
                 )
                 
                 self.session.add(ams_event_log)
                 self.session.commit()
-            except:
-                pass
+            except Exception as log_error:
+                print(f"[USER_REG] Failed to log error: {log_error}")
             
             return {
                 "success": False,
