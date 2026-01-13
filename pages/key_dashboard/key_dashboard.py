@@ -8,6 +8,8 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.popup import Popup
 from kivy.uix.label import Label
+from kivy.uix.progressbar import ProgressBar
+from kivy.graphics import Color, RoundedRectangle
 from kivy.properties import (
     StringProperty,
     ListProperty,
@@ -45,32 +47,86 @@ logging.basicConfig(
 log = logging.getLogger("KEY_DASHBOARD")
 
 # =========================================================
-# LOADING POPUP
+# LOADING POPUP - IMPROVED UI
 # =========================================================
 class SolenoidLoadingPopup(Popup):
-    """Loading popup shown while solenoid is opening"""
+    """Beautiful loading popup shown while door is opening"""
     
     def __init__(self, **kwargs):
-        content = BoxLayout(orientation='vertical', padding=20, spacing=15)
+        # Main container with gradient background
+        content = BoxLayout(orientation='vertical', padding=40, spacing=20)
         
-        # Loading message
+        # Title
+        title_label = Label(
+            text="[b]OPENING DOOR[/b]",
+            markup=True,
+            font_size='28sp',
+            size_hint_y=0.3,
+            color=(0.2, 0.8, 0.4, 1)  # Green color
+        )
+        content.add_widget(title_label)
+        
+        # Progress bar (indeterminate animation)
+        progress = ProgressBar(
+            max=100,
+            size_hint_y=0.15
+        )
+        progress.value = 50
+        content.add_widget(progress)
+        
+        # Animate progress bar
+        def animate_progress(dt):
+            progress.value = (progress.value + 3) % 100
+        Clock.schedule_interval(animate_progress, 0.05)
+        
+        # Message
         message = Label(
-            text="Opening Door...\nPlease wait",
+            text="Please wait while the system\nprepares access to your keys...",
             font_size='18sp',
-            color=(0.85, 0.92, 1, 1),
-            halign='center'
+            color=(0.7, 0.7, 0.7, 1),
+            halign='center',
+            size_hint_y=0.3
         )
         content.add_widget(message)
+        
+        # Status message
+        self.status_label = Label(
+            text="Initializing...",
+            font_size='14sp',
+            color=(0.5, 0.5, 0.5, 1),
+            italic=True,
+            size_hint_y=0.25
+        )
+        content.add_widget(self.status_label)
         
         super().__init__(
             title='',
             content=content,
-            size_hint=(0.5, 0.3),
+            size_hint=(0.6, 0.5),
             auto_dismiss=False,
             separator_height=0,
             background='',
             **kwargs
         )
+        
+        # Add rounded background with canvas
+        with self.content.canvas.before:
+            Color(0.15, 0.15, 0.18, 0.95)  # Dark background
+            self.rect = RoundedRectangle(
+                pos=self.content.pos,
+                size=self.content.size,
+                radius=[20]
+            )
+        
+        self.content.bind(pos=self._update_rect, size=self._update_rect)
+    
+    def _update_rect(self, *args):
+        self.rect.pos = self.content.pos
+        self.rect.size = self.content.size
+    
+    def update_status(self, status_text):
+        """Update status message"""
+        self.status_label.text = status_text
 
 # =========================================================
 # KEY ITEM
@@ -145,6 +201,9 @@ class KeyDashboardScreen(BaseScreen):
         try:
             import time
             
+            # Update status
+            Clock.schedule_once(lambda dt: self._update_popup_status("Connecting to hardware..."), 0)
+            
             session = self.manager.db_session
 
             # -------- ACCESS LOG --------
@@ -169,12 +228,14 @@ class KeyDashboardScreen(BaseScreen):
             Clock.schedule_once(lambda dt: self._update_activity_ui(), 0)
 
             # -------- CAN INIT --------
+            Clock.schedule_once(lambda dt: self._update_popup_status("Initializing CAN bus..."), 0)
             log.info("[CAN] Initializing AMS_CAN")
             self.ams_can = AMS_CAN()
             
             # Auto-detect strips
             time.sleep(6)  # Wait for CAN to settle
             
+            Clock.schedule_once(lambda dt: self._update_popup_status("Detecting key strips..."), 0)
             log.info("[CAN] Detecting key strips...")
             self.ams_can.get_version_number(1)
             self.ams_can.get_version_number(2)
@@ -183,6 +244,7 @@ class KeyDashboardScreen(BaseScreen):
             log.info(f"[CAN] Detected {len(self.ams_can.key_lists)} strip(s)")
 
             # -------- HARDWARE SYNC --------
+            Clock.schedule_once(lambda dt: self._update_popup_status("Syncing hardware state..."), 0)
             log.info("[SYNC] Starting hardware sync to database...")
             
             sync_success = sync_hardware_to_db(session, self.ams_can)
@@ -197,6 +259,7 @@ class KeyDashboardScreen(BaseScreen):
             time.sleep(0.5)
             session.expire_all()
             
+            Clock.schedule_once(lambda dt: self._update_popup_status("Loading keys..."), 0)
             log.info("[SYNC] Reloading keys from database...")
             
             # Reload keys from DB
@@ -211,11 +274,17 @@ class KeyDashboardScreen(BaseScreen):
                 )
             
             # Schedule UI updates and CAN sequence on main thread
+            Clock.schedule_once(lambda dt: self._update_popup_status("Preparing access..."), 0)
             Clock.schedule_once(lambda dt: self._finalize_initialization(), 0)
             
         except Exception as e:
             log.error(f"[INIT] Hardware initialization failed: {e}")
             Clock.schedule_once(lambda dt: self._dismiss_loading_popup(), 0)
+
+    def _update_popup_status(self, status_text):
+        """Update popup status message"""
+        if self._loading_popup:
+            self._loading_popup.update_status(status_text)
 
     def _update_activity_ui(self):
         """Update activity info in UI (runs on main thread)"""
@@ -278,6 +347,7 @@ class KeyDashboardScreen(BaseScreen):
         if not self._screen_active:
             return
         log.info("[CAN-1] LED ON (ALL)")
+        self._update_popup_status("Activating LEDs...")
         for strip in self.ams_can.key_lists:
             self.ams_can.set_all_LED_ON(strip, False)
         Clock.schedule_once(self._can_step_lock_all, 1.0)
@@ -286,6 +356,7 @@ class KeyDashboardScreen(BaseScreen):
         if not self._screen_active:
             return
         log.info("[CAN-2] LOCK ALL KEYS")
+        self._update_popup_status("Securing locks...")
         for strip in self.ams_can.key_lists:
             self.ams_can.lock_all_positions(strip)
         Clock.schedule_once(self._can_step_led_off_all, 1.0)
@@ -294,6 +365,7 @@ class KeyDashboardScreen(BaseScreen):
         if not self._screen_active:
             return
         log.info("[CAN-3] LED OFF (ALL)")
+        self._update_popup_status("Configuring access...")
         for strip in self.ams_can.key_lists:
             self.ams_can.set_all_LED_OFF(strip)
         Clock.schedule_once(self._can_step_unlock_activity, 1.0)
@@ -302,16 +374,22 @@ class KeyDashboardScreen(BaseScreen):
         if not self._screen_active:
             return
         log.info("[CAN-4] UNLOCK ACTIVITY KEYS")
+        self._update_popup_status("Unlocking authorized keys...")
         for key in self.keys_data:
             strip = int(key["strip"])
             pos = int(key["position"])
             self.ams_can.unlock_single_key(strip, pos)
             self.ams_can.set_single_LED_state(strip, pos, CAN_LED_STATE_ON)
         
+        # ← CHANGED: Update status and activate solenoid
+        self._update_popup_status("Opening door lock...")
         subprocess.Popen(
             ["sudo", "python3", "solenoid.py", "1"],
             cwd="/home/rock/Desktop/ams_v2",
         )
+        
+        # ← CHANGED: Dismiss popup after solenoid activation (1 second delay)
+        Clock.schedule_once(lambda dt: self._dismiss_loading_popup(), 1.0)
 
     # =====================================================
     # MQTT GPIO
@@ -347,8 +425,7 @@ class KeyDashboardScreen(BaseScreen):
         
         log.info("[DOOR] Opened")
 
-        # Dismiss loading popup when door opens
-        self._dismiss_loading_popup()
+        # ← REMOVED: Don't dismiss popup here (already dismissed after solenoid activation)
 
         subprocess.Popen(
             ["sudo", "python3", "solenoid.py", "0"],
@@ -415,7 +492,7 @@ class KeyDashboardScreen(BaseScreen):
         )
 
         self._screen_active = False
-        self._dismiss_loading_popup()
+        self._dismiss_loading_popup()  # Safety: ensure it's dismissed
         self._shutdown_can_and_mqtt()
         self.key_interactions = []
         self.manager.current = "activity_done"
