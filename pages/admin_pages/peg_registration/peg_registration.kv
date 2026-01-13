@@ -1,0 +1,170 @@
+<PegScanScreen>:
+    FloatLayout:
+
+        # ===== Header =====
+        Header:
+            pos_hint: {"top": 1}
+            status_text: "BUSY"
+            site_text: app.site_name if hasattr(app, 'site_name') else "SITE"
+            time_text: root.time_text
+    
+        BoxLayout:
+            orientation: "horizontal"
+            size_hint_y: None
+            height: "48dp"
+            padding: "16dp", 0
+            pos_hint: {"top": .95}
+
+            Button:
+                text: "Cancel"
+                size_hint_x: None
+                width: "100dp"
+                background_normal: ""
+                background_color: 0, 0, 0, 0
+                color: 0.90, 0.95, 1, 1
+                font_size: "16sp"
+                on_release: root.cancel_scan()
+                disabled: root.scan_in_progress
+
+            Widget:
+        
+        # ===== Main Content =====
+        BoxLayout:
+            orientation: "vertical"
+            spacing: "26dp"
+            size_hint: None, None
+            size: "500dp", "520dp"
+            pos_hint: {"center_x": 0.5, "center_y": 0.55}
+
+            Label:
+                text: "Peg Registration"
+                font_size: "24sp"
+                color: 0.9, 0.95, 1, 1
+                size_hint_y: None
+                height: "40dp"
+                halign: "center"
+                valign: "middle"
+                text_size: self.size
+
+            # ===== Icon (use existing card scan icon or generic) =====
+            Image:
+                source: "assets/icons/card_scan_frame.png"
+                size_hint: None, None
+                size: "180dp", "180dp"
+                fit_mode: "contain"
+                pos_hint: {"center_x": 0.5}
+
+            # ===== Progress Bar =====
+            BoxLayout:
+                size_hint: None, None
+                size: "360dp", "14dp"
+                pos_hint: {"center_x": 0.5}
+                canvas.before:
+                    Color:
+                        rgba: 0.1, 0.2, 0.3, 0.5
+                    RoundedRectangle:
+                        pos: self.pos
+                        size: self.size
+                        radius: [7]
+
+                Widget:
+                    size_hint_x: root.progress / 100.0
+                    size_hint_y: 1
+                    canvas:
+                        Color:
+                            rgba: (0.29, 0.87, 0.5, 1) if root.scan_state == "complete" else (1, 0.3, 0.3, 1) if root.scan_state == "error" else (0.18, 0.36, 0.52, 1)
+                        RoundedRectangle:
+                            pos: self.pos
+                            size: self.size
+                            radius: [7]
+
+            # ===== Status Text =====
+            Label:
+                text: root.status_text
+                font_size: "18sp"
+                color: (0.29, 0.87, 0.5, 1) if root.scan_state == "complete" else (1, 0.3, 0.3, 1) if root.scan_state == "error" else (0.85, 0.92, 1, 1)
+                bold: True
+                size_hint_y: None
+                height: "30dp"
+                halign: "center"
+                valign: "middle"
+                text_size: self.size
+
+            # ===== Instruction Text =====
+            Label:
+                text: root.instruction_text
+                font_size: "14sp"
+                color: 0.7, 0.8, 0.9, 1
+                size_hint_y: None
+                height: "50dp"
+                halign: "center"
+                valign: "middle"
+                text_size: self.size
+
+            # ===== Done Button =====
+            Button:
+                text: "Done"
+                size_hint: None, None
+                size: "200dp", "50dp"
+                pos_hint: {"center_x": 0.5}
+                background_normal: ""
+                background_color: (0.29, 0.87, 0.5, 1) if root.scan_state == "complete" else (0.5, 0.5, 0.5, 0.3)
+                color: 1, 1, 1, 1
+                font_size: "18sp"
+                bold: True
+                disabled: root.scan_state != "complete"
+                opacity: 1 if root.scan_state == "complete" else 0.3
+                on_release: root.go_home()
+
+        # ===== Footer =====
+        Footer:
+            pos_hint: {"y": 0}
+            version_text: "Version: V1.1"
+
+
+<PegScanCompletePopup>:
+    size_hint: 0.6, 0.4
+    auto_dismiss: False
+    
+    BoxLayout:
+        orientation: "vertical"
+        padding: "20dp"
+        spacing: "20dp"
+        canvas.before:
+            Color:
+                rgba: 0.12, 0.18, 0.25, 1
+            RoundedRectangle:
+                pos: self.pos
+                size: self.size
+                radius: [10]
+
+        Label:
+            text: "✓ Success"
+            font_size: "32sp"
+            color: 0.29, 0.87, 0.5, 1
+            bold: True
+            size_hint_y: None
+            height: "60dp"
+            halign: "center"
+
+        Label:
+            text: root.message_text
+            font_size: "16sp"
+            color: 0.85, 0.92, 1, 1
+            size_hint_y: None
+            height: "60dp"
+            halign: "center"
+            valign: "middle"
+            text_size: self.size
+
+        Button:
+            text: "OK"
+            size_hint: None, None
+            size: "150dp", "50dp"
+            pos_hint: {"center_x": 0.5}
+            background_normal: ""
+            background_color: 0.18, 0.36, 0.52, 1
+            color: 1, 1, 1, 1
+            font_size: "18sp"
+            bold: True
+            on_release: root.dismiss()

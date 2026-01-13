@@ -42,6 +42,7 @@ Builder.load_file(os.path.join(BASE_DIR, "pages/pin/pin.kv"))
 Builder.load_file(os.path.join(BASE_DIR, "pages/activity/activity.kv"))
 Builder.load_file(os.path.join(BASE_DIR, "pages/key_dashboard/key_dashboard.kv"))
 Builder.load_file(os.path.join(BASE_DIR, "pages/activity_done/activity_done.kv"))
+Builder.load_file(os.path.join(BASE_DIR, "pages/admin_pages/peg_registration/peg_registration.kv"))
 Builder.load_file(
     os.path.join(BASE_DIR, "pages/admin_pages/admin_home/admin_home.kv")
 )
@@ -55,6 +56,7 @@ from pages.activity.activity import ActivityCodeScreen
 from pages.key_dashboard.key_dashboard import KeyDashboardScreen
 from pages.activity_done.activity_done import ActivityDoneScreen
 from pages.admin_pages.admin_home.admin_home import AdminScreen
+from pages.admin_pages.peg_registration.peg_registration import PegScanScreen
 
 
 # ================= MAIN APP =================
@@ -107,6 +109,7 @@ class MainApp(App):
         sm.add_widget(KeyDashboardScreen(name="key_dashboard"))
         sm.add_widget(ActivityDoneScreen(name="activity_done"))
         sm.add_widget(AdminScreen(name="admin_home"))
+        sm.add_widget(PegScanScreen(name="peg_scan"))
 
         sm.current = "home"
         return sm

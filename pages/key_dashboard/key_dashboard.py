@@ -16,7 +16,7 @@ from kivy.clock import Clock
 from components.base_screen import BaseScreen
 from db import get_keys_for_activity, set_key_status_by_peg_id
 from amscan import AMS_CAN, CAN_LED_STATE_ON
-from test2 import sync_hardware_to_db  # Import the sync function
+from hardware_sync import sync_hardware_to_db 
 
 from csi_ams.model import (
     AMS_Keys,
