@@ -5,6 +5,8 @@ import paho.mqtt.client as mqtt
 
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.behaviors import ButtonBehavior
+from kivy.uix.popup import Popup
+from kivy.uix.label import Label
 from kivy.properties import (
     StringProperty,
     ListProperty,
@@ -40,6 +42,34 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
 log = logging.getLogger("KEY_DASHBOARD")
+
+# =========================================================
+# LOADING POPUP
+# =========================================================
+class SolenoidLoadingPopup(Popup):
+    """Loading popup shown while solenoid is opening"""
+    
+    def __init__(self, **kwargs):
+        content = BoxLayout(orientation='vertical', padding=20, spacing=15)
+        
+        # Loading message
+        message = Label(
+            text="Opening Door...\nPlease wait",
+            font_size='18sp',
+            color=(0.85, 0.92, 1, 1),
+            halign='center'
+        )
+        content.add_widget(message)
+        
+        super().__init__(
+            title='',
+            content=content,
+            size_hint=(0.5, 0.3),
+            auto_dismiss=False,
+            separator_height=0,
+            background='',
+            **kwargs
+        )
 
 # =========================================================
 # KEY ITEM
@@ -90,7 +120,8 @@ class KeyDashboardScreen(BaseScreen):
         self._mqtt_client = None
 
         self.ams_can = None
-        self._screen_active = False  # ← ADDED: Track if screen should respond to events
+        self._screen_active = False
+        self._loading_popup = None  # ← ADDED: Track loading popup
 
     # =====================================================
     # SCREEN LIFECYCLE
@@ -98,7 +129,7 @@ class KeyDashboardScreen(BaseScreen):
     def on_enter(self, *args):
         log.info("[ENTER] KeyDashboard entered")
         
-        self._screen_active = True  # ← ADDED: Activate screen
+        self._screen_active = True
 
         session = self.manager.db_session
 
@@ -194,14 +225,34 @@ class KeyDashboardScreen(BaseScreen):
     def on_leave(self, *args):
         """Called when leaving the screen"""
         log.info("[LEAVE] KeyDashboard leaving")
-        self._screen_active = False  # ← ADDED: Deactivate screen
+        self._screen_active = False
+        self._dismiss_loading_popup()  # ← ADDED: Dismiss popup on leave
         self._shutdown_can_and_mqtt()
+
+    # =====================================================
+    # LOADING POPUP HELPERS
+    # =====================================================
+    def _show_loading_popup(self):
+        """Show loading popup while solenoid opens"""
+        if self._loading_popup:
+            return  # Already showing
+        
+        log.info("[POPUP] Showing solenoid loading popup")
+        self._loading_popup = SolenoidLoadingPopup()
+        self._loading_popup.open()
+
+    def _dismiss_loading_popup(self):
+        """Dismiss loading popup"""
+        if self._loading_popup:
+            log.info("[POPUP] Dismissing loading popup")
+            self._loading_popup.dismiss()
+            self._loading_popup = None
 
     # =====================================================
     # CAN SEQUENCE
     # =====================================================
     def _can_step_led_on_all(self, dt):
-        if not self._screen_active:  # ← ADDED: Guard
+        if not self._screen_active:
             return
         log.info("[CAN-1] LED ON (ALL)")
         for strip in self.ams_can.key_lists:
@@ -209,7 +260,7 @@ class KeyDashboardScreen(BaseScreen):
         Clock.schedule_once(self._can_step_lock_all, 1.0)
 
     def _can_step_lock_all(self, dt):
-        if not self._screen_active:  # ← ADDED: Guard
+        if not self._screen_active:
             return
         log.info("[CAN-2] LOCK ALL KEYS")
         for strip in self.ams_can.key_lists:
@@ -217,7 +268,7 @@ class KeyDashboardScreen(BaseScreen):
         Clock.schedule_once(self._can_step_led_off_all, 1.0)
 
     def _can_step_led_off_all(self, dt):
-        if not self._screen_active:  # ← ADDED: Guard
+        if not self._screen_active:
             return
         log.info("[CAN-3] LED OFF (ALL)")
         for strip in self.ams_can.key_lists:
@@ -225,7 +276,7 @@ class KeyDashboardScreen(BaseScreen):
         Clock.schedule_once(self._can_step_unlock_activity, 1.0)
 
     def _can_step_unlock_activity(self, dt):
-        if not self._screen_active:  # ← ADDED: Guard
+        if not self._screen_active:
             return
         log.info("[CAN-4] UNLOCK ACTIVITY KEYS")
         for key in self.keys_data:
@@ -233,6 +284,10 @@ class KeyDashboardScreen(BaseScreen):
             pos = int(key["position"])
             self.ams_can.unlock_single_key(strip, pos)
             self.ams_can.set_single_LED_state(strip, pos, CAN_LED_STATE_ON)
+        
+        # ← ADDED: Show loading popup before opening solenoid
+        self._show_loading_popup()
+        
         subprocess.Popen(
             ["sudo", "python3", "solenoid.py", "1"],
             cwd="/home/rock/Desktop/ams_v2",
@@ -252,7 +307,6 @@ class KeyDashboardScreen(BaseScreen):
         client.subscribe("gpio/pin32")
 
     def on_mqtt_message(self, client, userdata, msg):
-        # ← ADDED: Guard against events when screen inactive
         if not self._screen_active:
             log.debug("[MQTT] Ignoring door event - screen not active")
             return
@@ -267,12 +321,14 @@ class KeyDashboardScreen(BaseScreen):
     # DOOR EVENTS
     # =====================================================
     def on_door_opened(self):
-        # ← ADDED: Guard
         if not self._screen_active:
             log.debug("[DOOR] Ignoring open event - screen not active")
             return
         
         log.info("[DOOR] Opened")
+
+        # ← ADDED: Dismiss loading popup when door opens
+        self._dismiss_loading_popup()
 
         subprocess.Popen(
             ["sudo", "python3", "solenoid.py", "0"],
@@ -289,7 +345,6 @@ class KeyDashboardScreen(BaseScreen):
         )
 
     def door_timer_tick(self, dt):
-        # ← ADDED: Guard
         if not self._screen_active:
             return
         
@@ -305,7 +360,6 @@ class KeyDashboardScreen(BaseScreen):
             log.warning("[DOOR] Max time exceeded")
 
     def on_door_closed(self):
-        # ← ADDED: Guard
         if not self._screen_active:
             log.debug("[DOOR] Ignoring close event - screen not active")
             return
@@ -332,9 +386,8 @@ class KeyDashboardScreen(BaseScreen):
             "%Y-%m-%d %H:%M:%S %Z"
         )
 
-        # ← ADDED: Deactivate BEFORE cleanup to prevent race conditions
         self._screen_active = False
-        
+        self._dismiss_loading_popup()  # ← ADDED: Ensure popup dismissed
         self._shutdown_can_and_mqtt()
         self.key_interactions = []
         self.manager.current = "activity_done"
@@ -394,7 +447,7 @@ class KeyDashboardScreen(BaseScreen):
     # CAN POLLING
     # =====================================================
     def poll_can_events(self, dt):
-        if not self.ams_can or not self._screen_active:  # ← ADDED: Guard
+        if not self.ams_can or not self._screen_active:
             return
 
         # KEY TAKEN (removed)
@@ -536,9 +589,8 @@ class KeyDashboardScreen(BaseScreen):
             "%Y-%m-%d %H:%M:%S %Z"
         )
 
-        # ← ADDED: Deactivate before navigation
         self._screen_active = False
-        
+        self._dismiss_loading_popup()  # ← ADDED: Ensure popup dismissed
         self._shutdown_can_and_mqtt()
         self.key_interactions = []
         self.manager.current = "activity_done"
@@ -549,9 +601,8 @@ class KeyDashboardScreen(BaseScreen):
     def go_back(self):
         log.info("[GO_BACK] User cancelled")
         
-        # ← ADDED: Deactivate screen
         self._screen_active = False
-        
+        self._dismiss_loading_popup()  # ← ADDED: Dismiss popup on cancel
         self._shutdown_can_and_mqtt()
 
         subprocess.Popen(
