@@ -116,7 +116,11 @@ class CardScanScreen(BaseScreen):
                 Clock.schedule_once(self.go_to_pin, 0.5)
             else:
                 print(f"✗ Card {card_no} not found in database")
-                self.instruction_text = "INVALID CARD!"
+                if self.manager.card_registration_mode:
+                    self.instruction_text = "NEW CARD!"
+                    self.manager.new_card = True
+                else:
+                    self.instruction_text = "INVALID CARD!"
                 self.manager.card_number = str(card_no)
                 self.progress = 0
                 if self.manager.card_registration_mode:

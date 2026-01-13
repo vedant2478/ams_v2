@@ -3,7 +3,7 @@ from components.base_screen import BaseScreen
 
 from datetime import datetime
 
-from db import verify_card_pin, log_access_and_event
+from db import verify_card_pin, log_access_and_event, verify_or_assign_card_pin
 from csi_ams.utils.commons import TZ_INDIA
 from csi_ams.model import *
 from model import ADMIN_PIN
@@ -101,42 +101,71 @@ class PinScreen(BaseScreen):
 
         # ---------------- SAFETY ----------------
         if entered_pin == ADMIN_PIN:
-                self.manager.current = "admin_home"
+            self.manager.current = "admin_home"
+            return
+
         if not self.card_number:
             self.message = "ERROR: No card"
             self.reset_pin()
             return
 
         # ---------------- VERIFY PIN ----------------
-        is_valid = verify_card_pin(
-            session=session,
-            card_number=self.card_number,
-            pin=entered_pin,
-        )
-
-
-        # ❌ PIN FAILED
-        if not is_valid:
-            self.message = "INCORRECT PIN"
-            self.reset_pin()
-
-
-            log_access_and_event(
+        if self.manager.new_card:
+            ok, reason = verify_or_assign_card_pin(
                 session=session,
-                event_id=EVENT_LOGIN_FAILED,
-                event_type=EVENT_TYPE_ALARM,
-                auth_mode=self.manager.auth_mode,
-                login_type=self.manager.final_auth_mode,
-                user_id=None,
-                access_log_updates={
-                    "signInFailed": 1,
-                    "signInSucceed": 0,
-                },
+                card_number=self.card_number,
+                pin=entered_pin,
             )
-            return
 
-        # ✅ PIN SUCCESS
-        self.message = "PIN VERIFIED"
+            if not ok:
+                if reason == "no_pin":
+                    # no such PIN in DB
+                    self.message = "No PIN assigned"
+                elif reason == "conflict":
+                    # PIN belongs to another card already
+                    self.message = "Update card"
+                else:
+                    self.message = "PIN error"
+                self.reset_pin()
+                return
+
+            # success path for new card
+            if reason == "ok_assigned":
+                print("User added with this card")
+                self.message = "User added"
+            elif reason == "ok_existing":
+                # PIN already had this card, treat as normal success
+                self.message = "PIN VERIFIED"
+
+        else:
+            # existing card flow: old verify logic
+            is_valid = verify_card_pin(
+                session=session,
+                card_number=self.card_number,
+                pin=entered_pin,
+            )
+
+            if not is_valid:
+                self.message = "INCORRECT PIN"
+                self.reset_pin()
+
+                log_access_and_event(
+                    session=session,
+                    event_id=EVENT_LOGIN_FAILED,
+                    event_type=EVENT_TYPE_ALARM,
+                    auth_mode=self.manager.auth_mode,
+                    login_type=self.manager.final_auth_mode,
+                    user_id=None,
+                    access_log_updates={
+                        "signInFailed": 1,
+                        "signInSucceed": 0,
+                    },
+                )
+                return
+
+            self.message = "PIN VERIFIED"
+
+        # ✅ common success path (both new_card and existing)
         print(f"✓ PIN correct for card {self.card_number}")
 
         user_id = self.card_info["id"]
@@ -155,10 +184,8 @@ class PinScreen(BaseScreen):
             },
         )
 
-        # Save access log for next screens
         self.manager.access_log_id = result["access_log_id"]
 
-        # ---------------- MOVE TO ACTIVITY ----------------
         self.reset_pin()
         self.manager.transition.direction = "left"
         self.manager.current = "activity"
