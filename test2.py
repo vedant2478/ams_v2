@@ -1,156 +1,117 @@
-# test_sync_hardware.py
-
-from datetime import datetime
-import logging
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-
-# import your existing engine / Session / models / AMS_CAN
-from model import AMS_Keys  # adjust import if needed
-from db import engine                # or wherever your engine is
-from amscan import AMS_CAN
-from csi_ams.utils.commons import SLOT_STATUS_KEY_NOT_PRESENT, SQLALCHEMY_DATABASE_URI
-
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-)
-log = logging.getLogger("TEST_SYNC")
-
-engine = create_engine(
-            SQLALCHEMY_DATABASE_URI,
-            connect_args={"check_same_thread": False},
-        )
-
-SessionLocal = sessionmaker(bind=engine)
-
-
-def sync_hardware_state_to_db(session, ams_can):
+def sync_hardware_to_db(session):
     """
-    Standalone version: just CAN → DB sync, no UI, no Kivy.
+    Automatically detect all key strips, check all positions, 
+    and sync status to database.
+    Just call this with a session and it handles everything.
+    
+    Usage:
+        from test_key_status import sync_hardware_to_db
+        sync_hardware_to_db(session)
     """
-    if not ams_can:
-        log.warning("[SYNC] AMS_CAN not initialised, skipping hardware sync")
-        return
-
-    log.info("[SYNC] Starting hardware → DB sync (standalone tester)")
-
-    # Reset only keyStatus; keep mapping so we know which key belongs to which slot.
-    updated = session.query(AMS_Keys).update(
-        {"keyStatus": SLOT_STATUS_KEY_NOT_PRESENT}
-    )
-    log.info(f"[SYNC] Reset {updated} keys in DB to OUT (status only)")
-
-    if not ams_can.key_lists:
-        log.warning("[SYNC] ams_can.key_lists is empty; no strips detected")
-    else:
-        log.info(f"[SYNC] Scanning strips: {ams_can.key_lists}")
-
-    present_count = 0
-
-    # Helper: (strip,pos) -> AMS_Keys row; dynamic + static mapping
-    def get_key_for_slot(strip_id, pos):
-        # 1) dynamic mapping if already set
-        row = session.query(AMS_Keys).filter(
-            AMS_Keys.current_pos_strip_id == strip_id,
-            AMS_Keys.current_pos_slot_no == pos,
-        ).first()
-        if row:
-            return row
-
-        # 2) fallback: static cabinet layout (door/strip/position)
-        return session.query(AMS_Keys).filter(
-            AMS_Keys.strip == strip_id,
-            AMS_Keys.position == pos,
-        ).first()
-
-    for strip_id in ams_can.key_lists:
-        for pos in range(1, 15):   # slots 1..14
-            key_fob_id = ams_can.get_key_id(strip_id, pos)
-            log.debug(f"[SYNC] strip={strip_id} pos={pos} get_key_id={key_fob_id}")
-
-            if key_fob_id is False or key_fob_id is None:
-                continue
-
-            key_fob_str = str(key_fob_id)
-
-            # -------- CASE 1: NO KEY PRESENT (all zeros) --------
-            if key_fob_str.strip("0") == "":
-                key_row = get_key_for_slot(strip_id, pos)
-                if key_row:
-                    key_row.keyStatus = SLOT_STATUS_KEY_NOT_PRESENT
-                    log.info(
-                        f"[SYNC] Slot empty, marked OUT: peg_id={key_row.peg_id} "
-                        f"name={getattr(key_row, 'keyName', None)} "
-                        f"strip={strip_id} pos={pos}"
-                    )
-                else:
-                    log.info(
-                        f"[SYNC] Slot empty, no peg mapped in DB "
-                        f"(strip={strip_id}, pos={pos})"
-                    )
-                continue
-
-            # -------- CASE 2: REAL KEY PRESENT --------
-            try:
-                peg_int = int(key_fob_str)
-            except ValueError:
-                log.warning(
-                    f"[SYNC] Non-numeric key_fob_id '{key_fob_str}' at "
-                    f"strip={strip_id} pos={pos}"
-                )
-                continue
-
-            key_row = session.query(AMS_Keys).filter(
-                AMS_Keys.peg_id == peg_int
-            ).first()
-
-            if not key_row:
-                log.warning(
-                    f"[SYNC] Peg not found in DB for peg_id={peg_int} "
-                    f"(strip={strip_id}, pos={pos})"
-                )
-                continue
-
-            key_row.keyStatus = 0  # IN
-            key_row.current_pos_strip_id = strip_id
-            key_row.current_pos_slot_no = pos
-            present_count += 1
-            log.info(
-                f"[SYNC] Marked IN: peg_id={peg_int}, "
-                f"name={getattr(key_row, 'keyName', None)} strip={strip_id} pos={pos}"
-            )
-
-    session.commit()
-    log.info(f"[SYNC] Hardware sync complete. Marked {present_count} keys as IN")
-
-    # Print final state for all keys for debugging
-    all_keys = session.query(AMS_Keys).order_by(AMS_Keys.id).all()
-    log.info("==== FINAL KEY STATES ====")
-    for k in all_keys:
-        log.info(
-            f"id={k.id}, name={getattr(k, 'keyName', None)}, "
-            f"peg={k.peg_id}, status={k.keyStatus}, "
-            f"strip={k.current_pos_strip_id}, pos={k.current_pos_slot_no}"
-        )
-
-
-def main():
-    log.info("=== TEST: CAN → DB sync ===")
-    session = SessionLocal()
-
-    # Init CAN
+    from csi_ams.model import AMS_Keys
+    from ams_can import AMS_CAN
+    from time import sleep
+    
+    print("=" * 60)
+    print("AUTO SYNC: Hardware → Database")
+    print("=" * 60)
+    
+    # Initialize CAN
+    print("[1/4] Initializing CAN bus...")
     ams_can = AMS_CAN()
-    ams_can.get_version_number(1)
-    ams_can.get_version_number(2)
-
-    # Run sync once
-    sync_hardware_state_to_db(session, ams_can)
-
-    # Clean up CAN
+    sleep(6)
+    
+    # Auto-detect strips
+    print("[2/4] Detecting key strips...")
+    for strip_id in range(1, 5):
+        version = ams_can.get_version_number(strip_id)
+        if version:
+            print(f"  ✓ Strip {strip_id} detected (v{version})")
+        sleep(0.5)
+    
+    if len(ams_can.key_lists) == 0:
+        print("✗ No strips found. Aborting.")
+        ams_can.cleanup()
+        return False
+    
+    print(f"  Found {len(ams_can.key_lists)} strip(s): {ams_can.key_lists}")
+    
+    # Get all key records from DB grouped by strip
+    print("[3/4] Loading key records from database...")
+    key_records = (
+        session.query(AMS_Keys)
+        .filter(AMS_Keys.deletedAt == None)
+        .order_by(AMS_Keys.stripId, AMS_Keys.keyPosition)
+        .all()
+    )
+    
+    # Group by strip
+    strips_in_db = {}
+    for key in key_records:
+        if key.stripId not in strips_in_db:
+            strips_in_db[key.stripId] = []
+        strips_in_db[key.stripId].append(key)
+    
+    print(f"  Found records for {len(strips_in_db)} strip(s) in DB")
+    
+    # Sync each strip
+    print("[4/4] Syncing hardware status to database...")
+    total_synced = 0
+    total_present = 0
+    total_empty = 0
+    
+    for strip_id in ams_can.key_lists:
+        if strip_id not in strips_in_db:
+            print(f"\n⚠️  Strip {strip_id} has no DB records, skipping...")
+            continue
+        
+        print(f"\n  Strip {strip_id}: Checking {len(strips_in_db[strip_id])} positions...")
+        
+        for key_record in strips_in_db[strip_id]:
+            position = key_record.keyPosition
+            
+            # Check hardware
+            key_id = ams_can.get_key_id(strip_id, position)
+            is_present = bool(key_id and key_id != "00000" and key_id != False)
+            
+            # Update DB
+            old_status = key_record.keyPresent
+            new_status = 1 if is_present else 0
+            key_record.keyPresent = new_status
+            
+            # Log changes
+            if old_status != new_status:
+                status_text = "PRESENT" if is_present else "EMPTY"
+                print(f"    Pos {position:2d}: {old_status} → {new_status} ({status_text})")
+            
+            if is_present:
+                total_present += 1
+            else:
+                total_empty += 1
+            
+            total_synced += 1
+            sleep(0.2)
+    
+    # Commit all changes
+    try:
+        session.commit()
+        print(f"\n✓ Database updated successfully")
+    except Exception as e:
+        session.rollback()
+        print(f"\n✗ Database commit failed: {e}")
+        ams_can.cleanup()
+        return False
+    
+    # Summary
+    print(f"\n{'='*60}")
+    print("SYNC SUMMARY")
+    print(f"{'='*60}")
+    print(f"Strips checked: {len(ams_can.key_lists)}")
+    print(f"Total positions synced: {total_synced}")
+    print(f"Keys present: {total_present}")
+    print(f"Empty positions: {total_empty}")
+    print(f"{'='*60}")
+    
+    # Cleanup
     ams_can.cleanup()
-    log.info("=== DONE ===")
-
-
-if __name__ == "__main__":
-    main()
+    return True
