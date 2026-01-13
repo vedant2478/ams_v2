@@ -1,5 +1,5 @@
 # test_key_status.py
-from amscan import AMS_CAN, CAN_LED_STATE_OFF, CAN_LED_STATE_ON
+from ams_can import AMS_CAN, CAN_LED_STATE_OFF, CAN_LED_STATE_ON
 from time import sleep
 import sys
 
@@ -11,12 +11,40 @@ class KeyStatusTester:
         print("=" * 60)
         
         try:
+            print("[CAN] Initializing AMS_CAN")
             self.ams_can = AMS_CAN()
-            sleep(6)  # Wait for CAN bus initialization
+            sleep(6)  # Wait for CAN bus to settle
+            
+            # Explicitly query each strip to trigger detection
+            print("[CAN] Detecting key strips...")
+            detected_strips = []
+            
+            for strip_id in range(1, 5):  # Try strips 1-4
+                print(f"  Checking strip {strip_id}...", end=" ", flush=True)
+                version = self.ams_can.get_version_number(strip_id)
+                
+                if version:
+                    print(f"✓ Found - Version: {version}")
+                    detected_strips.append(strip_id)
+                else:
+                    print(f"✗ Not found")
+                
+                sleep(0.5)
+            
             print(f"\n✓ CAN Bus initialized successfully")
-            print(f"✓ Detected {len(self.ams_can.key_lists)} key strip(s)")
+            print(f"✓ Detected {len(self.ams_can.key_lists)} key strip(s): {self.ams_can.key_lists}")
+            
+            if len(self.ams_can.key_lists) == 0:
+                print("\n⚠️  No key strips detected!")
+                print("\nTroubleshooting:")
+                print("  1. Check CAN bus: ip link show can0")
+                print("  2. Monitor traffic: candump can0")
+                print("  3. Verify hardware power and connections")
+                
         except Exception as e:
             print(f"✗ Error initializing CAN: {e}")
+            import traceback
+            traceback.print_exc()
             sys.exit(1)
 
     def is_key_present(self, strip_id, position):
@@ -85,7 +113,7 @@ class KeyStatusTester:
         """Check all detected strips."""
         if not self.ams_can.key_lists:
             print("✗ No key strips detected!")
-            return
+            return {}
         
         all_results = {}
         
@@ -164,6 +192,10 @@ def main():
     """Main test function."""
     tester = KeyStatusTester()
     
+    if len(tester.ams_can.key_lists) == 0:
+        print("\n✗ No strips detected. Exiting.")
+        return
+    
     try:
         # Option 1: Check all strips (basic check)
         print("\n[TEST 1] Checking all key positions...")
@@ -184,6 +216,8 @@ def main():
         print("\n\n⚠ Test interrupted by user")
     except Exception as e:
         print(f"\n✗ Error during test: {e}")
+        import traceback
+        traceback.print_exc()
     finally:
         tester.cleanup()
 
