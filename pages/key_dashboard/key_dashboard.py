@@ -2,6 +2,7 @@ from datetime import datetime
 import subprocess
 import logging
 import paho.mqtt.client as mqtt
+import threading
 
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.behaviors import ButtonBehavior
@@ -107,6 +108,7 @@ class KeyDashboardScreen(BaseScreen):
     key_interactions = ListProperty([])
 
     MAX_DOOR_TIME = 60
+    MIN_DOOR_OPEN_TIME = 3
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -114,6 +116,7 @@ class KeyDashboardScreen(BaseScreen):
         self.key_widgets = {}
         self._door_open = False
         self.door_open_seconds = 0
+        self._door_opened_timestamp = None
 
         self._door_timer_event = None
         self._can_poll_event = None
@@ -131,95 +134,106 @@ class KeyDashboardScreen(BaseScreen):
         
         self._screen_active = True
         
-        # Schedule initialization after UI renders (0.1 seconds delay)
-        Clock.schedule_once(self._initialize_hardware, 0.1)
-
-    def _initialize_hardware(self, dt):
-        """Initialize hardware after UI is rendered"""
-        
-        # Show loading popup NOW (after UI is ready)
+        # Show popup immediately BEFORE heavy initialization
         self._show_loading_popup()
         
-        session = self.manager.db_session
+        # Run heavy initialization in background thread
+        threading.Thread(target=self._initialize_hardware_thread, daemon=True).start()
 
-        # -------- ACCESS LOG --------
-        access_log = AMS_Access_Log(
-            signInTime=datetime.now(TZ_INDIA),
-            signInMode=self.manager.auth_mode,
-            signInFailed=0,
-            signInSucceed=1,
-            signInUserId=self.manager.card_info["id"],
-            doorOpenTime=datetime.now(TZ_INDIA),
-            event_type_id=EVENT_DOOR_OPEN,
-            is_posted=0,
-        )
-        session.add(access_log)
-        session.commit()
-        self.manager.ams_access_log = access_log
+    def _initialize_hardware_thread(self):
+        """Run hardware initialization in background thread"""
+        try:
+            import time
+            
+            session = self.manager.db_session
 
-        # -------- ACTIVITY --------
-        self.activity_info = self.manager.activity_info
+            # -------- ACCESS LOG --------
+            access_log = AMS_Access_Log(
+                signInTime=datetime.now(TZ_INDIA),
+                signInMode=self.manager.auth_mode,
+                signInFailed=0,
+                signInSucceed=1,
+                signInUserId=self.manager.card_info["id"],
+                doorOpenTime=datetime.now(TZ_INDIA),
+                event_type_id=EVENT_DOOR_OPEN,
+                is_posted=0,
+            )
+            session.add(access_log)
+            session.commit()
+            self.manager.ams_access_log = access_log
+
+            # -------- ACTIVITY --------
+            self.activity_info = self.manager.activity_info
+            
+            # Schedule UI update on main thread
+            Clock.schedule_once(lambda dt: self._update_activity_ui(), 0)
+
+            # -------- CAN INIT --------
+            log.info("[CAN] Initializing AMS_CAN")
+            self.ams_can = AMS_CAN()
+            
+            # Auto-detect strips
+            time.sleep(6)  # Wait for CAN to settle
+            
+            log.info("[CAN] Detecting key strips...")
+            self.ams_can.get_version_number(1)
+            self.ams_can.get_version_number(2)
+            time.sleep(0.5)
+            
+            log.info(f"[CAN] Detected {len(self.ams_can.key_lists)} strip(s)")
+
+            # -------- HARDWARE SYNC --------
+            log.info("[SYNC] Starting hardware sync to database...")
+            
+            sync_success = sync_hardware_to_db(session, self.ams_can)
+            
+            if sync_success:
+                log.info("[SYNC] Hardware sync completed successfully")
+            else:
+                log.warning("[SYNC] Hardware sync failed")
+            
+            session.flush()
+            session.commit()
+            time.sleep(0.5)
+            session.expire_all()
+            
+            log.info("[SYNC] Reloading keys from database...")
+            
+            # Reload keys from DB
+            self.reload_keys_from_db()
+            
+            log.info(f"[SYNC] Loaded {len(self.keys_data)} keys from DB")
+            
+            for k in self.keys_data:
+                log.debug(
+                    f"[  Key       ] id={k.get('id')} name={k.get('name')} "
+                    f"status={k.get('status')} peg={k.get('peg_id')}"
+                )
+            
+            # Schedule UI updates and CAN sequence on main thread
+            Clock.schedule_once(lambda dt: self._finalize_initialization(), 0)
+            
+        except Exception as e:
+            log.error(f"[INIT] Hardware initialization failed: {e}")
+            Clock.schedule_once(lambda dt: self._dismiss_loading_popup(), 0)
+
+    def _update_activity_ui(self):
+        """Update activity info in UI (runs on main thread)"""
         self.activity_code = self.activity_info["code"]
         self.activity_name = self.activity_info["name"]
 
-        # -------- CAN INIT FIRST --------
-        log.info("[CAN] Initializing AMS_CAN")
-        self.ams_can = AMS_CAN()
-        
-        # Auto-detect strips
-        import time
-        time.sleep(6)  # Wait for CAN to settle
-        
-        log.info("[CAN] Detecting key strips...")
-        self.ams_can.get_version_number(1)
-        self.ams_can.get_version_number(2)
-        time.sleep(0.5)
-        
-        log.info(f"[CAN] Detected {len(self.ams_can.key_lists)} strip(s)")
-
-        # -------- HARDWARE SYNC --------
-        log.info("[SYNC] Starting hardware sync to database...")
-        
-        # Sync hardware state to DB using existing CAN instance
-        sync_success = sync_hardware_to_db(session, self.ams_can)
-        
-        if sync_success:
-            log.info("[SYNC] Hardware sync completed successfully")
-        else:
-            log.warning("[SYNC] Hardware sync failed")
-        
-        # Force session to flush all pending changes
-        session.flush()
-        session.commit()
-        
-        # Wait for DB to fully commit
-        time.sleep(0.5)
-        
-        # Expire all objects to force fresh read from DB
-        session.expire_all()
-        
-        log.info("[SYNC] Reloading keys from database...")
-        
-        # Reload keys from DB (now reflects hardware state)
-        self.reload_keys_from_db()
-        
-        log.info(f"[SYNC] Loaded {len(self.keys_data)} keys from DB")
-        
-        # Debug: print loaded keys
-        for k in self.keys_data:
-            log.debug(
-                f"  Key: id={k.get('id')} name={k.get('name')} "
-                f"status={k.get('status')} peg={k.get('peg_id')}"
-            )
-        
+    def _finalize_initialization(self):
+        """Finalize initialization on main thread"""
+        # Populate UI
         self.populate_keys()
 
-        # Start deterministic CAN sequence for activity keys
+        # Start CAN sequence
         Clock.schedule_once(self._can_step_led_on_all, 1.5)
 
         # door state
         self._door_open = False
         self.door_open_seconds = 0
+        self._door_opened_timestamp = None
         self.time_remaining = str(self.MAX_DOOR_TIME)
         self.progress_value = 0.0
 
@@ -342,6 +356,7 @@ class KeyDashboardScreen(BaseScreen):
         )
 
         self._door_open = True
+        self._door_opened_timestamp = datetime.now()
         self.door_open_seconds = 0
         self.time_remaining = str(self.MAX_DOOR_TIME)
         self.progress_value = 0.0
@@ -369,6 +384,13 @@ class KeyDashboardScreen(BaseScreen):
         if not self._screen_active:
             log.debug("[DOOR] Ignoring close event - screen not active")
             return
+        
+        # Check minimum door open time
+        if self._door_opened_timestamp:
+            elapsed = (datetime.now() - self._door_opened_timestamp).total_seconds()
+            if elapsed < self.MIN_DOOR_OPEN_TIME:
+                log.info(f"[DOOR] Close event too soon ({elapsed:.1f}s < {self.MIN_DOOR_OPEN_TIME}s), ignoring")
+                return
         
         log.info("[DOOR] Closed")
         self._door_open = False
@@ -440,7 +462,7 @@ class KeyDashboardScreen(BaseScreen):
     # NAME LOOKUP
     # =====================================================
     def _get_key_name_by_peg(self, peg_id):
-        log.debug(f"keys_data for lookup: {self.keys_data}")
+        log.debug(f"[keys_data for lookup] {self.keys_data}")
         for k in self.keys_data:
             if str(k.get("peg_id")) == str(peg_id):
                 desc = k.get("description") or k.get("name")
