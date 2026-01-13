@@ -27,3 +27,4 @@ class AdminScreen(Screen):
     def go_home(self):
         print("[ADMIN] Go Home")
         self.manager.current = "home"
+        self.manager.card_registration_mode = False

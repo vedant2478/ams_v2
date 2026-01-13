@@ -27,6 +27,7 @@ class CardScanScreen(BaseScreen):
         self.stop_card_reading()
         self.manager.transition.direction = "right"
         self.manager.current = "home"
+        self.manager.card_registration_mode = False
 
     def on_enter(self):
         self.progress = 0
