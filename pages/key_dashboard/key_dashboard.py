@@ -3,7 +3,7 @@ import subprocess
 import logging
 import paho.mqtt.client as mqtt
 import threading
-
+from kivy.uix.modalview import ModalView
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.popup import Popup
@@ -47,18 +47,36 @@ logging.basicConfig(
 log = logging.getLogger("KEY_DASHBOARD")
 
 # =========================================================
-# LOADING POPUP - IMPROVED UI
+# LOADING POPUP - USING MODALVIEW (NO BORDERS)
 # =========================================================
-
-# =========================================================
-# LOADING POPUP - COMPLETELY BORDERLESS
-# =========================================================
-class SolenoidLoadingPopup(Popup):
-    """Beautiful loading popup shown while door is opening"""
+class SolenoidLoadingPopup(ModalView):
+    """Beautiful loading popup shown while door is opening - NO WHITE BORDER"""
     
     def __init__(self, **kwargs):
-        # Main container with gradient background
+        super().__init__(
+            size_hint=(0.6, 0.5),
+            auto_dismiss=False,
+            background='',
+            background_color=[0, 0, 0, 0.7],  # Semi-transparent black overlay
+            **kwargs
+        )
+        
+        # Main container
+        container = BoxLayout(orientation='vertical', padding=0, spacing=0)
+        
+        # Inner content box with rounded background
         content = BoxLayout(orientation='vertical', padding=40, spacing=20)
+        
+        # Draw rounded background directly on content
+        with content.canvas.before:
+            Color(0.15, 0.15, 0.18, 0.98)  # Dark background
+            self.rect = RoundedRectangle(
+                pos=content.pos,
+                size=content.size,
+                radius=[20, 20, 20, 20]
+            )
+        
+        content.bind(pos=self._update_rect, size=self._update_rect)
         
         # Title
         title_label = Label(
@@ -66,22 +84,20 @@ class SolenoidLoadingPopup(Popup):
             markup=True,
             font_size='28sp',
             size_hint_y=0.3,
-            color=(0.2, 0.8, 0.4, 1)  # Green color
+            color=(0.2, 0.8, 0.4, 1)
         )
         content.add_widget(title_label)
         
-        # Progress bar (indeterminate animation)
-        progress = ProgressBar(
+        # Progress bar
+        self.progress = ProgressBar(
             max=100,
             size_hint_y=0.15
         )
-        progress.value = 50
-        content.add_widget(progress)
+        self.progress.value = 50
+        content.add_widget(self.progress)
         
-        # Animate progress bar
-        def animate_progress(dt):
-            progress.value = (progress.value + 3) % 100
-        Clock.schedule_interval(animate_progress, 0.05)
+        # Start animation
+        Clock.schedule_interval(self._animate_progress, 0.05)
         
         # Message
         message = Label(
@@ -103,34 +119,15 @@ class SolenoidLoadingPopup(Popup):
         )
         content.add_widget(self.status_label)
         
-        super().__init__(
-            title='',
-            content=content,
-            size_hint=(0.6, 0.5),
-            auto_dismiss=False,
-            separator_height=0,
-            **kwargs
-        )
-        
-        # ← FIXED: Remove ALL Kivy default backgrounds and borders
-        self.background = ''
-        self.background_color = [0, 0, 0, 0]  # Transparent
-        
-        # Add custom rounded background AFTER popup is created
-        with self.canvas.before:
-            Color(0.15, 0.15, 0.18, 0.95)  # Dark background
-            self.rect = RoundedRectangle(
-                pos=(self.x + self.width * 0.2, self.y + self.height * 0.25),
-                size=(self.width * 0.6, self.height * 0.5),
-                radius=[20]
-            )
-        
-        self.bind(pos=self._update_rect, size=self._update_rect)
+        container.add_widget(content)
+        self.add_widget(container)
     
-    def _update_rect(self, *args):
-        """Update rectangle position to match popup"""
-        self.rect.pos = (self.x + self.width * 0.2, self.y + self.height * 0.25)
-        self.rect.size = (self.width * 0.6, self.height * 0.5)
+    def _animate_progress(self, dt):
+        self.progress.value = (self.progress.value + 3) % 100
+    
+    def _update_rect(self, instance, value):
+        self.rect.pos = instance.pos
+        self.rect.size = instance.size
     
     def update_status(self, status_text):
         """Update status message"""
