@@ -131,9 +131,15 @@ class KeyDashboardScreen(BaseScreen):
         
         self._screen_active = True
         
-        # Show loading popup immediately when screen enters
-        self._show_loading_popup()
+        # Schedule initialization after UI renders (0.1 seconds delay)
+        Clock.schedule_once(self._initialize_hardware, 0.1)
 
+    def _initialize_hardware(self, dt):
+        """Initialize hardware after UI is rendered"""
+        
+        # Show loading popup NOW (after UI is ready)
+        self._show_loading_popup()
+        
         session = self.manager.db_session
 
         # -------- ACCESS LOG --------
@@ -288,7 +294,6 @@ class KeyDashboardScreen(BaseScreen):
             self.ams_can.unlock_single_key(strip, pos)
             self.ams_can.set_single_LED_state(strip, pos, CAN_LED_STATE_ON)
         
-        # Popup was already shown in on_enter()
         subprocess.Popen(
             ["sudo", "python3", "solenoid.py", "1"],
             cwd="/home/rock/Desktop/ams_v2",
