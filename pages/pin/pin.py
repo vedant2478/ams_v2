@@ -173,6 +173,7 @@ class PinScreen(BaseScreen):
                             on_yes=on_yes_update,
                             on_no=on_no_update,
                         )
+                        self.manager.card_registration_mode = False
                         return
 
                     # success cases from function
