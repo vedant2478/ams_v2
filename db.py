@@ -1,6 +1,7 @@
 from datetime import datetime
+from sqlite3 import IntegrityError
 from sqlalchemy.orm import Session
-from typing import Optional, Dict
+from typing import Optional, Dict , Tuple
 from model import (
     AMS_Keys,
     AMS_Users,
@@ -253,6 +254,46 @@ def verify_card_pin(
         .first()
     )
     return bool(user and user.pinCode == str(pin)) 
+
+
+# return: (success, reason)
+# reason in {"ok_assigned", "ok_existing", "no_pin", "conflict"}
+def verify_or_assign_card_pin(
+    session: Session,
+    card_number: str,
+    pin: str,
+) -> Tuple[bool, str]:
+    pin = str(pin)
+    card_number = str(card_number)
+
+    user: Optional[AMS_Users] = (
+        session.query(AMS_Users)
+        .filter(
+            AMS_Users.pinCode == pin,
+            AMS_Users.deletedAt == None,
+        )
+        .first()
+    )
+
+    if not user:
+        return False, "no_pin"
+
+    # already has a card
+    if user.cardNo:
+        if user.cardNo == card_number:
+            return True, "ok_existing"
+        else:
+            return False, "conflict"  # PIN already bound to some other card
+
+    # no card yet → assign
+    user.cardNo = card_number
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        return False, "conflict"
+
+    return True, "ok_assigned"
 
 
 # ==================================================

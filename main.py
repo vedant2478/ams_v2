@@ -94,6 +94,7 @@ class MainApp(App):
         sm.timestamp_text = ""
         sm.card_registration_mode = False
         sm.card_number = None
+        sm.new_card = False
 
         # -------------------------------------------------
         # REGISTER SCREENS
