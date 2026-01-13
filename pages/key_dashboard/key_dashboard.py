@@ -50,21 +50,15 @@ log = logging.getLogger("KEY_DASHBOARD")
 # LOADING POPUP - IMPROVED UI
 # =========================================================
 
+# =========================================================
+# LOADING POPUP - COMPLETELY BORDERLESS
+# =========================================================
 class SolenoidLoadingPopup(Popup):
     """Beautiful loading popup shown while door is opening"""
     
     def __init__(self, **kwargs):
         # Main container with gradient background
         content = BoxLayout(orientation='vertical', padding=40, spacing=20)
-        
-        # Add rounded background with canvas FIRST
-        with content.canvas.before:
-            Color(0.15, 0.15, 0.18, 0.95)  # Dark background
-            self.rect = RoundedRectangle(
-                pos=content.pos,
-                size=content.size,
-                radius=[20]
-            )
         
         # Title
         title_label = Label(
@@ -115,20 +109,28 @@ class SolenoidLoadingPopup(Popup):
             size_hint=(0.6, 0.5),
             auto_dismiss=False,
             separator_height=0,
-            background='',  # Remove default background
-            border=(0, 0, 0, 0),  # ← ADDED: Remove border
             **kwargs
         )
         
-        # Make the popup itself transparent
-        with self.canvas.before:
-            Color(0, 0, 0, 0)  # ← ADDED: Transparent popup background
+        # ← FIXED: Remove ALL Kivy default backgrounds and borders
+        self.background = ''
+        self.background_color = [0, 0, 0, 0]  # Transparent
         
-        content.bind(pos=self._update_rect, size=self._update_rect)
+        # Add custom rounded background AFTER popup is created
+        with self.canvas.before:
+            Color(0.15, 0.15, 0.18, 0.95)  # Dark background
+            self.rect = RoundedRectangle(
+                pos=(self.x + self.width * 0.2, self.y + self.height * 0.25),
+                size=(self.width * 0.6, self.height * 0.5),
+                radius=[20]
+            )
+        
+        self.bind(pos=self._update_rect, size=self._update_rect)
     
     def _update_rect(self, *args):
-        self.rect.pos = self.content.pos
-        self.rect.size = self.content.size
+        """Update rectangle position to match popup"""
+        self.rect.pos = (self.x + self.width * 0.2, self.y + self.height * 0.25)
+        self.rect.size = (self.width * 0.6, self.height * 0.5)
     
     def update_status(self, status_text):
         """Update status message"""
