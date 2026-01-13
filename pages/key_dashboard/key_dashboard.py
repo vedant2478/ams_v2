@@ -556,6 +556,9 @@ class KeyDashboardScreen(BaseScreen):
     # =====================================================
     # CAN POLLING
     # =====================================================
+    # =====================================================
+# CAN POLLING
+# =====================================================
     def poll_can_events(self, dt):
         if not self.ams_can or not self._screen_active:
             return
@@ -594,10 +597,25 @@ class KeyDashboardScreen(BaseScreen):
                     break
 
             if not updated:
+                # ← CHANGED: Key wasn't taken in this session, fetch from DB
+                log.info(f"[KEY INSERT] Key {key_name} returned but not in session history - fetching from DB")
+                
+                session = self.manager.db_session
+                key_record = session.query(AMS_Keys).filter(
+                    AMS_Keys.peg_id == peg_id
+                ).first()
+                
+                taken_timestamp = None
+                if key_record and key_record.keyTakenAtTime:
+                    taken_timestamp = key_record.keyTakenAtTime
+                    log.info(f"[KEY INSERT] Found DB taken time: {taken_timestamp}")
+                else:
+                    log.warning(f"[KEY INSERT] No taken time found in DB for peg_id={peg_id}")
+                
                 self.key_interactions.append({
                     "key_name": key_name,
                     "peg_id": peg_id,
-                    "taken_timestamp": None,
+                    "taken_timestamp": taken_timestamp,  # ← From DB
                     "returned_timestamp": returned_time,
                 })
 
@@ -605,6 +623,7 @@ class KeyDashboardScreen(BaseScreen):
             self.ams_can.key_inserted_event = False
             self.reload_keys_from_db()
             self.update_key_widgets()
+
 
     # =====================================================
     # DB COMMIT
@@ -710,7 +729,6 @@ class KeyDashboardScreen(BaseScreen):
     # =====================================================
     def go_back(self):
         log.info("[GO_BACK] User cancelled")
-        
         self._screen_active = False
         self._dismiss_loading_popup()
         self._shutdown_can_and_mqtt()
