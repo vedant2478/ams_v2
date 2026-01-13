@@ -1,7 +1,6 @@
 from kivy.properties import StringProperty
 from kivy.clock import Clock
 from datetime import datetime
-from test2 import sync_hardware_to_db
 from components.base_screen import BaseScreen
 from db import get_site_name
 
@@ -22,7 +21,7 @@ class HomeScreen(BaseScreen):
         # Update time immediately + every second
         self.update_time()
         Clock.schedule_interval(self.update_time, 1)
-        sync_hardware_to_db(self.manager.db_session)
+        
 
         # 🔑 SAFE DB ACCESS (session already created by manager)
         session = self.manager.db_session
