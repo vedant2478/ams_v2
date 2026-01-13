@@ -14,7 +14,7 @@ from csi_ams.utils.commons import get_event_description
 
 
 TZ_INDIA = pytz.timezone("Asia/Kolkata")
-print("helloo")
+
 
 def wait_for_keylists(ams_can, timeout=15):
     print("Waiting for CAN key-lists...")
