@@ -267,11 +267,13 @@ def verify_or_assign_card_pin(
 ) -> Tuple[bool, str]:
     """
     success, reason
-    reason in: "ok_assigned", "ok_existing", "no_pin", "conflict"
+    reason in: "ok_assigned", "ok_existing", "ok_updated", "no_pin", "conflict"
+    conflict = card or pin is already bound in a way that cannot be changed
     """
     pin = str(pin)
     card_number = str(card_number)
 
+    # 1) Find user by PIN
     user: Optional[AMS_Users] = (
         session.query(AMS_Users)
         .filter(
@@ -284,30 +286,55 @@ def verify_or_assign_card_pin(
     if not user:
         return False, "no_pin"
 
-    # PIN exists and already has a card
+    # 2) PIN has a card already
     if user.cardNo:
+        # same card → nothing to do
         if user.cardNo == card_number:
             return True, "ok_existing"
-        else:
-            return False, "conflict"  # PIN belongs to some other card
 
-    # PIN exists but cardNo is empty -> assign this card
-    if user.cardNo:
-        if user.cardNo == card_number:
-            return True, "ok_existing"
+        # different card and we are not forcing an update
         if not force_update:
             return False, "conflict"
 
-        # force update card number
+        # force_update: before changing card, check if this new card_number
+        # is already assigned to some (other) user
+        other = (
+            session.query(AMS_Users)
+            .filter(
+                AMS_Users.cardNo == card_number,
+                AMS_Users.deletedAt == None,
+                AMS_Users.id != user.id,  # avoid matching same user
+            )
+            .first()
+        )
+        if other:
+            # card already used by another user → cannot reassign
+            return False, "conflict"
+
+        # safe to update cardNo for this PIN
         user.cardNo = card_number
         try:
             session.commit()
         except IntegrityError:
             session.rollback()
             return False, "conflict"
+
         return True, "ok_updated"
 
-    # no card yet -> assign
+    # 3) PIN exists but cardNo is empty -> assign this card
+    # before assigning, ensure this card_number is not already in use
+    existing_card_user = (
+        session.query(AMS_Users)
+        .filter(
+            AMS_Users.cardNo == card_number,
+            AMS_Users.deletedAt == None,
+        )
+        .first()
+    )
+    if existing_card_user:
+        # some user already has this card; cannot just assign it
+        return False, "conflict"
+
     user.cardNo = card_number
     try:
         session.commit()
@@ -316,8 +343,6 @@ def verify_or_assign_card_pin(
         return False, "conflict"
 
     return True, "ok_assigned"
-
-
 
 # ==================================================
 # USER ACTIVITIES

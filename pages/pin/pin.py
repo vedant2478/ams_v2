@@ -105,7 +105,6 @@ class PinScreen(BaseScreen):
 
         def _close(instance):
             popup.dismiss()
-            # after registration done, exit registration mode if needed
             self.manager.card_registration_mode = False
 
         btn.bind(on_release=_close)
@@ -156,9 +155,10 @@ class PinScreen(BaseScreen):
                                 session=session,
                                 card_number=self.card_number,
                                 pin=entered_pin,
-                                force_update=True,  # make sure DB func supports this
+                                force_update=True,
                             )
-                            if ok2:
+                            print(f"→ force_update returned: {ok2}, {reason2}")
+                            if ok2 and reason2 in ("ok_updated", "ok_existing"):
                                 print(f"✓ Card updated to {self.card_number}")
                                 self.message = "Card updated"
                                 self.show_done_popup("Card updated")
@@ -180,8 +180,9 @@ class PinScreen(BaseScreen):
                         print(f"✓ Card {self.card_number} assigned to this PIN")
                         self.message = "User added"
                         self.show_done_popup("User added")
-                    elif ok and reason == "ok_existing":
-                        print(f"✓ PIN already had this card")
+                    elif ok and reason in ("ok_existing", "ok_updated"):
+                        # ok_existing: same card; ok_updated: changed to this card
+                        print(f"✓ PIN has card {self.card_number}")
                         self.message = "PIN VERIFIED"
                         self.show_done_popup("PIN VERIFIED")
 
@@ -256,10 +257,8 @@ class PinScreen(BaseScreen):
             },
         )
 
-        # Save access log for next screens
         self.manager.access_log_id = result["access_log_id"]
 
-        # ---------------- MOVE TO ACTIVITY ----------------
         self.reset_pin()
         self.manager.transition.direction = "left"
         self.manager.current = "activity"
