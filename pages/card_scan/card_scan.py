@@ -150,7 +150,7 @@ class CardScanScreen(BaseScreen):
                 Clock.schedule_once(self.go_to_pin, 1.0)
             else:
                 # Normal mode: invalid card, keep scanning
-                self.instruction_text = "INVALID CARD! Scan again"
+                self.instruction_text = "INVALID CARD!"
                 # Do NOT stop card_reading, do NOT cancel timeout
 
     def update_progress(self, dt):
