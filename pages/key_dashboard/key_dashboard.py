@@ -121,7 +121,7 @@ class KeyDashboardScreen(BaseScreen):
 
         self.ams_can = None
         self._screen_active = False
-        self._loading_popup = None  # ← ADDED: Track loading popup
+        self._loading_popup = None
 
     # =====================================================
     # SCREEN LIFECYCLE
@@ -130,6 +130,9 @@ class KeyDashboardScreen(BaseScreen):
         log.info("[ENTER] KeyDashboard entered")
         
         self._screen_active = True
+        
+        # Show loading popup immediately when screen enters
+        self._show_loading_popup()
 
         session = self.manager.db_session
 
@@ -226,7 +229,7 @@ class KeyDashboardScreen(BaseScreen):
         """Called when leaving the screen"""
         log.info("[LEAVE] KeyDashboard leaving")
         self._screen_active = False
-        self._dismiss_loading_popup()  # ← ADDED: Dismiss popup on leave
+        self._dismiss_loading_popup()
         self._shutdown_can_and_mqtt()
 
     # =====================================================
@@ -285,9 +288,7 @@ class KeyDashboardScreen(BaseScreen):
             self.ams_can.unlock_single_key(strip, pos)
             self.ams_can.set_single_LED_state(strip, pos, CAN_LED_STATE_ON)
         
-        # ← ADDED: Show loading popup before opening solenoid
-        self._show_loading_popup()
-        
+        # Popup was already shown in on_enter()
         subprocess.Popen(
             ["sudo", "python3", "solenoid.py", "1"],
             cwd="/home/rock/Desktop/ams_v2",
@@ -327,7 +328,7 @@ class KeyDashboardScreen(BaseScreen):
         
         log.info("[DOOR] Opened")
 
-        # ← ADDED: Dismiss loading popup when door opens
+        # Dismiss loading popup when door opens
         self._dismiss_loading_popup()
 
         subprocess.Popen(
@@ -387,7 +388,7 @@ class KeyDashboardScreen(BaseScreen):
         )
 
         self._screen_active = False
-        self._dismiss_loading_popup()  # ← ADDED: Ensure popup dismissed
+        self._dismiss_loading_popup()
         self._shutdown_can_and_mqtt()
         self.key_interactions = []
         self.manager.current = "activity_done"
@@ -590,7 +591,7 @@ class KeyDashboardScreen(BaseScreen):
         )
 
         self._screen_active = False
-        self._dismiss_loading_popup()  # ← ADDED: Ensure popup dismissed
+        self._dismiss_loading_popup()
         self._shutdown_can_and_mqtt()
         self.key_interactions = []
         self.manager.current = "activity_done"
@@ -602,7 +603,7 @@ class KeyDashboardScreen(BaseScreen):
         log.info("[GO_BACK] User cancelled")
         
         self._screen_active = False
-        self._dismiss_loading_popup()  # ← ADDED: Dismiss popup on cancel
+        self._dismiss_loading_popup()
         self._shutdown_can_and_mqtt()
 
         subprocess.Popen(
