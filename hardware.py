@@ -1,5 +1,5 @@
 # test_key_status.py
-from ams_can import AMS_CAN, CAN_LED_STATE_OFF, CAN_LED_STATE_ON
+from amscan import AMS_CAN, CAN_LED_STATE_OFF, CAN_LED_STATE_ON
 from time import sleep
 import sys
 
