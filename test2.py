@@ -9,7 +9,7 @@ def sync_hardware_to_db(session):
         sync_hardware_to_db(session)
     """
     from csi_ams.model import AMS_Keys
-    from ams_can import AMS_CAN
+    from amscan import AMS_CAN
     from time import sleep
     
     print("=" * 60)
