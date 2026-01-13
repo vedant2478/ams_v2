@@ -16,6 +16,7 @@ from kivy.clock import Clock
 from components.base_screen import BaseScreen
 from db import get_keys_for_activity, set_key_status_by_peg_id
 from amscan import AMS_CAN, CAN_LED_STATE_ON
+from test2 import sync_hardware_to_db  # Import the sync function
 
 from csi_ams.model import (
     AMS_Keys,
@@ -40,7 +41,6 @@ logging.basicConfig(
 )
 log = logging.getLogger("KEY_DASHBOARD")
 
-
 # =========================================================
 # KEY ITEM
 # =========================================================
@@ -49,7 +49,7 @@ class KeyItem(ButtonBehavior, BoxLayout):
     key_name = StringProperty("")
     status_text = StringProperty("IN")
     status_color = ListProperty([0, 1, 0, 1])
-    dashboard = ObjectProperty(None)   # set from KeyDashboardScreen
+    dashboard = ObjectProperty(None)
 
     def set_status(self, status):
         self.status_text = status
@@ -63,7 +63,6 @@ class KeyItem(ButtonBehavior, BoxLayout):
                 self.status_text,
                 self.key_id,
             )
-
 
 # =========================================================
 # DASHBOARD SCREEN
@@ -120,18 +119,26 @@ class KeyDashboardScreen(BaseScreen):
         self.activity_code = self.activity_info["code"]
         self.activity_name = self.activity_info["name"]
 
-        # Load current static mapping (strip/position for each activity key)
+        # -------- HARDWARE SYNC --------
+        log.info("[SYNC] Starting hardware sync to database...")
+        
+        # Sync hardware state to DB using the standalone function
+        sync_success = sync_hardware_to_db(session)
+        
+        if sync_success:
+            log.info("[SYNC] Hardware sync completed successfully")
+        else:
+            log.warning("[SYNC] Hardware sync failed or no strips detected")
+
+        # Reload keys from DB (now reflects hardware state)
         self.reload_keys_from_db()
         self.populate_keys()
 
-        # -------- CAN INIT --------
-        log.info("[CAN] Initializing AMS_CAN")
+        # -------- CAN INIT (already done in sync_hardware_to_db) --------
+        # Get reference to CAN (sync function already initialized it)
+        log.info("[CAN] Getting AMS_CAN instance")
         self.ams_can = AMS_CAN()
-        self.ams_can.get_version_number(1)
-        self.ams_can.get_version_number(2)
-
-        # FIRST: sync DB + UI to actual hardware state
-        self.sync_hardware_state_to_db()
+        # No need to call get_version_number again, sync already did it
 
         # Start deterministic CAN sequence for activity keys
         Clock.schedule_once(self._can_step_led_on_all, 1.5)
@@ -149,115 +156,6 @@ class KeyDashboardScreen(BaseScreen):
         self._can_poll_event = Clock.schedule_interval(
             self.poll_can_events, 0.2
         )
-
-    # =====================================================
-    # SYNC HARDWARE -> DB -> UI
-    # =====================================================
-    def sync_hardware_state_to_db(self):
-        """
-        Scan all key strips using AMS_CAN.get_key_id and update AMS_Keys to match
-        actual hardware state (present/empty per slot), then reload UI.
-
-        IMPORTANT: does NOT reset current_pos_* before scan so that
-        activity mapping (strip/position) remains available.
-        """
-        if not self.ams_can:
-            log.warning("[SYNC] AMS_CAN not initialised, skipping hardware sync")
-            return
-
-        log.info("[SYNC] Starting hardware → DB sync")
-        session = self.manager.db_session
-
-        # Reset only keyStatus; keep mapping so we know which key belongs to which slot.
-        updated = session.query(AMS_Keys).update({
-            "keyStatus": SLOT_STATUS_KEY_NOT_PRESENT,
-        })
-        log.info(f"[SYNC] Reset {updated} keys in DB to OUT (status only)")
-
-        if not self.ams_can.key_lists:
-            log.warning("[SYNC] ams_can.key_lists is empty; no strips detected")
-        else:
-            log.info(f"[SYNC] Scanning strips: {self.ams_can.key_lists}")
-
-        present_count = 0
-
-        # Helper: map (strip,pos) → AMS_Keys row using static location mapping
-        def get_key_for_slot(strip_id, pos):
-            return session.query(AMS_Keys).filter(
-                AMS_Keys.current_pos_strip_id == strip_id,
-                AMS_Keys.current_pos_slot_no == pos,
-            ).first()
-
-        for strip_id in self.ams_can.key_lists:
-            for pos in range(1, 15):  # slots 1..14
-                key_fob_id = self.ams_can.get_key_id(strip_id, pos)
-                log.debug(f"[SYNC] strip={strip_id} pos={pos} get_key_id={key_fob_id}")
-
-                if key_fob_id is False or key_fob_id is None:
-                    continue
-
-                key_fob_str = str(key_fob_id)
-
-                # -------- CASE 1: NO KEY PRESENT (all zeros) --------
-                if key_fob_str.strip("0") == "":
-                    key_row = get_key_for_slot(strip_id, pos)
-                    if key_row:
-                        key_row.keyStatus = SLOT_STATUS_KEY_NOT_PRESENT
-                        # Leave mapping intact; cabinet layout is static
-                        log.info(
-                            f"[SYNC] Slot empty, marked OUT: peg_id={key_row.peg_id} "
-                            f"name={getattr(key_row, 'keyName', None)} strip={strip_id} pos={pos}"
-                        )
-                    else:
-                        log.info(
-                            f"[SYNC] Slot empty, no peg mapped in DB (strip={strip_id}, pos={pos})"
-                        )
-                    continue
-
-                # -------- CASE 2: REAL KEY PRESENT --------
-                try:
-                    peg_int = int(key_fob_str)
-                except ValueError:
-                    log.warning(
-                        f"[SYNC] Non-numeric key_fob_id '{key_fob_str}' at strip={strip_id} pos={pos}"
-                    )
-                    continue
-
-                key_row = session.query(AMS_Keys).filter(
-                    AMS_Keys.peg_id == peg_int
-                ).first()
-
-                if not key_row:
-                    log.warning(
-                        f"[SYNC] Peg not found in DB for peg_id={peg_int} "
-                        f"(strip={strip_id}, pos={pos})"
-                    )
-                    continue
-
-                key_row.keyStatus = 0  # IN
-                key_row.current_pos_strip_id = strip_id
-                key_row.current_pos_slot_no = pos
-                present_count += 1
-                log.info(
-                    f"[SYNC] Marked IN: peg_id={peg_int}, "
-                    f"name={getattr(key_row, 'keyName', None)} strip={strip_id} pos={pos}"
-                )
-
-        session.commit()
-        log.info(f"[SYNC] Hardware sync complete. Marked {present_count} keys as IN")
-
-        # 3) refresh UI from DB
-        self.reload_keys_from_db()
-        log.info(f"[SYNC] Reloaded keys_data from DB: {len(self.keys_data)} records")
-        for k in self.keys_data:
-            log.debug(
-                f"[SYNC] DB key id={k.get('id')} name={k.get('name')} "
-                f"peg_id={k.get('peg_id')} status={k.get('status')} "
-                f"strip={k.get('strip')} pos={k.get('position')}"
-            )
-
-        self.populate_keys()
-        log.info("[SYNC] UI widgets repopulated from synced DB")
 
     # =====================================================
     # CAN SEQUENCE
@@ -291,7 +189,6 @@ class KeyDashboardScreen(BaseScreen):
             ["sudo", "python3", "solenoid.py", "1"],
             cwd="/home/rock/Desktop/ams_v2",
         )
-
 
     # =====================================================
     # MQTT GPIO
