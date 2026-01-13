@@ -49,12 +49,22 @@ log = logging.getLogger("KEY_DASHBOARD")
 # =========================================================
 # LOADING POPUP - IMPROVED UI
 # =========================================================
+
 class SolenoidLoadingPopup(Popup):
     """Beautiful loading popup shown while door is opening"""
     
     def __init__(self, **kwargs):
         # Main container with gradient background
         content = BoxLayout(orientation='vertical', padding=40, spacing=20)
+        
+        # Add rounded background with canvas FIRST
+        with content.canvas.before:
+            Color(0.15, 0.15, 0.18, 0.95)  # Dark background
+            self.rect = RoundedRectangle(
+                pos=content.pos,
+                size=content.size,
+                radius=[20]
+            )
         
         # Title
         title_label = Label(
@@ -105,20 +115,16 @@ class SolenoidLoadingPopup(Popup):
             size_hint=(0.6, 0.5),
             auto_dismiss=False,
             separator_height=0,
-            background='',
+            background='',  # Remove default background
+            border=(0, 0, 0, 0),  # ← ADDED: Remove border
             **kwargs
         )
         
-        # Add rounded background with canvas
-        with self.content.canvas.before:
-            Color(0.15, 0.15, 0.18, 0.95)  # Dark background
-            self.rect = RoundedRectangle(
-                pos=self.content.pos,
-                size=self.content.size,
-                radius=[20]
-            )
+        # Make the popup itself transparent
+        with self.canvas.before:
+            Color(0, 0, 0, 0)  # ← ADDED: Transparent popup background
         
-        self.content.bind(pos=self._update_rect, size=self._update_rect)
+        content.bind(pos=self._update_rect, size=self._update_rect)
     
     def _update_rect(self, *args):
         self.rect.pos = self.content.pos
