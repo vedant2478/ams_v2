@@ -122,31 +122,47 @@ class KeyDashboardScreen(BaseScreen):
         self.activity_code = self.activity_info["code"]
         self.activity_name = self.activity_info["name"]
 
+        # -------- CAN INIT FIRST --------
+        log.info("[CAN] Initializing AMS_CAN")
+        self.ams_can = AMS_CAN()
+        
+        # Auto-detect strips
+        import time
+        time.sleep(6)  # Wait for CAN to settle
+        
+        log.info("[CAN] Detecting key strips...")
+        self.ams_can.get_version_number(1)
+        self.ams_can.get_version_number(2)
+        time.sleep(0.5)
+        
+        log.info(f"[CAN] Detected {len(self.ams_can.key_lists)} strip(s)")
+
         # -------- HARDWARE SYNC --------
         log.info("[SYNC] Starting hardware sync to database...")
         
-        # Sync hardware state to DB using the standalone function
-        sync_success = sync_hardware_to_db(session)
+        # Sync hardware state to DB using existing CAN instance
+        sync_success = sync_hardware_to_db(session, self.ams_can)
         
         if sync_success:
             log.info("[SYNC] Hardware sync completed successfully")
         else:
-            log.warning("[SYNC] Hardware sync failed or no strips detected")
+            log.warning("[SYNC] Hardware sync failed")
         
         # Force session to flush all pending changes
         session.flush()
         session.commit()
         
-        # Wait a moment for DB to fully commit
-        import time
+        # Wait for DB to fully commit
         time.sleep(0.5)
         
         # Expire all objects to force fresh read from DB
         session.expire_all()
         
         log.info("[SYNC] Reloading keys from database...")
+        
         # Reload keys from DB (now reflects hardware state)
         self.reload_keys_from_db()
+        
         log.info(f"[SYNC] Loaded {len(self.keys_data)} keys from DB")
         
         # Debug: print loaded keys
@@ -157,13 +173,6 @@ class KeyDashboardScreen(BaseScreen):
             )
         
         self.populate_keys()
-
-        # -------- CAN INIT --------
-        # Get fresh CAN instance for dashboard operations
-        log.info("[CAN] Getting AMS_CAN instance for dashboard")
-        self.ams_can = AMS_CAN()
-        # Give CAN time to settle
-        time.sleep(1)
 
         # Start deterministic CAN sequence for activity keys
         Clock.schedule_once(self._can_step_led_on_all, 1.5)
