@@ -94,6 +94,9 @@ class KeyDashboardScreen(BaseScreen):
     # =====================================================
     # SCREEN ENTER
     # =====================================================
+    # =====================================================
+# SCREEN ENTER
+# =====================================================
     def on_enter(self, *args):
         log.info("[ENTER] KeyDashboard entered")
 
@@ -129,16 +132,38 @@ class KeyDashboardScreen(BaseScreen):
             log.info("[SYNC] Hardware sync completed successfully")
         else:
             log.warning("[SYNC] Hardware sync failed or no strips detected")
-
+        
+        # Force session to flush all pending changes
+        session.flush()
+        session.commit()
+        
+        # Wait a moment for DB to fully commit
+        import time
+        time.sleep(0.5)
+        
+        # Expire all objects to force fresh read from DB
+        session.expire_all()
+        
+        log.info("[SYNC] Reloading keys from database...")
         # Reload keys from DB (now reflects hardware state)
         self.reload_keys_from_db()
+        log.info(f"[SYNC] Loaded {len(self.keys_data)} keys from DB")
+        
+        # Debug: print loaded keys
+        for k in self.keys_data:
+            log.debug(
+                f"  Key: id={k.get('id')} name={k.get('name')} "
+                f"status={k.get('status')} peg={k.get('peg_id')}"
+            )
+        
         self.populate_keys()
 
-        # -------- CAN INIT (already done in sync_hardware_to_db) --------
-        # Get reference to CAN (sync function already initialized it)
-        log.info("[CAN] Getting AMS_CAN instance")
+        # -------- CAN INIT --------
+        # Get fresh CAN instance for dashboard operations
+        log.info("[CAN] Getting AMS_CAN instance for dashboard")
         self.ams_can = AMS_CAN()
-        # No need to call get_version_number again, sync already did it
+        # Give CAN time to settle
+        time.sleep(1)
 
         # Start deterministic CAN sequence for activity keys
         Clock.schedule_once(self._can_step_led_on_all, 1.5)
@@ -156,6 +181,7 @@ class KeyDashboardScreen(BaseScreen):
         self._can_poll_event = Clock.schedule_interval(
             self.poll_can_events, 0.2
         )
+
 
     # =====================================================
     # CAN SEQUENCE
