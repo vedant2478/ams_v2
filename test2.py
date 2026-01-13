@@ -5,7 +5,7 @@ def sync_hardware_to_db(session):
     Just call this with a session and it handles everything.
     
     Usage:
-        from test_key_status import sync_hardware_to_db
+        from test2 import sync_hardware_to_db
         sync_hardware_to_db(session)
     """
     from csi_ams.model import AMS_Keys
@@ -41,18 +41,21 @@ def sync_hardware_to_db(session):
     key_records = (
         session.query(AMS_Keys)
         .filter(AMS_Keys.deletedAt == None)
-        .order_by(AMS_Keys.stripId, AMS_Keys.keyPosition)
+        .order_by(AMS_Keys.keyStrip, AMS_Keys.keyPosition)
         .all()
     )
     
     # Group by strip
     strips_in_db = {}
     for key in key_records:
-        if key.stripId not in strips_in_db:
-            strips_in_db[key.stripId] = []
-        strips_in_db[key.stripId].append(key)
+        strip_id = key.keyStrip
+        if strip_id not in strips_in_db:
+            strips_in_db[strip_id] = []
+        strips_in_db[strip_id].append(key)
     
     print(f"  Found records for {len(strips_in_db)} strip(s) in DB")
+    for strip_id, keys in strips_in_db.items():
+        print(f"    Strip {strip_id}: {len(keys)} keys")
     
     # Sync each strip
     print("[4/4] Syncing hardware status to database...")
@@ -74,20 +77,25 @@ def sync_hardware_to_db(session):
             key_id = ams_can.get_key_id(strip_id, position)
             is_present = bool(key_id and key_id != "00000" and key_id != False)
             
-            # Update DB
-            old_status = key_record.keyPresent
-            new_status = 1 if is_present else 0
-            key_record.keyPresent = new_status
+            # Update DB - keyStatus field
+            # SLOT_STATUS_KEY_NOT_PRESENT = 0
+            # SLOT_STATUS_KEY_PRESENT_RIGHT_SLOT = 1
+            old_status = key_record.keyStatus
+            
+            if is_present:
+                new_status = 1  # SLOT_STATUS_KEY_PRESENT_RIGHT_SLOT
+                total_present += 1
+            else:
+                new_status = 0  # SLOT_STATUS_KEY_NOT_PRESENT
+                total_empty += 1
+            
+            key_record.keyStatus = new_status
             
             # Log changes
             if old_status != new_status:
                 status_text = "PRESENT" if is_present else "EMPTY"
-                print(f"    Pos {position:2d}: {old_status} → {new_status} ({status_text})")
-            
-            if is_present:
-                total_present += 1
-            else:
-                total_empty += 1
+                key_name = key_record.keyName or f"Key-{position}"
+                print(f"    Pos {position:2d} ({key_name}): {old_status} → {new_status} ({status_text})")
             
             total_synced += 1
             sleep(0.2)
@@ -99,6 +107,8 @@ def sync_hardware_to_db(session):
     except Exception as e:
         session.rollback()
         print(f"\n✗ Database commit failed: {e}")
+        import traceback
+        traceback.print_exc()
         ams_can.cleanup()
         return False
     
