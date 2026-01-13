@@ -47,6 +47,7 @@ class PinScreen(BaseScreen):
         self.reset_pin()
         self.manager.transition.direction = "right"
         self.manager.current = "card_scan"
+        self.manager.card_registration_mode = False
 
     # --------------------------------------------------
     # POPUPS
