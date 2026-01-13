@@ -139,6 +139,7 @@ class PinScreen(BaseScreen):
                         card_number=self.card_number,
                         pin=entered_pin,
                     )
+                    print(f"→ verify_or_assign_card_pin returned: {ok}, {reason}")
 
                     # no PIN in DB
                     if not ok and reason == "no_pin":
