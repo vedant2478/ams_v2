@@ -2,6 +2,10 @@
 from kivy.uix.screenmanager import Screen
 from kivy.properties import NumericProperty, StringProperty
 from kivy.clock import Clock
+from kivy.uix.popup import Popup
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.label import Label
+from kivy.uix.button import Button
 from threading import Thread
 from db import check_card_exists
 from datetime import datetime
@@ -86,6 +90,30 @@ class CardScanScreen(BaseScreen):
         self.progress = 0
         self.go_back()
 
+    def show_card_exists_popup(self):
+        """Show popup when card already exists during registration mode."""
+        layout = BoxLayout(orientation="vertical", padding=10, spacing=10)
+
+        lbl = Label(text="Card already exists!")
+        btn = Button(text="Back", size_hint=(1, 0.3))
+
+        layout.add_widget(lbl)
+        layout.add_widget(btn)
+
+        popup = Popup(
+            title="Error",
+            content=layout,
+            size_hint=(0.6, 0.4),
+            auto_dismiss=False,
+        )
+
+        def _back(instance):
+            popup.dismiss()
+            self.go_back()
+
+        btn.bind(on_release=_back)
+        popup.open()
+
     def poll_card(self):
         """Background thread to continuously poll for cards until valid or timeout."""
         while self.card_reading:
@@ -116,24 +144,36 @@ class CardScanScreen(BaseScreen):
         )
 
         if card_info["exists"]:
-            # Valid card found -> stop scanning and go to PIN
-            print(f"✓ Card found: {card_info['name']}")
-            self.instruction_text = f"Welcome {card_info['name']}"
-            self.manager.card_number = str(card_no)
-            self.manager.card_info = card_info
-            self.progress = 100
+            # Card found in DB
+            if self.manager.card_registration_mode:
+                # Registration mode but card already exists -> show popup
+                print(f"✗ Card {card_no} already exists, cannot register")
+                self.instruction_text = "Card already exists!"
+                
+                # Stop scanning and timeout
+                self.card_reading = False
+                if self._timeout_event is not None:
+                    self._timeout_event.cancel()
+                    self._timeout_event = None
 
-            # Cancel timeout and stop reading
-            self.card_reading = False
-            if self._timeout_event is not None:
-                self._timeout_event.cancel()
-                self._timeout_event = None
+                self.show_card_exists_popup()
+            else:
+                # Normal mode: valid card found -> go to PIN
+                print(f"✓ Card found: {card_info['name']}")
+                self.instruction_text = f"Welcome {card_info['name']}"
+                self.manager.card_number = str(card_no)
+                self.manager.card_info = card_info
+                self.progress = 100
 
-            Clock.schedule_once(self.go_to_pin, 0.5)
+                # Cancel timeout and stop reading
+                self.card_reading = False
+                if self._timeout_event is not None:
+                    self._timeout_event.cancel()
+                    self._timeout_event = None
+
+                Clock.schedule_once(self.go_to_pin, 0.5)
         else:
-            # Invalid card -> just show message, keep scanning
-            print(f"✗ Card {card_no} not found in database")
-
+            # Card NOT in DB
             if self.manager.card_registration_mode:
                 # NEW CARD in registration mode -> go to PIN
                 print("→ Card registration mode active, going to PIN screen")
