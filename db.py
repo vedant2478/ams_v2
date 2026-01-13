@@ -258,11 +258,17 @@ def verify_card_pin(
 
 # return: (success, reason)
 # reason in {"ok_assigned", "ok_existing", "no_pin", "conflict"}
+
 def verify_or_assign_card_pin(
     session: Session,
     card_number: str,
     pin: str,
+    force_update: bool = False,
 ) -> Tuple[bool, str]:
+    """
+    success, reason
+    reason in: "ok_assigned", "ok_existing", "no_pin", "conflict"
+    """
     pin = str(pin)
     card_number = str(card_number)
 
@@ -278,14 +284,30 @@ def verify_or_assign_card_pin(
     if not user:
         return False, "no_pin"
 
-    # already has a card
+    # PIN exists and already has a card
     if user.cardNo:
         if user.cardNo == card_number:
             return True, "ok_existing"
         else:
-            return False, "conflict"  # PIN already bound to some other card
+            return False, "conflict"  # PIN belongs to some other card
 
-    # no card yet → assign
+    # PIN exists but cardNo is empty -> assign this card
+    if user.cardNo:
+        if user.cardNo == card_number:
+            return True, "ok_existing"
+        if not force_update:
+            return False, "conflict"
+
+        # force update card number
+        user.cardNo = card_number
+        try:
+            session.commit()
+        except IntegrityError:
+            session.rollback()
+            return False, "conflict"
+        return True, "ok_updated"
+
+    # no card yet -> assign
     user.cardNo = card_number
     try:
         session.commit()
@@ -294,6 +316,7 @@ def verify_or_assign_card_pin(
         return False, "conflict"
 
     return True, "ok_assigned"
+
 
 
 # ==================================================

@@ -63,30 +63,56 @@ class PinScreen(BaseScreen):
                 if len(self.pin) == self.MAX_PIN:
                     if self.manager.card_registration_mode:
                         print("→ Card registration mode active", self.card_number)
-                        
-                        # Create the registration service
-                        reg_service = UserRegistrationService(self.manager.db_session)
-                        
-                        # Register the new user
-                        result = reg_service.create_new_user(
+
+                        session = self.manager.db_session
+                        entered_pin = "".join(self.pin)
+
+                        ok, reason = verify_or_assign_card_pin(
+                            session=session,
                             card_number=self.card_number,
-                            pin="".join(self.pin),
-                            name=None,  # Will use default name
-                            role='user'
+                            pin=entered_pin,
                         )
-                        
-                        # Store result in manager for admin screen to access
-                        self.manager.registration_result = result
-                        
-                        if result["success"]:
-                            print(f"✓ User registered: {result['name']} (ID: {result['user_id']})")
-                            self.message = "Registration successful!"
-                        else:
-                            print(f"✗ Registration failed: {result['error']}")
-                            self.message = result['error']
+
+                        # no PIN in DB
+                        if not ok and reason == "no_pin":
+                            self.message = "Incorrect PIN"
+                            print("✗ No user found with this PIN")
+                            return
+
+                        # PIN exists but belongs to some other card
+                        if not ok and reason == "conflict":
+                            print("⚠️ PIN already has another card assigned")
+                            # replace this with a Kivy popup if needed
+                            answer = input("Card already assigned. Update card? (y/N): ").strip().lower()
+                            if answer == "y":
+                                # call again but now force update in the function (see below)
+                                ok2, reason2 = verify_or_assign_card_pin(
+                                    session=session,
+                                    card_number=self.card_number,
+                                    pin=entered_pin,
+                                    force_update=True,   # add this optional arg to your function
+                                )
+                                if ok2:
+                                    print(f"✓ Card updated to {self.card_number}")
+                                    self.message = "Card updated"
+                                else:
+                                    self.message = "Update failed"
+                            else:
+                                print("↩ Card not updated")
+                                self.message = "Card not updated"
+                            return
+
+                        # success cases from function
+                        if ok and reason == "ok_assigned":
+                            print(f"✓ Card {self.card_number} assigned to this PIN")
+                            self.message = "User added"
+                        elif ok and reason == "ok_existing":
+                            print(f"✓ PIN already had this card")
+                            self.message = "PIN VERIFIED"
+
                         self.manager.card_registration_mode = False
-                        # Navigate to admin screen
-                        self.manager.current = "home"
+                        return
+
                     else:
                         self.validate_pin()
                 else:
@@ -101,71 +127,42 @@ class PinScreen(BaseScreen):
 
         # ---------------- SAFETY ----------------
         if entered_pin == ADMIN_PIN:
-            self.manager.current = "admin_home"
-            return
-
+                self.manager.current = "admin_home"
         if not self.card_number:
             self.message = "ERROR: No card"
             self.reset_pin()
             return
 
         # ---------------- VERIFY PIN ----------------
-        if self.manager.new_card:
-            ok, reason = verify_or_assign_card_pin(
+        is_valid = verify_card_pin(
+            session=session,
+            card_number=self.card_number,
+            pin=entered_pin,
+        )
+
+
+        # ❌ PIN FAILED
+        if not is_valid:
+            self.message = "INCORRECT PIN"
+            self.reset_pin()
+
+
+            log_access_and_event(
                 session=session,
-                card_number=self.card_number,
-                pin=entered_pin,
+                event_id=EVENT_LOGIN_FAILED,
+                event_type=EVENT_TYPE_ALARM,
+                auth_mode=self.manager.auth_mode,
+                login_type=self.manager.final_auth_mode,
+                user_id=None,
+                access_log_updates={
+                    "signInFailed": 1,
+                    "signInSucceed": 0,
+                },
             )
+            return
 
-            if not ok:
-                if reason == "no_pin":
-                    # no such PIN in DB
-                    self.message = "No PIN assigned"
-                elif reason == "conflict":
-                    # PIN belongs to another card already
-                    self.message = "Update card"
-                else:
-                    self.message = "PIN error"
-                self.reset_pin()
-                return
-
-            # success path for new card
-            if reason == "ok_assigned":
-                print("User added with this card")
-                self.message = "User added"
-            elif reason == "ok_existing":
-                # PIN already had this card, treat as normal success
-                self.message = "PIN VERIFIED"
-
-        else:
-            # existing card flow: old verify logic
-            is_valid = verify_card_pin(
-                session=session,
-                card_number=self.card_number,
-                pin=entered_pin,
-            )
-
-            if not is_valid:
-                self.message = "INCORRECT PIN"
-                self.reset_pin()
-
-                log_access_and_event(
-                    session=session,
-                    event_id=EVENT_LOGIN_FAILED,
-                    event_type=EVENT_TYPE_ALARM,
-                    auth_mode=self.manager.auth_mode,
-                    login_type=self.manager.final_auth_mode,
-                    user_id=None,
-                    access_log_updates={
-                        "signInFailed": 1,
-                        "signInSucceed": 0,
-                    },
-                )
-                return
-
-            self.message = "PIN VERIFIED"
-
-        # ✅ common success path (both new_card and existing)
+        # ✅ PIN SUCCESS
+        self.message = "PIN VERIFIED"
         print(f"✓ PIN correct for card {self.card_number}")
 
         user_id = self.card_info["id"]
@@ -184,8 +181,10 @@ class PinScreen(BaseScreen):
             },
         )
 
+        # Save access log for next screens
         self.manager.access_log_id = result["access_log_id"]
 
+        # ---------------- MOVE TO ACTIVITY ----------------
         self.reset_pin()
         self.manager.transition.direction = "left"
         self.manager.current = "activity"
