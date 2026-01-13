@@ -40,7 +40,7 @@ class ActivityCodeScreen(BaseScreen):
         self.code.clear()
         self.code_length = 0
         self.manager.transition.direction = "right"
-        self.manager.current = "pin"
+        self.manager.current = "home"
 
     def on_keypad(self, value):
         if value.isdigit():
