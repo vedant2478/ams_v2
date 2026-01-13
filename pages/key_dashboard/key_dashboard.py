@@ -90,15 +90,15 @@ class KeyDashboardScreen(BaseScreen):
         self._mqtt_client = None
 
         self.ams_can = None
+        self._screen_active = False  # ← ADDED: Track if screen should respond to events
 
     # =====================================================
-    # SCREEN ENTER
+    # SCREEN LIFECYCLE
     # =====================================================
-    # =====================================================
-# SCREEN ENTER
-# =====================================================
     def on_enter(self, *args):
         log.info("[ENTER] KeyDashboard entered")
+        
+        self._screen_active = True  # ← ADDED: Activate screen
 
         session = self.manager.db_session
 
@@ -191,29 +191,42 @@ class KeyDashboardScreen(BaseScreen):
             self.poll_can_events, 0.2
         )
 
+    def on_leave(self, *args):
+        """Called when leaving the screen"""
+        log.info("[LEAVE] KeyDashboard leaving")
+        self._screen_active = False  # ← ADDED: Deactivate screen
+        self._shutdown_can_and_mqtt()
 
     # =====================================================
     # CAN SEQUENCE
     # =====================================================
     def _can_step_led_on_all(self, dt):
+        if not self._screen_active:  # ← ADDED: Guard
+            return
         log.info("[CAN-1] LED ON (ALL)")
         for strip in self.ams_can.key_lists:
             self.ams_can.set_all_LED_ON(strip, False)
         Clock.schedule_once(self._can_step_lock_all, 1.0)
 
     def _can_step_lock_all(self, dt):
+        if not self._screen_active:  # ← ADDED: Guard
+            return
         log.info("[CAN-2] LOCK ALL KEYS")
         for strip in self.ams_can.key_lists:
             self.ams_can.lock_all_positions(strip)
         Clock.schedule_once(self._can_step_led_off_all, 1.0)
 
     def _can_step_led_off_all(self, dt):
+        if not self._screen_active:  # ← ADDED: Guard
+            return
         log.info("[CAN-3] LED OFF (ALL)")
         for strip in self.ams_can.key_lists:
             self.ams_can.set_all_LED_OFF(strip)
         Clock.schedule_once(self._can_step_unlock_activity, 1.0)
 
     def _can_step_unlock_activity(self, dt):
+        if not self._screen_active:  # ← ADDED: Guard
+            return
         log.info("[CAN-4] UNLOCK ACTIVITY KEYS")
         for key in self.keys_data:
             strip = int(key["strip"])
@@ -239,6 +252,11 @@ class KeyDashboardScreen(BaseScreen):
         client.subscribe("gpio/pin32")
 
     def on_mqtt_message(self, client, userdata, msg):
+        # ← ADDED: Guard against events when screen inactive
+        if not self._screen_active:
+            log.debug("[MQTT] Ignoring door event - screen not active")
+            return
+        
         value = int(msg.payload.decode())
         if value == 1 and not self._door_open:
             Clock.schedule_once(lambda dt: self.on_door_opened())
@@ -249,6 +267,11 @@ class KeyDashboardScreen(BaseScreen):
     # DOOR EVENTS
     # =====================================================
     def on_door_opened(self):
+        # ← ADDED: Guard
+        if not self._screen_active:
+            log.debug("[DOOR] Ignoring open event - screen not active")
+            return
+        
         log.info("[DOOR] Opened")
 
         subprocess.Popen(
@@ -266,6 +289,10 @@ class KeyDashboardScreen(BaseScreen):
         )
 
     def door_timer_tick(self, dt):
+        # ← ADDED: Guard
+        if not self._screen_active:
+            return
+        
         self.door_open_seconds += 1
         remaining = max(0, self.MAX_DOOR_TIME - self.door_open_seconds)
 
@@ -275,9 +302,14 @@ class KeyDashboardScreen(BaseScreen):
         )
 
         if self.door_open_seconds >= self.MAX_DOOR_TIME:
-            print("[DOOR] Max time exceeded, auto-closing door")
+            log.warning("[DOOR] Max time exceeded")
 
     def on_door_closed(self):
+        # ← ADDED: Guard
+        if not self._screen_active:
+            log.debug("[DOOR] Ignoring close event - screen not active")
+            return
+        
         log.info("[DOOR] Closed")
         self._door_open = False
 
@@ -300,6 +332,9 @@ class KeyDashboardScreen(BaseScreen):
             "%Y-%m-%d %H:%M:%S %Z"
         )
 
+        # ← ADDED: Deactivate BEFORE cleanup to prevent race conditions
+        self._screen_active = False
+        
         self._shutdown_can_and_mqtt()
         self.key_interactions = []
         self.manager.current = "activity_done"
@@ -308,25 +343,39 @@ class KeyDashboardScreen(BaseScreen):
     # SHUTDOWN HELPER
     # =====================================================
     def _shutdown_can_and_mqtt(self):
+        log.info("[SHUTDOWN] Cleaning up resources...")
+        
+        # Stop polling first
         if self._can_poll_event:
             self._can_poll_event.cancel()
             self._can_poll_event = None
 
-        if self.ams_can:
-            for strip in self.ams_can.key_lists:
-                self.ams_can.unlock_all_positions(strip)
-                self.ams_can.set_all_LED_OFF(strip)
-            self.ams_can.cleanup()
-            self.ams_can = None
+        # Stop door timer
+        if self._door_timer_event:
+            self._door_timer_event.cancel()
+            self._door_timer_event = None
 
+        # Disconnect MQTT BEFORE CAN cleanup
         if self._mqtt_client:
             self._mqtt_client.loop_stop()
             self._mqtt_client.disconnect()
             self._mqtt_client = None
+            log.info("[SHUTDOWN] MQTT disconnected")
 
-        if self._door_timer_event:
-            self._door_timer_event.cancel()
-            self._door_timer_event = None
+        # CAN cleanup
+        if self.ams_can:
+            try:
+                for strip in self.ams_can.key_lists:
+                    self.ams_can.unlock_all_positions(strip)
+                    self.ams_can.set_all_LED_OFF(strip)
+            except Exception as e:
+                log.error(f"[SHUTDOWN] CAN error: {e}")
+            
+            self.ams_can.cleanup()
+            self.ams_can = None
+            log.info("[SHUTDOWN] CAN cleaned up")
+        
+        log.info("[SHUTDOWN] Complete")
 
     # =====================================================
     # NAME LOOKUP
@@ -345,7 +394,7 @@ class KeyDashboardScreen(BaseScreen):
     # CAN POLLING
     # =====================================================
     def poll_can_events(self, dt):
-        if not self.ams_can:
+        if not self.ams_can or not self._screen_active:  # ← ADDED: Guard
             return
 
         # KEY TAKEN (removed)
@@ -487,6 +536,9 @@ class KeyDashboardScreen(BaseScreen):
             "%Y-%m-%d %H:%M:%S %Z"
         )
 
+        # ← ADDED: Deactivate before navigation
+        self._screen_active = False
+        
         self._shutdown_can_and_mqtt()
         self.key_interactions = []
         self.manager.current = "activity_done"
@@ -495,6 +547,11 @@ class KeyDashboardScreen(BaseScreen):
     # EXIT CLEANUP
     # =====================================================
     def go_back(self):
+        log.info("[GO_BACK] User cancelled")
+        
+        # ← ADDED: Deactivate screen
+        self._screen_active = False
+        
         self._shutdown_can_and_mqtt()
 
         subprocess.Popen(
