@@ -628,10 +628,10 @@ class KeyDashboardScreen(BaseScreen):
 
         # KEY RETURNED (inserted)
         if self.ams_can.key_inserted_event:
+        
             peg_id = self.ams_can.key_inserted_id
-            # You must ensure AMS_CAN provides these:
-            actual_pos = self.ams_can.key_inserted_pos      # physical slot no.
-            actual_strip = self.ams_can.key_inserted_strip  # physical strip id
+            actual_pos = self.ams_can.key_inserted_position_slot
+            actual_strip = self.ams_can.key_inserted_position_list
 
             key_name = self._get_key_name_by_peg(peg_id)
             returned_time = datetime.now(TZ_INDIA)
