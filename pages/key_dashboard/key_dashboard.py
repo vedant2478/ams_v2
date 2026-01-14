@@ -3,10 +3,10 @@ import subprocess
 import logging
 import paho.mqtt.client as mqtt
 import threading
+
 from kivy.uix.modalview import ModalView
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.behaviors import ButtonBehavior
-from kivy.uix.popup import Popup
 from kivy.uix.label import Label
 from kivy.uix.progressbar import ProgressBar
 from kivy.graphics import Color, RoundedRectangle
@@ -21,7 +21,7 @@ from kivy.clock import Clock
 from components.base_screen import BaseScreen
 from db import get_keys_for_activity, set_key_status_by_peg_id
 from amscan import AMS_CAN, CAN_LED_STATE_ON
-from hardware_sync import sync_hardware_to_db 
+from hardware_sync import sync_hardware_to_db
 
 from csi_ams.model import (
     AMS_Keys,
@@ -46,12 +46,13 @@ logging.basicConfig(
 )
 log = logging.getLogger("KEY_DASHBOARD")
 
+
 # =========================================================
 # LOADING POPUP - USING MODALVIEW (NO BORDERS)
 # =========================================================
 class SolenoidLoadingPopup(ModalView):
     """Beautiful loading popup shown while door is opening - NO WHITE BORDER"""
-    
+
     def __init__(self, **kwargs):
         super().__init__(
             size_hint=(0.6, 0.5),
@@ -60,13 +61,13 @@ class SolenoidLoadingPopup(ModalView):
             background_color=[0, 0, 0, 0.7],  # Semi-transparent black overlay
             **kwargs
         )
-        
+
         # Main container
         container = BoxLayout(orientation='vertical', padding=0, spacing=0)
-        
+
         # Inner content box with rounded background
         content = BoxLayout(orientation='vertical', padding=40, spacing=20)
-        
+
         # Draw rounded background directly on content
         with content.canvas.before:
             Color(0.15, 0.15, 0.18, 0.98)  # Dark background
@@ -75,9 +76,9 @@ class SolenoidLoadingPopup(ModalView):
                 size=content.size,
                 radius=[20, 20, 20, 20]
             )
-        
+
         content.bind(pos=self._update_rect, size=self._update_rect)
-        
+
         # Title
         title_label = Label(
             text="[b]OPENING DOOR[/b]",
@@ -87,7 +88,7 @@ class SolenoidLoadingPopup(ModalView):
             color=(0.2, 0.8, 0.4, 1)
         )
         content.add_widget(title_label)
-        
+
         # Progress bar
         self.progress = ProgressBar(
             max=100,
@@ -95,10 +96,10 @@ class SolenoidLoadingPopup(ModalView):
         )
         self.progress.value = 50
         content.add_widget(self.progress)
-        
+
         # Start animation
         Clock.schedule_interval(self._animate_progress, 0.05)
-        
+
         # Message
         message = Label(
             text="Please wait while the system\nprepares access to your keys...",
@@ -108,7 +109,7 @@ class SolenoidLoadingPopup(ModalView):
             size_hint_y=0.3
         )
         content.add_widget(message)
-        
+
         # Status message
         self.status_label = Label(
             text="Initializing...",
@@ -118,20 +119,21 @@ class SolenoidLoadingPopup(ModalView):
             size_hint_y=0.25
         )
         content.add_widget(self.status_label)
-        
+
         container.add_widget(content)
         self.add_widget(container)
-    
+
     def _animate_progress(self, dt):
         self.progress.value = (self.progress.value + 3) % 100
-    
+
     def _update_rect(self, instance, value):
         self.rect.pos = instance.pos
         self.rect.size = instance.size
-    
+
     def update_status(self, status_text):
         """Update status message"""
         self.status_label.text = status_text
+
 
 # =========================================================
 # KEY ITEM
@@ -155,6 +157,7 @@ class KeyItem(ButtonBehavior, BoxLayout):
                 self.status_text,
                 self.key_id,
             )
+
 
 # =========================================================
 # DASHBOARD SCREEN
@@ -187,17 +190,22 @@ class KeyDashboardScreen(BaseScreen):
         self._screen_active = False
         self._loading_popup = None
 
+        # Misplaced key blinking
+        self._blink_event = None
+        self._blink_state = False
+        self._misplaced_slots = set()   # set of (strip, pos)
+
     # =====================================================
     # SCREEN LIFECYCLE
     # =====================================================
     def on_enter(self, *args):
         log.info("[ENTER] KeyDashboard entered")
-        
+
         self._screen_active = True
-        
+
         # Show popup immediately BEFORE heavy initialization
         self._show_loading_popup()
-        
+
         # Run heavy initialization in background thread
         threading.Thread(target=self._initialize_hardware_thread, daemon=True).start()
 
@@ -205,10 +213,10 @@ class KeyDashboardScreen(BaseScreen):
         """Run hardware initialization in background thread"""
         try:
             import time
-            
+
             # Update status
             Clock.schedule_once(lambda dt: self._update_popup_status("Connecting to hardware..."), 0)
-            
+
             session = self.manager.db_session
 
             # -------- ACCESS LOG --------
@@ -228,7 +236,7 @@ class KeyDashboardScreen(BaseScreen):
 
             # -------- ACTIVITY --------
             self.activity_info = self.manager.activity_info
-            
+
             # Schedule UI update on main thread
             Clock.schedule_once(lambda dt: self._update_activity_ui(), 0)
 
@@ -236,52 +244,52 @@ class KeyDashboardScreen(BaseScreen):
             Clock.schedule_once(lambda dt: self._update_popup_status("Initializing CAN bus..."), 0)
             log.info("[CAN] Initializing AMS_CAN")
             self.ams_can = AMS_CAN()
-            
+
             # Auto-detect strips
             time.sleep(6)  # Wait for CAN to settle
-            
+
             Clock.schedule_once(lambda dt: self._update_popup_status("Detecting key strips..."), 0)
             log.info("[CAN] Detecting key strips...")
             self.ams_can.get_version_number(1)
             self.ams_can.get_version_number(2)
             time.sleep(0.5)
-            
+
             log.info(f"[CAN] Detected {len(self.ams_can.key_lists)} strip(s)")
 
             # -------- HARDWARE SYNC --------
             Clock.schedule_once(lambda dt: self._update_popup_status("Syncing hardware state..."), 0)
             log.info("[SYNC] Starting hardware sync to database...")
-            
+
             sync_success = sync_hardware_to_db(session, self.ams_can)
-            
+
             if sync_success:
                 log.info("[SYNC] Hardware sync completed successfully")
             else:
                 log.warning("[SYNC] Hardware sync failed")
-            
+
             session.flush()
             session.commit()
             time.sleep(0.5)
             session.expire_all()
-            
+
             Clock.schedule_once(lambda dt: self._update_popup_status("Loading keys..."), 0)
             log.info("[SYNC] Reloading keys from database...")
-            
+
             # Reload keys from DB
             self.reload_keys_from_db()
-            
+
             log.info(f"[SYNC] Loaded {len(self.keys_data)} keys from DB")
-            
+
             for k in self.keys_data:
                 log.debug(
                     f"[  Key       ] id={k.get('id')} name={k.get('name')} "
                     f"status={k.get('status')} peg={k.get('peg_id')}"
                 )
-            
+
             # Schedule UI updates and CAN sequence on main thread
             Clock.schedule_once(lambda dt: self._update_popup_status("Preparing access..."), 0)
             Clock.schedule_once(lambda dt: self._finalize_initialization(), 0)
-            
+
         except Exception as e:
             log.error(f"[INIT] Hardware initialization failed: {e}")
             Clock.schedule_once(lambda dt: self._dismiss_loading_popup(), 0)
@@ -324,6 +332,8 @@ class KeyDashboardScreen(BaseScreen):
         log.info("[LEAVE] KeyDashboard leaving")
         self._screen_active = False
         self._dismiss_loading_popup()
+        self._stop_misplaced_blink()
+        self._misplaced_slots.clear()
         self._shutdown_can_and_mqtt()
 
     # =====================================================
@@ -333,7 +343,7 @@ class KeyDashboardScreen(BaseScreen):
         """Show loading popup while solenoid opens"""
         if self._loading_popup:
             return  # Already showing
-        
+
         log.info("[POPUP] Showing solenoid loading popup")
         self._loading_popup = SolenoidLoadingPopup()
         self._loading_popup.open()
@@ -344,6 +354,38 @@ class KeyDashboardScreen(BaseScreen):
             log.info("[POPUP] Dismissing loading popup")
             self._loading_popup.dismiss()
             self._loading_popup = None
+
+    # =====================================================
+    # MISPLACED KEY BLINKING
+    # =====================================================
+    def _start_misplaced_blink(self):
+        """Start periodic blink for all misplaced slots."""
+        if self._blink_event:
+            return
+        self._blink_state = False
+        self._blink_event = Clock.schedule_interval(self._blink_tick, 0.5)
+
+    def _stop_misplaced_blink(self):
+        """Stop blinking and turn LEDs ON (or OFF) for misplaced slots."""
+        if self._blink_event:
+            self._blink_event.cancel()
+            self._blink_event = None
+        if not self.ams_can:
+            return
+        for strip, pos in self._misplaced_slots:
+            # choose ON or OFF according to your UX
+            self.ams_can.set_single_LED_state(strip, pos, CAN_LED_STATE_ON)
+
+    def _blink_tick(self, dt):
+        """Toggle LEDs of all misplaced slots."""
+        if not self.ams_can:
+            return
+        self._blink_state = not self._blink_state
+        for strip, pos in self._misplaced_slots:
+            if self._blink_state:
+                self.ams_can.set_single_LED_state(strip, pos, CAN_LED_STATE_ON)
+            else:
+                self.ams_can.set_single_LED_state(strip, pos, 0)  # 0 = OFF
 
     # =====================================================
     # CAN SEQUENCE
@@ -385,15 +427,15 @@ class KeyDashboardScreen(BaseScreen):
             pos = int(key["position"])
             self.ams_can.unlock_single_key(strip, pos)
             self.ams_can.set_single_LED_state(strip, pos, CAN_LED_STATE_ON)
-        
-        # ← CHANGED: Update status and activate solenoid
+
+        # Update status and activate solenoid
         self._update_popup_status("Opening door lock...")
         subprocess.Popen(
             ["sudo", "python3", "solenoid.py", "1"],
             cwd="/home/rock/Desktop/ams_v2",
         )
-        
-        # ← CHANGED: Dismiss popup after solenoid activation (1 second delay)
+
+        # Dismiss popup after solenoid activation (1 second delay)
         Clock.schedule_once(lambda dt: self._dismiss_loading_popup(), 1.0)
 
     # =====================================================
@@ -413,7 +455,7 @@ class KeyDashboardScreen(BaseScreen):
         if not self._screen_active:
             log.debug("[MQTT] Ignoring door event - screen not active")
             return
-        
+
         value = int(msg.payload.decode())
         if value == 1 and not self._door_open:
             Clock.schedule_once(lambda dt: self.on_door_opened())
@@ -427,10 +469,8 @@ class KeyDashboardScreen(BaseScreen):
         if not self._screen_active:
             log.debug("[DOOR] Ignoring open event - screen not active")
             return
-        
-        log.info("[DOOR] Opened")
 
-        # ← REMOVED: Don't dismiss popup here (already dismissed after solenoid activation)
+        log.info("[DOOR] Opened")
 
         subprocess.Popen(
             ["sudo", "python3", "solenoid.py", "0"],
@@ -450,7 +490,7 @@ class KeyDashboardScreen(BaseScreen):
     def door_timer_tick(self, dt):
         if not self._screen_active:
             return
-        
+
         self.door_open_seconds += 1
         remaining = max(0, self.MAX_DOOR_TIME - self.door_open_seconds)
 
@@ -466,14 +506,14 @@ class KeyDashboardScreen(BaseScreen):
         if not self._screen_active:
             log.debug("[DOOR] Ignoring close event - screen not active")
             return
-        
+
         # Check minimum door open time
         if self._door_opened_timestamp:
             elapsed = (datetime.now() - self._door_opened_timestamp).total_seconds()
             if elapsed < self.MIN_DOOR_OPEN_TIME:
                 log.info(f"[DOOR] Close event too soon ({elapsed:.1f}s < {self.MIN_DOOR_OPEN_TIME}s), ignoring")
                 return
-        
+
         log.info("[DOOR] Closed")
         self._door_open = False
 
@@ -497,7 +537,9 @@ class KeyDashboardScreen(BaseScreen):
         )
 
         self._screen_active = False
-        self._dismiss_loading_popup()  # Safety: ensure it's dismissed
+        self._dismiss_loading_popup()  # Safety
+        self._stop_misplaced_blink()
+        self._misplaced_slots.clear()
         self._shutdown_can_and_mqtt()
         self.key_interactions = []
         self.manager.current = "activity_done"
@@ -507,7 +549,7 @@ class KeyDashboardScreen(BaseScreen):
     # =====================================================
     def _shutdown_can_and_mqtt(self):
         log.info("[SHUTDOWN] Cleaning up resources...")
-        
+
         # Stop polling first
         if self._can_poll_event:
             self._can_poll_event.cancel()
@@ -517,6 +559,10 @@ class KeyDashboardScreen(BaseScreen):
         if self._door_timer_event:
             self._door_timer_event.cancel()
             self._door_timer_event = None
+
+        # Stop misplaced blinking
+        self._stop_misplaced_blink()
+        self._misplaced_slots.clear()
 
         # Disconnect MQTT BEFORE CAN cleanup
         if self._mqtt_client:
@@ -533,11 +579,11 @@ class KeyDashboardScreen(BaseScreen):
                     self.ams_can.set_all_LED_OFF(strip)
             except Exception as e:
                 log.error(f"[SHUTDOWN] CAN error: {e}")
-            
+
             self.ams_can.cleanup()
             self.ams_can = None
             log.info("[SHUTDOWN] CAN cleaned up")
-        
+
         log.info("[SHUTDOWN] Complete")
 
     # =====================================================
@@ -556,9 +602,6 @@ class KeyDashboardScreen(BaseScreen):
     # =====================================================
     # CAN POLLING
     # =====================================================
-    # =====================================================
-# CAN POLLING
-# =====================================================
     def poll_can_events(self, dt):
         if not self.ams_can or not self._screen_active:
             return
@@ -586,9 +629,40 @@ class KeyDashboardScreen(BaseScreen):
         # KEY RETURNED (inserted)
         if self.ams_can.key_inserted_event:
             peg_id = self.ams_can.key_inserted_id
+            # You must ensure AMS_CAN provides these:
+            actual_pos = self.ams_can.key_inserted_pos      # physical slot no.
+            actual_strip = self.ams_can.key_inserted_strip  # physical strip id
+
             key_name = self._get_key_name_by_peg(peg_id)
             returned_time = datetime.now(TZ_INDIA)
 
+            # -------- MISPLACED CHECK --------
+            expected_pos = None
+            expected_strip = None
+            for k in self.keys_data:
+                if str(k.get("peg_id")) == str(peg_id):
+                    expected_pos = int(k.get("position"))
+                    expected_strip = int(k.get("strip"))
+                    break
+
+            if expected_pos is not None and (
+                expected_pos != actual_pos or expected_strip != actual_strip
+            ):
+                log.warning(
+                    f"[MISPLACED] Key {key_name} peg_id={peg_id} expected "
+                    f"strip={expected_strip},pos={expected_pos} but inserted at "
+                    f"strip={actual_strip},pos={actual_pos}"
+                )
+                self._misplaced_slots.add((actual_strip, actual_pos))
+                self._start_misplaced_blink()
+            else:
+                # If this key was previously misplaced but now in correct slot, stop blinking for that slot
+                if (actual_strip, actual_pos) in self._misplaced_slots:
+                    self._misplaced_slots.discard((actual_strip, actual_pos))
+                    if not self._misplaced_slots:
+                        self._stop_misplaced_blink()
+
+            # -------- EXISTING LOGIC (DB + interactions) --------
             updated = False
             for ev in reversed(self.key_interactions):
                 if ev["key_name"] == key_name and ev["returned_timestamp"] is None:
@@ -597,25 +671,25 @@ class KeyDashboardScreen(BaseScreen):
                     break
 
             if not updated:
-                # ← CHANGED: Key wasn't taken in this session, fetch from DB
+                # Key not in session → fetch taken time from DB
                 log.info(f"[KEY INSERT] Key {key_name} returned but not in session history - fetching from DB")
-                
+
                 session = self.manager.db_session
                 key_record = session.query(AMS_Keys).filter(
                     AMS_Keys.peg_id == peg_id
                 ).first()
-                
+
                 taken_timestamp = None
                 if key_record and key_record.keyTakenAtTime:
                     taken_timestamp = key_record.keyTakenAtTime
                     log.info(f"[KEY INSERT] Found DB taken time: {taken_timestamp}")
                 else:
                     log.warning(f"[KEY INSERT] No taken time found in DB for peg_id={peg_id}")
-                
+
                 self.key_interactions.append({
                     "key_name": key_name,
                     "peg_id": peg_id,
-                    "taken_timestamp": taken_timestamp,  # ← From DB
+                    "taken_timestamp": taken_timestamp,
                     "returned_timestamp": returned_time,
                 })
 
@@ -623,7 +697,6 @@ class KeyDashboardScreen(BaseScreen):
             self.ams_can.key_inserted_event = False
             self.reload_keys_from_db()
             self.update_key_widgets()
-
 
     # =====================================================
     # DB COMMIT
@@ -720,6 +793,8 @@ class KeyDashboardScreen(BaseScreen):
 
         self._screen_active = False
         self._dismiss_loading_popup()
+        self._stop_misplaced_blink()
+        self._misplaced_slots.clear()
         self._shutdown_can_and_mqtt()
         self.key_interactions = []
         self.manager.current = "activity_done"
@@ -731,6 +806,8 @@ class KeyDashboardScreen(BaseScreen):
         log.info("[GO_BACK] User cancelled")
         self._screen_active = False
         self._dismiss_loading_popup()
+        self._stop_misplaced_blink()
+        self._misplaced_slots.clear()
         self._shutdown_can_and_mqtt()
 
         subprocess.Popen(
