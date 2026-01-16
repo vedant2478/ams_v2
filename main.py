@@ -62,7 +62,7 @@ from pages.admin_pages.admin_home.admin_home import AdminScreen
 from pages.admin_pages.peg_registration.peg_registration import PegScanScreen
 from pages.module_select.module_select import ModuleSelectScreen
 from pages.attendance_system.attendance_type.attendance_type import AttendanceTypeScreen
-from pages.attendance_system.face_attendance.face_attendance import KivyCamera
+from pages.attendance_system.face_attendance.face_attendance import FaceAttendanceScreen
 
 # ================= MAIN APP =================
 class MainApp(App):
@@ -117,7 +117,7 @@ class MainApp(App):
         sm.add_widget(PegScanScreen(name="peg_scan"))
         sm.add_widget(ModuleSelectScreen(name="module_select"))
         sm.add_widget(AttendanceTypeScreen(name="attendance_type"))
-        sm.add_widget(KivyCamera(name="face_attendance"))
+        sm.add_widget(FaceAttendanceScreen(name="face_attendance"))
 
         sm.current = "home"
         return sm
