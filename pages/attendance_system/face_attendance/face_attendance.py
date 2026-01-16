@@ -11,7 +11,7 @@ from kivy.graphics.texture import Texture
 import cv2
 
 # Import the face recognition system
-from face_recognition_system import FaceAttendanceSystem
+from attendance import FaceAttendanceSystem
 from face_detection_utils import is_face_in_box
 
 
