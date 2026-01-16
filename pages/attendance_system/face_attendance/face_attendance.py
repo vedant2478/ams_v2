@@ -11,6 +11,7 @@ class KivyCamera(Image):
     Custom camera widget using OpenCV for live camera feed
     """
     def __init__(self, **kwargs):
+        print("KivyCamera: __init__ called")
         super(KivyCamera, self).__init__(**kwargs)
         self.capture = None
         self.fps = 30
@@ -18,76 +19,100 @@ class KivyCamera(Image):
     def start(self, camera_index=1):
         """
         Start the camera capture
-        Args:
-            camera_index: Camera device index (default 1 for your device)
         """
+        print(f"KivyCamera: start() called with camera_index={camera_index}")
         try:
             # Open camera at index 1
             self.capture = cv2.VideoCapture(camera_index)
+            print(f"KivyCamera: VideoCapture created: {self.capture}")
             
             if not self.capture.isOpened():
-                print(f"Error: Could not open camera at index {camera_index}")
+                print(f"ERROR: Could not open camera at index {camera_index}")
                 return
+            
+            print("KivyCamera: Camera opened successfully")
             
             # Set camera properties
             self.capture.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
             self.capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
             self.capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
             
-            # Warm up camera - discard first few frames
-            for _ in range(5):
-                self.capture.read()
+            # Warm up camera
+            print("KivyCamera: Warming up camera...")
+            for i in range(5):
+                ret, frame = self.capture.read()
+                print(f"  Warm-up frame {i}: ret={ret}")
             
             # Schedule frame updates
             Clock.schedule_interval(self.update, 1.0 / self.fps)
-            print(f"Camera started successfully at index {camera_index}")
+            print(f"KivyCamera: Clock scheduled at {self.fps} FPS")
+            print("="*50)
             
         except Exception as e:
-            print(f"Error starting camera: {e}")
+            print(f"ERROR in start(): {e}")
+            import traceback
+            traceback.print_exc()
     
     def update(self, dt):
         """
         Update camera frame
         """
-        if not self.capture or not self.capture.isOpened():
+        if not self.capture:
+            print("ERROR: self.capture is None")
+            return
+            
+        if not self.capture.isOpened():
+            print("ERROR: capture is not opened")
             return
         
         try:
             ret, frame = self.capture.read()
             
-            if ret and frame is not None:
-                # Get frame dimensions
-                h, w = frame.shape[:2]
+            if not ret:
+                print("ERROR: Failed to read frame (ret=False)")
+                return
                 
-                # Convert BGR to RGB
-                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                
-                # Flatten to bytes
-                buf = frame_rgb.tobytes()
-                
-                # Create texture
-                texture = Texture.create(size=(w, h), colorfmt='rgb')
-                texture.blit_buffer(buf, colorfmt='rgb', bufferfmt='ubyte')
-                texture.flip_vertical()  # Flip texture for correct orientation
-                
-                # Update display
-                self.texture = texture
-                
+            if frame is None:
+                print("ERROR: Frame is None")
+                return
+            
+            # Get frame dimensions
+            h, w = frame.shape[:2]
+            print(f"Frame captured: {w}x{h}")
+            
+            # Convert BGR to RGB
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            
+            # Flatten to bytes
+            buf = frame_rgb.tobytes()
+            
+            # Create texture
+            texture = Texture.create(size=(w, h), colorfmt='rgb')
+            texture.blit_buffer(buf, colorfmt='rgb', bufferfmt='ubyte')
+            texture.flip_vertical()
+            
+            # Update display
+            self.texture = texture
+            print(f"Texture updated: {w}x{h}")
+            
         except Exception as e:
-            print(f"Frame update error: {e}")
+            print(f"ERROR in update(): {e}")
+            import traceback
+            traceback.print_exc()
     
     def stop(self):
         """
         Stop the camera capture
         """
+        print("KivyCamera: stop() called")
         Clock.unschedule(self.update)
         if self.capture:
             try:
                 self.capture.release()
-            except:
-                pass
+                print("KivyCamera: Camera released")
+            except Exception as e:
+                print(f"ERROR releasing camera: {e}")
             self.capture = None
-        print("Camera stopped")
 
 
 class FaceAttendanceScreen(Screen):
@@ -99,114 +124,71 @@ class FaceAttendanceScreen(Screen):
     current_user = StringProperty("USER_NAME")
     
     def __init__(self, **kwargs):
+        print("FaceAttendanceScreen: __init__ called")
         super(FaceAttendanceScreen, self).__init__(**kwargs)
     
     def on_enter(self):
         """
         Called when screen is entered - initialize camera
         """
+        print("FaceAttendanceScreen: on_enter() called")
         Clock.schedule_once(self.setup_camera, 0.5)
     
     def setup_camera(self, dt):
         """
         Setup and start camera feed
         """
+        print("FaceAttendanceScreen: setup_camera() called")
         try:
+            # Check if camera_feed exists in ids
+            if 'camera_feed' not in self.ids:
+                print("ERROR: 'camera_feed' not found in self.ids")
+                print(f"Available ids: {list(self.ids.keys())}")
+                return
+            
+            print(f"camera_feed widget: {self.ids.camera_feed}")
+            print(f"camera_feed type: {type(self.ids.camera_feed)}")
+            
             # Start camera at index 1
             self.ids.camera_feed.start(camera_index=1)
             
         except Exception as e:
-            print(f"Camera setup error: {e}")
+            print(f"ERROR in setup_camera(): {e}")
+            import traceback
+            traceback.print_exc()
     
     def on_time_type_change(self, time_type):
         """
         Handle toggle button change between In-Time and Out-Time
-        Args:
-            time_type: "in" or "out"
         """
         self.current_time_type = time_type
         print(f"Time type changed to: {time_type}")
-        
-        if time_type == "in":
-            print("Ready for In-Time attendance")
-        else:
-            print("Ready for Out-Time attendance")
     
     def update_welcome_message(self, username):
         """
         Update welcome message with detected user
-        Args:
-            username: Name of the detected user
         """
         self.current_user = username
         self.ids.welcome_label.text = f'"{username}" --> Welcome'
-    
-    def enable_face_detection(self):
-        """
-        Enable real-time face detection on camera feed
-        Call this method to activate face detection
-        """
-        try:
-            # Schedule face detection
-            Clock.schedule_interval(self.detect_faces, 0.5)
-            print("Face detection enabled")
-            
-        except Exception as e:
-            print(f"Face detection setup error: {e}")
-    
-    def detect_faces(self, dt):
-        """
-        Detect faces in current camera frame
-        """
-        try:
-            camera = self.ids.camera_feed
-            if camera.capture and camera.capture.isOpened():
-                ret, frame = camera.capture.read()
-                
-                if ret and frame is not None:
-                    # Load classifier
-                    face_cascade = cv2.CascadeClassifier(
-                        cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
-                    )
-                    
-                    # Detect faces
-                    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                    faces = face_cascade.detectMultiScale(gray, 1.3, 5)
-                    
-                    if len(faces) > 0:
-                        # Face detected - update UI
-                        self.update_welcome_message("Face Detected")
-                    else:
-                        self.update_welcome_message("USER_NAME")
-                        
-        except Exception as e:
-            print(f"Face detection error: {e}")
     
     def go_back(self):
         """
         Navigate back to previous screen
         """
-        # Unschedule any detection tasks
-        Clock.unschedule(self.detect_faces)
-        
-        # Stop camera
+        print("FaceAttendanceScreen: go_back() called")
         try:
             self.ids.camera_feed.stop()
-        except:
-            pass
+        except Exception as e:
+            print(f"ERROR stopping camera: {e}")
         
-        print("Going back")
         self.manager.current = "attendance_type"
     
     def on_leave(self):
         """
         Called when screen is left - cleanup camera
         """
-        # Unschedule any detection tasks
-        Clock.unschedule(self.detect_faces)
-        
-        # Stop camera
+        print("FaceAttendanceScreen: on_leave() called")
         try:
             self.ids.camera_feed.stop()
-        except:
-            pass
+        except Exception as e:
+            print(f"ERROR in on_leave: {e}")
