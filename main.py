@@ -47,6 +47,7 @@ Builder.load_file(
     os.path.join(BASE_DIR, "pages/admin_pages/admin_home/admin_home.kv")
 )
 Builder.load_file(os.path.join(BASE_DIR, "pages/module_select/module_select.kv"))
+Builder.load_file(os.path.join(BASE_DIR, "pages/attendance_system/attendance_type/attendance_type.kv"))
 
 # ================= SCREEN PY =================
 from pages.home.home import HomeScreen
@@ -59,6 +60,7 @@ from pages.activity_done.activity_done import ActivityDoneScreen
 from pages.admin_pages.admin_home.admin_home import AdminScreen
 from pages.admin_pages.peg_registration.peg_registration import PegScanScreen
 from pages.module_select.module_select import ModuleSelectScreen
+from pages.attendance_system.attendance_type.attendance_type import AttendanceTypeScreen
 
 
 # ================= MAIN APP =================
@@ -113,6 +115,7 @@ class MainApp(App):
         sm.add_widget(AdminScreen(name="admin_home"))
         sm.add_widget(PegScanScreen(name="peg_scan"))
         sm.add_widget(ModuleSelectScreen(name="module_select"))
+        sm.add_widget(AttendanceTypeScreen(name="attendance_type"))
 
         sm.current = "home"
         return sm
