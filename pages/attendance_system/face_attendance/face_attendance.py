@@ -4,7 +4,6 @@ from kivy.properties import StringProperty
 from kivy.clock import Clock
 from kivy.graphics.texture import Texture
 import cv2
-import sys
 
 
 class KivyCamera(Image):
@@ -23,7 +22,7 @@ class KivyCamera(Image):
             camera_index: Camera device index (default 1 for your device)
         """
         try:
-            # Open camera at index 1 (your working camera)
+            # Open camera at index 1
             self.capture = cv2.VideoCapture(camera_index)
             
             if not self.capture.isOpened():
@@ -34,10 +33,10 @@ class KivyCamera(Image):
             self.capture.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
             self.capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
             self.capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-            self.capture.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
             
-            # Suppress JPEG warnings
-            cv2.setLogLevel(0)
+            # Warm up camera - discard first few frames
+            for _ in range(5):
+                self.capture.read()
             
             # Schedule frame updates
             Clock.schedule_interval(self.update, 1.0 / self.fps)
@@ -47,58 +46,46 @@ class KivyCamera(Image):
             print(f"Error starting camera: {e}")
     
     def update(self, dt):
+        """
+        Update camera frame
+        """
         if not self.capture or not self.capture.isOpened():
             return
         
         try:
             ret, frame = self.capture.read()
             
-            if ret and frame is not None and frame.size > 0:
-                # Reset reconnect counter on successful read
-                self.reconnect_attempts = 0
-                
-                # Skip some frames if processing is slow
-                self.frame_skip = (self.frame_skip + 1) % 2
-                if self.frame_skip != 0:
-                    return
-                
-                # Remove or comment out this line to fix inversion:
-                # frame = cv2.flip(frame, 1)
+            if ret and frame is not None:
+                # Get frame dimensions
+                h, w = frame.shape[:2]
                 
                 # Convert BGR to RGB
-                buf = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 
-                # Convert to Kivy texture
-                buf = buf.tobytes()
-                texture = Texture.create(
-                    size=(frame.shape[1], frame.shape[0]), 
-                    colorfmt='rgb'
-                )
+                # Flatten to bytes
+                buf = frame_rgb.tobytes()
+                
+                # Create texture
+                texture = Texture.create(size=(w, h), colorfmt='rgb')
                 texture.blit_buffer(buf, colorfmt='rgb', bufferfmt='ubyte')
+                texture.flip_vertical()  # Flip texture for correct orientation
                 
-                # Display texture
+                # Update display
                 self.texture = texture
                 
-            else:
-                # Handle failed frame read
-                self.reconnect_attempts += 1
-                if self.reconnect_attempts < self.max_reconnect_attempts:
-                    # Try to grab next frame
-                    self.capture.grab()
-                else:
-                    print("Camera connection lost")
-                    
         except Exception as e:
-            # Silently ignore corrupt frame errors
-            pass
-
+            print(f"Frame update error: {e}")
+    
     def stop(self):
         """
         Stop the camera capture
         """
         Clock.unschedule(self.update)
         if self.capture:
-            self.capture.release()
+            try:
+                self.capture.release()
+            except:
+                pass
             self.capture = None
         print("Camera stopped")
 
@@ -125,7 +112,7 @@ class FaceAttendanceScreen(Screen):
         Setup and start camera feed
         """
         try:
-            # Start camera at index 1 (your working camera)
+            # Start camera at index 1
             self.ids.camera_feed.start(camera_index=1)
             
         except Exception as e:
@@ -154,43 +141,55 @@ class FaceAttendanceScreen(Screen):
         self.current_user = username
         self.ids.welcome_label.text = f'"{username}" --> Welcome'
     
-    def process_face_detection(self, frame):
+    def enable_face_detection(self):
         """
-        Process face detection on the current frame
-        Args:
-            frame: Current camera frame from OpenCV
-        Returns:
-            Processed frame with face detection overlays
+        Enable real-time face detection on camera feed
+        Call this method to activate face detection
         """
         try:
-            # Load face cascade classifier
-            face_cascade = cv2.CascadeClassifier(
-                cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
-            )
-            
-            # Convert to grayscale for face detection
-            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            
-            # Detect faces
-            faces = face_cascade.detectMultiScale(gray, 1.3, 5)
-            
-            # Draw rectangles around detected faces
-            for (x, y, w, h) in faces:
-                cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
-                
-                # Update welcome message when face detected
-                if len(faces) > 0:
-                    self.update_welcome_message("Detected User")
+            # Schedule face detection
+            Clock.schedule_interval(self.detect_faces, 0.5)
+            print("Face detection enabled")
             
         except Exception as e:
+            print(f"Face detection setup error: {e}")
+    
+    def detect_faces(self, dt):
+        """
+        Detect faces in current camera frame
+        """
+        try:
+            camera = self.ids.camera_feed
+            if camera.capture and camera.capture.isOpened():
+                ret, frame = camera.capture.read()
+                
+                if ret and frame is not None:
+                    # Load classifier
+                    face_cascade = cv2.CascadeClassifier(
+                        cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+                    )
+                    
+                    # Detect faces
+                    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                    faces = face_cascade.detectMultiScale(gray, 1.3, 5)
+                    
+                    if len(faces) > 0:
+                        # Face detected - update UI
+                        self.update_welcome_message("Face Detected")
+                    else:
+                        self.update_welcome_message("USER_NAME")
+                        
+        except Exception as e:
             print(f"Face detection error: {e}")
-        
-        return frame
     
     def go_back(self):
         """
         Navigate back to previous screen
         """
+        # Unschedule any detection tasks
+        Clock.unschedule(self.detect_faces)
+        
+        # Stop camera
         try:
             self.ids.camera_feed.stop()
         except:
@@ -203,6 +202,10 @@ class FaceAttendanceScreen(Screen):
         """
         Called when screen is left - cleanup camera
         """
+        # Unschedule any detection tasks
+        Clock.unschedule(self.detect_faces)
+        
+        # Stop camera
         try:
             self.ids.camera_feed.stop()
         except:
