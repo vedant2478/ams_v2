@@ -3,6 +3,7 @@ from kivy.uix.image import Image
 from kivy.properties import StringProperty
 from kivy.clock import Clock
 from kivy.graphics.texture import Texture
+from components.base_screen import BaseScreen
 import cv2
 
 
@@ -15,26 +16,46 @@ class KivyCamera(Image):
         self.capture = None
         self.fps = 30
         
-    def start(self, camera_index=0):
-        """
-        Start the camera capture
-        Args:
-            camera_index: Camera device index (0 for default camera)
-        """
+    def start(self, camera_index=None):
+    
         try:
+            # Try video1 first, then search for others
+            if camera_index is None:
+                # Try common indices for your device
+                for idx in [1, 0, 2, 3]:
+                    cap = cv2.VideoCapture(idx)
+                    if cap.isOpened():
+                        ret, _ = cap.read()
+                        cap.release()
+                        if ret:
+                            camera_index = idx
+                            print(f"Found working camera at index: {idx}")
+                            break
+                
+                if camera_index is None:
+                    print("Error: No working camera found")
+                    return
+            
+            # Open the camera
             self.capture = cv2.VideoCapture(camera_index)
+            
+            if not self.capture.isOpened():
+                print(f"Error: Could not open camera at index {camera_index}")
+                return
             
             # Set camera resolution
             self.capture.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
             self.capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+            self.capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
             
             # Schedule frame updates
             Clock.schedule_interval(self.update, 1.0 / self.fps)
-            print("Camera started successfully")
+            print(f"Camera started successfully at index {camera_index}")
             
         except Exception as e:
             print(f"Error starting camera: {e}")
-    
+
+        
     def update(self, dt):
         """
         Update camera frame
@@ -68,7 +89,7 @@ class KivyCamera(Image):
         print("Camera stopped")
 
 
-class FaceAttendanceScreen(Screen):
+class FaceAttendanceScreen(BaseScreen):
     """
     Face Attendance Screen with In-Time/Out-Time toggle and camera feed
     """
