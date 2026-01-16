@@ -1,73 +1,65 @@
 import cv2
 import numpy as np
-from deepface import DeepFace
+import face_recognition
 from datetime import datetime
 
 
 class FaceAttendanceSystem:
     """
-    Face recognition attendance system using DeepFace.
-    Uses DeepFace library with in-memory storage.
+    Face recognition attendance system using face_recognition library.
+    Lightweight alternative to DeepFace.
     """
     
-    def __init__(self, model_name="Facenet512", distance_metric="cosine", tolerance=0.4):
+    def __init__(self, tolerance=0.6):
         """
         Initialize the attendance system.
         
         Args:
-            model_name: Recognition model (Facenet512, VGG-Face, ArcFace, etc.)
-            distance_metric: Distance metric (cosine, euclidean, euclidean_l2)
-            tolerance: Recognition tolerance (lower = stricter, default 0.4 for cosine)
+            tolerance: Recognition tolerance (0.6 is default, lower = stricter)
         """
-        self.model_name = model_name
-        self.distance_metric = distance_metric
         self.tolerance = tolerance
         
         # In-memory storage
-        self.users = {}  # {name: [embedding1, embedding2, ...]}
+        self.users = {}  # {name: [encoding1, encoding2, ...]}
         self.attendance_log = []  # [{name, timestamp, distance, type}, ...]
         
         print(f"✅ FaceAttendanceSystem initialized")
-        print(f"   Model: {model_name}")
-        print(f"   Distance Metric: {distance_metric}")
+        print(f"   Library: face_recognition")
         print(f"   Tolerance: {tolerance}")
     
     def _generate_encoding(self, image):
-        """Generate face embedding from image using DeepFace."""
+        """
+        Generate face encoding from image using face_recognition.
+        
+        Args:
+            image: OpenCV image (BGR format) or path to image
+        
+        Returns:
+            encoding: Numpy array or None if no face detected
+        """
         try:
+            # Convert from path if needed
             if isinstance(image, str):
                 image = cv2.imread(image)
                 if image is None:
                     return None
             
-            result = DeepFace.represent(
-                img_path=image,
-                model_name=self.model_name,
-                enforce_detection=True,
-                detector_backend="opencv",
-                align=True
-            )
+            # Convert BGR to RGB (face_recognition uses RGB)
+            rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
             
-            if len(result) == 0:
+            # Get face encodings
+            encodings = face_recognition.face_encodings(rgb_image)
+            
+            if len(encodings) == 0:
+                print(f"⚠ No face detected")
                 return None
             
-            embedding = np.array(result[0]["embedding"])
-            return embedding
+            # Return first face encoding
+            return encodings[0]
         
         except Exception as e:
             print(f"❌ Encoding error: {e}")
             return None
-    
-    def _calculate_distance(self, embedding1, embedding2):
-        """Calculate distance between two embeddings."""
-        if self.distance_metric == "cosine":
-            return 1 - np.dot(embedding1, embedding2) / (np.linalg.norm(embedding1) * np.linalg.norm(embedding2))
-        elif self.distance_metric == "euclidean":
-            return np.linalg.norm(embedding1 - embedding2)
-        elif self.distance_metric == "euclidean_l2":
-            return np.linalg.norm(embedding1 - embedding2) / np.sqrt(np.sum(embedding1**2) + np.sum(embedding2**2))
-        else:
-            return 1 - np.dot(embedding1, embedding2) / (np.linalg.norm(embedding1) * np.linalg.norm(embedding2))
     
     def register_user(self, name, image):
         """
@@ -119,19 +111,18 @@ class FaceAttendanceSystem:
         best_name = "Unknown"
         best_distance = float('inf')
         
+        # Compare with all stored encodings
         for name, encodings_list in self.users.items():
-            for encoding in encodings_list:
-                distance = self._calculate_distance(query_encoding, encoding)
-                
-                if distance < best_distance:
-                    best_distance = distance
-                    best_name = name
+            # Use face_recognition's compare_faces
+            distances = face_recognition.face_distance(encodings_list, query_encoding)
+            min_distance = np.min(distances)
+            
+            if min_distance < best_distance:
+                best_distance = min_distance
+                best_name = name
         
         # Calculate confidence (inverse of distance, normalized to 0-100%)
-        if self.distance_metric == "cosine":
-            confidence = max(0, (1 - best_distance) * 100)
-        else:
-            confidence = max(0, (self.tolerance - best_distance) / self.tolerance * 100)
+        confidence = max(0, (1 - best_distance) * 100)
         
         if best_distance <= self.tolerance:
             print(f"✅ Recognized: {best_name} (distance: {best_distance:.3f}, confidence: {confidence:.1f}%)")
