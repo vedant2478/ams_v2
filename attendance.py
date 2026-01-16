@@ -1,71 +1,65 @@
 import cv2
 import numpy as np
 from datetime import datetime
-import insightface
-from insightface.app import FaceAnalysis
-from sklearn.metrics.pairwise import cosine_similarity
 
 
 class FaceAttendanceSystem:
     """
-    Face recognition using InsightFace (ONNX Runtime).
-    Better accuracy than OpenCV LBPH, lighter than DeepFace.
+    Lightweight face recognition using OpenCV only (no dlib required).
+    Uses Local Binary Patterns Histograms (LBPH) for face recognition.
     """
     
-    def __init__(self, threshold=0.4):
+    def __init__(self, threshold=50):
         """
         Initialize the attendance system.
         
         Args:
-            threshold: Similarity threshold (lower = stricter, 0.3-0.5 recommended)
+            threshold: Recognition threshold (lower = stricter, default 50)
         """
         self.threshold = threshold
-        
-        # Initialize InsightFace
-        print("🔄 Initializing InsightFace...")
-        self.app = FaceAnalysis(name='buffalo_l', providers=['CPUExecutionProvider'])
-        self.app.prepare(ctx_id=0, det_size=(640, 640))
+        self.face_recognizer = cv2.face.LBPHFaceRecognizer_create()
         
         # In-memory storage
-        self.users = {}  # {name: [embedding1, embedding2, ...]}
+        self.users = {}  # {name: user_id}
+        self.user_id_counter = 0
+        self.face_samples = []  # List of face samples
+        self.face_labels = []   # Corresponding labels
         self.attendance_log = []
+        self.is_trained = False
         
-        print(f"✅ FaceAttendanceSystem initialized (InsightFace)")
+        print(f"✅ FaceAttendanceSystem initialized (OpenCV LBPH)")
         print(f"   Threshold: {threshold}")
     
-    def _generate_encoding(self, image):
-        """
-        Generate face embedding from image using InsightFace.
-        
-        Args:
-            image: OpenCV image (BGR format)
-        
-        Returns:
-            embedding: Numpy array or None if no face detected
-        """
+    def _detect_face(self, image):
+        """Detect face in image and return face ROI."""
         try:
             if isinstance(image, str):
                 image = cv2.imread(image)
                 if image is None:
                     return None
             
-            # Detect faces and get embeddings
-            faces = self.app.get(image)
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            face_cascade = cv2.CascadeClassifier(
+                cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+            )
+            
+            faces = face_cascade.detectMultiScale(gray, 1.3, 5)
             
             if len(faces) == 0:
                 print("⚠ No face detected")
                 return None
             
-            # Return embedding of first (largest) face
-            embedding = faces[0].embedding
+            # Return first face
+            (x, y, w, h) = faces[0]
+            face_roi = gray[y:y+h, x:x+w]
             
-            # Normalize embedding
-            embedding = embedding / np.linalg.norm(embedding)
+            # Resize to standard size
+            face_roi = cv2.resize(face_roi, (200, 200))
             
-            return embedding
+            return face_roi
         
         except Exception as e:
-            print(f"❌ Encoding error: {e}")
+            print(f"❌ Face detection error: {e}")
             return None
     
     def register_user(self, name, image):
@@ -81,18 +75,28 @@ class FaceAttendanceSystem:
         """
         print(f"\n📝 Registering: {name}")
         
-        embedding = self._generate_encoding(image)
+        face_roi = self._detect_face(image)
         
-        if embedding is None:
+        if face_roi is None:
             print(f"❌ Registration failed - no face detected")
             return False
         
+        # Assign user ID
         if name not in self.users:
-            self.users[name] = []
+            self.users[name] = self.user_id_counter
+            self.user_id_counter += 1
         
-        self.users[name].append(embedding)
+        user_id = self.users[name]
         
-        print(f"✅ Registered: {name} (Total embeddings: {len(self.users[name])})")
+        # Add face sample
+        self.face_samples.append(face_roi)
+        self.face_labels.append(user_id)
+        
+        # Retrain recognizer
+        self.face_recognizer.train(self.face_samples, np.array(self.face_labels))
+        self.is_trained = True
+        
+        print(f"✅ Registered: {name} (ID: {user_id}, Samples: {self.face_labels.count(user_id)})")
         return True
     
     def recognize_user(self, image):
@@ -103,43 +107,36 @@ class FaceAttendanceSystem:
             image: OpenCV image (BGR format)
         
         Returns:
-            (name, confidence, similarity): Recognized name, confidence %, and similarity score
+            (name, confidence, distance): Recognized name, confidence %, and distance
         """
-        query_embedding = self._generate_encoding(image)
+        if not self.is_trained:
+            print("⚠ No trained users")
+            return "Unknown", 0.0, 100.0
         
-        if query_embedding is None:
-            return "Unknown", 0.0, 0.0
+        face_roi = self._detect_face(image)
         
-        if len(self.users) == 0:
-            print("⚠ No registered users")
-            return "Unknown", 0.0, 0.0
+        if face_roi is None:
+            return "Unknown", 0.0, 100.0
         
-        best_name = "Unknown"
-        best_similarity = -1.0
+        # Predict
+        label, distance = self.face_recognizer.predict(face_roi)
         
-        # Compare with all stored embeddings
-        for name, embeddings_list in self.users.items():
-            for embedding in embeddings_list:
-                # Calculate cosine similarity
-                similarity = cosine_similarity(
-                    query_embedding.reshape(1, -1),
-                    embedding.reshape(1, -1)
-                )[0][0]
-                
-                if similarity > best_similarity:
-                    best_similarity = similarity
-                    best_name = name
+        # Find name from label
+        name = "Unknown"
+        for user_name, user_id in self.users.items():
+            if user_id == label:
+                name = user_name
+                break
         
-        # Calculate confidence
-        confidence = best_similarity * 100
+        # Calculate confidence (inverse of distance)
+        confidence = max(0, (100 - distance))
         
-        # Check threshold (for cosine similarity, higher is better)
-        if best_similarity >= self.threshold:
-            print(f"✅ Recognized: {best_name} (similarity: {best_similarity:.3f}, confidence: {confidence:.1f}%)")
-            return best_name, confidence, best_similarity
+        if distance <= self.threshold:
+            print(f"✅ Recognized: {name} (distance: {distance:.1f}, confidence: {confidence:.1f}%)")
+            return name, confidence, distance
         else:
-            print(f"❌ Unknown (closest: {best_name} at {best_similarity:.3f})")
-            return "Unknown", 0.0, best_similarity
+            print(f"❌ Unknown (closest: {name} at {distance:.1f})")
+            return "Unknown", 0.0, distance
     
     def mark_attendance(self, image, time_type="in"):
         """
@@ -152,7 +149,7 @@ class FaceAttendanceSystem:
         Returns:
             (success, name, confidence): Tuple
         """
-        name, confidence, similarity = self.recognize_user(image)
+        name, confidence, distance = self.recognize_user(image)
         
         if name == "Unknown":
             print(f"❌ Attendance not marked: Unknown person")
@@ -161,7 +158,7 @@ class FaceAttendanceSystem:
         record = {
             "name": name,
             "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            "similarity": round(similarity, 3),
+            "distance": round(distance, 1),
             "confidence": round(confidence, 1),
             "type": time_type
         }
@@ -188,14 +185,28 @@ class FaceAttendanceSystem:
             return self.attendance_log[-limit:]
     
     def delete_user(self, name):
-        """Delete a user."""
-        if name in self.users:
-            del self.users[name]
-            print(f"✅ Deleted user: {name}")
-            return True
-        else:
+        """Delete a user (requires retraining)."""
+        if name not in self.users:
             print(f"❌ User not found: {name}")
             return False
+        
+        user_id = self.users[name]
+        del self.users[name]
+        
+        # Remove samples
+        indices_to_remove = [i for i, label in enumerate(self.face_labels) if label == user_id]
+        for index in sorted(indices_to_remove, reverse=True):
+            del self.face_samples[index]
+            del self.face_labels[index]
+        
+        # Retrain if samples remain
+        if len(self.face_samples) > 0:
+            self.face_recognizer.train(self.face_samples, np.array(self.face_labels))
+        else:
+            self.is_trained = False
+        
+        print(f"✅ Deleted user: {name}")
+        return True
     
     def clear_attendance_log(self):
         """Clear all attendance records."""
