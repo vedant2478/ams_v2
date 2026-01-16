@@ -3,10 +3,11 @@ from kivy.uix.image import Image
 from kivy.properties import StringProperty, BooleanProperty
 from kivy.clock import Clock
 from kivy.graphics.texture import Texture
+from attendance import FaceAttendanceSystem
 import cv2
 
 # Import the face recognition system
-from face_recognition_system import FaceAttendanceSystem
+from attendance import FaceAttendanceSystem
 from face_detection_utils import is_face_in_box
 
 
