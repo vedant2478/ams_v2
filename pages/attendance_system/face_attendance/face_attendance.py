@@ -38,22 +38,19 @@ class KivyCamera(Image):
             print(f"Error starting camera: {e}")
     
     def update(self, dt):
-        """
-        Update camera frame with rotation fix
-        """
         if self.capture and self.capture.isOpened():
             ret, frame = self.capture.read()
             
             if ret and frame is not None:
-                # ROTATE 90 DEGREES CLOCKWISE to fix orientation
-                frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+                # ROTATE 90 DEGREES COUNTER-CLOCKWISE (LEFT)
+                frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
                 
                 h, w = frame.shape[:2]
                 buf = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB).tobytes()
                 texture = Texture.create(size=(w, h), colorfmt='rgb')
                 texture.blit_buffer(buf, colorfmt='rgb', bufferfmt='ubyte')
                 self.texture = texture
-    
+
     def stop(self):
         """
         Stop the camera capture
