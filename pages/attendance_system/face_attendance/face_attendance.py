@@ -11,7 +11,7 @@ from kivy.graphics.texture import Texture
 import cv2
 
 # Import the face recognition system
-from attendance import FaceAttendanceSystem
+from face_recognition_system import FaceAttendanceSystem
 from face_detection_utils import is_face_in_box
 
 
@@ -215,7 +215,6 @@ class FaceAttendanceScreen(Screen):
         
         # Initialize face recognition system
         self.face_system = FaceAttendanceSystem(threshold=50)
-
         self.registration_popup = None
     
     def on_enter(self):
