@@ -6,7 +6,7 @@ from kivy.graphics.texture import Texture
 import cv2
 
 # Import the face recognition system
-from attendance import FaceAttendanceSystem
+from face_recognition_system import FaceAttendanceSystem
 from face_detection_utils import is_face_in_box
 
 
@@ -115,11 +115,7 @@ class FaceAttendanceScreen(Screen):
         super(FaceAttendanceScreen, self).__init__(**kwargs)
         
         # Initialize face recognition system as an object
-        self.face_system = FaceAttendanceSystem(
-            model_name="Facenet512",
-            distance_metric="cosine",
-            tolerance=0.4
-        )
+        self.face_system = FaceAttendanceSystem(tolerance=0.6)
     
     def on_enter(self):
         """Called when screen is entered"""
