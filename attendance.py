@@ -1,65 +1,64 @@
 import cv2
 import numpy as np
+import face_recognition
 from datetime import datetime
 
 
 class FaceAttendanceSystem:
     """
-    Lightweight face recognition using OpenCV only (no dlib required).
-    Uses Local Binary Patterns Histograms (LBPH) for face recognition.
+    Face recognition attendance system using face_recognition library.
+    Lightweight alternative to DeepFace.
     """
     
-    def __init__(self, threshold=50):
+    def __init__(self, tolerance=0.6):
         """
         Initialize the attendance system.
         
         Args:
-            threshold: Recognition threshold (lower = stricter, default 50)
+            tolerance: Recognition tolerance (0.6 is default, lower = stricter)
         """
-        self.threshold = threshold
-        self.face_recognizer = cv2.face.LBPHFaceRecognizer_create()
+        self.tolerance = tolerance
         
         # In-memory storage
-        self.users = {}  # {name: user_id}
-        self.user_id_counter = 0
-        self.face_samples = []  # List of face samples
-        self.face_labels = []   # Corresponding labels
-        self.attendance_log = []
-        self.is_trained = False
+        self.users = {}  # {name: [encoding1, encoding2, ...]}
+        self.attendance_log = []  # [{name, timestamp, distance, type}, ...]
         
-        print(f"✅ FaceAttendanceSystem initialized (OpenCV LBPH)")
-        print(f"   Threshold: {threshold}")
+        print(f"✅ FaceAttendanceSystem initialized")
+        print(f"   Library: face_recognition")
+        print(f"   Tolerance: {tolerance}")
     
-    def _detect_face(self, image):
-        """Detect face in image and return face ROI."""
+    def _generate_encoding(self, image):
+        """
+        Generate face encoding from image using face_recognition.
+        
+        Args:
+            image: OpenCV image (BGR format) or path to image
+        
+        Returns:
+            encoding: Numpy array or None if no face detected
+        """
         try:
+            # Convert from path if needed
             if isinstance(image, str):
                 image = cv2.imread(image)
                 if image is None:
                     return None
             
-            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-            face_cascade = cv2.CascadeClassifier(
-                cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
-            )
+            # Convert BGR to RGB (face_recognition uses RGB)
+            rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
             
-            faces = face_cascade.detectMultiScale(gray, 1.3, 5)
+            # Get face encodings
+            encodings = face_recognition.face_encodings(rgb_image)
             
-            if len(faces) == 0:
-                print("⚠ No face detected")
+            if len(encodings) == 0:
+                print(f"⚠ No face detected")
                 return None
             
-            # Return first face
-            (x, y, w, h) = faces[0]
-            face_roi = gray[y:y+h, x:x+w]
-            
-            # Resize to standard size
-            face_roi = cv2.resize(face_roi, (200, 200))
-            
-            return face_roi
+            # Return first face encoding
+            return encodings[0]
         
         except Exception as e:
-            print(f"❌ Face detection error: {e}")
+            print(f"❌ Encoding error: {e}")
             return None
     
     def register_user(self, name, image):
@@ -68,35 +67,25 @@ class FaceAttendanceSystem:
         
         Args:
             name: User's name
-            image: OpenCV image (BGR format)
+            image: OpenCV image (BGR format) - numpy array
         
         Returns:
             success: True if registered, False otherwise
         """
         print(f"\n📝 Registering: {name}")
         
-        face_roi = self._detect_face(image)
+        encoding = self._generate_encoding(image)
         
-        if face_roi is None:
+        if encoding is None:
             print(f"❌ Registration failed - no face detected")
             return False
         
-        # Assign user ID
         if name not in self.users:
-            self.users[name] = self.user_id_counter
-            self.user_id_counter += 1
+            self.users[name] = []
         
-        user_id = self.users[name]
+        self.users[name].append(encoding)
         
-        # Add face sample
-        self.face_samples.append(face_roi)
-        self.face_labels.append(user_id)
-        
-        # Retrain recognizer
-        self.face_recognizer.train(self.face_samples, np.array(self.face_labels))
-        self.is_trained = True
-        
-        print(f"✅ Registered: {name} (ID: {user_id}, Samples: {self.face_labels.count(user_id)})")
+        print(f"✅ Registered: {name} (Total encodings: {len(self.users[name])})")
         return True
     
     def recognize_user(self, image):
@@ -104,52 +93,56 @@ class FaceAttendanceSystem:
         Recognize user from image.
         
         Args:
-            image: OpenCV image (BGR format)
+            image: OpenCV image (BGR format) - numpy array
         
         Returns:
-            (name, confidence, distance): Recognized name, confidence %, and distance
+            (name, distance, confidence): Recognized name, distance, and confidence percentage
+            Returns ("Unknown", 1.0, 0.0) if not recognized
         """
-        if not self.is_trained:
-            print("⚠ No trained users")
-            return "Unknown", 0.0, 100.0
+        query_encoding = self._generate_encoding(image)
         
-        face_roi = self._detect_face(image)
+        if query_encoding is None:
+            return "Unknown", 1.0, 0.0
         
-        if face_roi is None:
-            return "Unknown", 0.0, 100.0
+        if len(self.users) == 0:
+            print("⚠ No registered users")
+            return "Unknown", 1.0, 0.0
         
-        # Predict
-        label, distance = self.face_recognizer.predict(face_roi)
+        best_name = "Unknown"
+        best_distance = float('inf')
         
-        # Find name from label
-        name = "Unknown"
-        for user_name, user_id in self.users.items():
-            if user_id == label:
-                name = user_name
-                break
+        # Compare with all stored encodings
+        for name, encodings_list in self.users.items():
+            # Use face_recognition's compare_faces
+            distances = face_recognition.face_distance(encodings_list, query_encoding)
+            min_distance = np.min(distances)
+            
+            if min_distance < best_distance:
+                best_distance = min_distance
+                best_name = name
         
-        # Calculate confidence (inverse of distance)
-        confidence = max(0, (100 - distance))
+        # Calculate confidence (inverse of distance, normalized to 0-100%)
+        confidence = max(0, (1 - best_distance) * 100)
         
-        if distance <= self.threshold:
-            print(f"✅ Recognized: {name} (distance: {distance:.1f}, confidence: {confidence:.1f}%)")
-            return name, confidence, distance
+        if best_distance <= self.tolerance:
+            print(f"✅ Recognized: {best_name} (distance: {best_distance:.3f}, confidence: {confidence:.1f}%)")
+            return best_name, best_distance, confidence
         else:
-            print(f"❌ Unknown (closest: {name} at {distance:.1f})")
-            return "Unknown", 0.0, distance
+            print(f"❌ Unknown (closest: {best_name} at {best_distance:.3f})")
+            return "Unknown", best_distance, 0.0
     
     def mark_attendance(self, image, time_type="in"):
         """
-        Mark attendance.
+        Mark attendance by recognizing user and logging.
         
         Args:
-            image: OpenCV image (BGR format)
+            image: OpenCV image (BGR format) - numpy array
             time_type: "in" or "out"
         
         Returns:
-            (success, name, confidence): Tuple
+            (success, name, confidence): Tuple of success status, name, and confidence
         """
-        name, confidence, distance = self.recognize_user(image)
+        name, distance, confidence = self.recognize_user(image)
         
         if name == "Unknown":
             print(f"❌ Attendance not marked: Unknown person")
@@ -158,7 +151,7 @@ class FaceAttendanceSystem:
         record = {
             "name": name,
             "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            "distance": round(distance, 1),
+            "distance": round(distance, 3),
             "confidence": round(confidence, 1),
             "type": time_type
         }
@@ -185,28 +178,14 @@ class FaceAttendanceSystem:
             return self.attendance_log[-limit:]
     
     def delete_user(self, name):
-        """Delete a user (requires retraining)."""
-        if name not in self.users:
+        """Delete a user."""
+        if name in self.users:
+            del self.users[name]
+            print(f"✅ Deleted user: {name}")
+            return True
+        else:
             print(f"❌ User not found: {name}")
             return False
-        
-        user_id = self.users[name]
-        del self.users[name]
-        
-        # Remove samples
-        indices_to_remove = [i for i, label in enumerate(self.face_labels) if label == user_id]
-        for index in sorted(indices_to_remove, reverse=True):
-            del self.face_samples[index]
-            del self.face_labels[index]
-        
-        # Retrain if samples remain
-        if len(self.face_samples) > 0:
-            self.face_recognizer.train(self.face_samples, np.array(self.face_labels))
-        else:
-            self.is_trained = False
-        
-        print(f"✅ Deleted user: {name}")
-        return True
     
     def clear_attendance_log(self):
         """Clear all attendance records."""

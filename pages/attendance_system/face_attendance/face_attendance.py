@@ -1,13 +1,17 @@
 from kivy.uix.screenmanager import Screen
 from kivy.uix.image import Image
+from kivy.uix.popup import Popup
+from kivy.uix.label import Label
+from kivy.uix.textinput import TextInput
+from kivy.uix.button import Button
+from kivy.uix.boxlayout import BoxLayout
 from kivy.properties import StringProperty, BooleanProperty
 from kivy.clock import Clock
 from kivy.graphics.texture import Texture
-from attendance import FaceAttendanceSystem
 import cv2
 
 # Import the face recognition system
-from attendance import FaceAttendanceSystem
+from face_recognition_system import FaceAttendanceSystem
 from face_detection_utils import is_face_in_box
 
 
@@ -106,18 +110,112 @@ class KivyCamera(Image):
         print("Camera stopped")
 
 
+class RegistrationPopup(Popup):
+    """Popup for user registration"""
+    
+    def __init__(self, callback, **kwargs):
+        super(RegistrationPopup, self).__init__(**kwargs)
+        self.callback = callback
+        self.sample_count = 0
+        self.target_samples = 3
+        self.username = None
+        
+        self.title = "Register New User"
+        self.size_hint = (0.8, 0.5)
+        self.auto_dismiss = False
+        
+        # Layout
+        layout = BoxLayout(orientation='vertical', padding=10, spacing=10)
+        
+        # Instructions
+        self.instruction_label = Label(
+            text="Step 1: Enter your name",
+            size_hint_y=0.3,
+            color=(0.9, 0.95, 1, 1)
+        )
+        layout.add_widget(self.instruction_label)
+        
+        # Name input
+        self.name_input = TextInput(
+            hint_text="Enter your name",
+            multiline=False,
+            size_hint_y=0.2
+        )
+        layout.add_widget(self.name_input)
+        
+        # Status label
+        self.status_label = Label(
+            text="",
+            size_hint_y=0.2,
+            color=(0.9, 0.95, 1, 1)
+        )
+        layout.add_widget(self.status_label)
+        
+        # Buttons
+        btn_layout = BoxLayout(size_hint_y=0.3, spacing=10)
+        
+        self.capture_btn = Button(
+            text="Capture Face",
+            disabled=True,
+            background_normal='',
+            background_color=(0.18, 0.35, 0.50, 0.85)
+        )
+        self.capture_btn.bind(on_release=self.on_capture)
+        btn_layout.add_widget(self.capture_btn)
+        
+        cancel_btn = Button(
+            text="Cancel",
+            background_normal='',
+            background_color=(0.5, 0.2, 0.2, 0.85)
+        )
+        cancel_btn.bind(on_release=self.dismiss)
+        btn_layout.add_widget(cancel_btn)
+        
+        layout.add_widget(btn_layout)
+        
+        self.content = layout
+        
+        # Bind name input
+        self.name_input.bind(text=self.on_name_change)
+    
+    def on_name_change(self, instance, value):
+        """Enable capture button when name is entered"""
+        if value.strip():
+            self.capture_btn.disabled = False
+            self.username = value.strip()
+            self.instruction_label.text = f"Step 2: Position face in box and click 'Capture Face' ({self.target_samples} times)"
+        else:
+            self.capture_btn.disabled = True
+    
+    def on_capture(self, instance):
+        """Handle capture button press"""
+        if self.username:
+            success = self.callback(self.username)
+            
+            if success:
+                self.sample_count += 1
+                self.status_label.text = f"✅ Sample {self.sample_count}/{self.target_samples} captured!"
+                
+                if self.sample_count >= self.target_samples:
+                    self.status_label.text = f"✅ {self.username} registered successfully!"
+                    Clock.schedule_once(lambda dt: self.dismiss(), 1.5)
+            else:
+                self.status_label.text = "❌ No face detected. Position face in box!"
+
+
 class FaceAttendanceScreen(Screen):
     
     current_time_type = StringProperty("in")
     current_user = StringProperty("USER_NAME")
     processing = BooleanProperty(False)
+    registration_mode = BooleanProperty(False)
     
     def __init__(self, **kwargs):
         super(FaceAttendanceScreen, self).__init__(**kwargs)
         
-        # Initialize face recognition system as an object
+        # Initialize face recognition system
         self.face_system = FaceAttendanceSystem(threshold=50)
-
+        self.registration_popup = None
     
     def on_enter(self):
         """Called when screen is entered"""
@@ -134,7 +232,7 @@ class FaceAttendanceScreen(Screen):
     
     def auto_recognize(self, dt):
         """Automatically recognize faces and mark attendance"""
-        if self.processing:
+        if self.processing or self.registration_mode:
             return
         
         try:
@@ -161,28 +259,33 @@ class FaceAttendanceScreen(Screen):
             print(f"Auto-recognition error: {e}")
             self.processing = False
     
-    def register_new_user(self, username):
+    def show_registration_popup(self):
+        """Show registration popup"""
+        self.registration_mode = True
+        self.registration_popup = RegistrationPopup(callback=self.register_user_capture)
+        self.registration_popup.bind(on_dismiss=self.on_registration_dismiss)
+        self.registration_popup.open()
+    
+    def on_registration_dismiss(self, instance):
+        """Called when registration popup is dismissed"""
+        self.registration_mode = False
+    
+    def register_user_capture(self, username):
         """
-        Register a new user (call this from registration button/dialog)
+        Capture face sample for registration
         
         Args:
             username: Name of the user to register
         
         Returns:
-            success: True if registration successful
+            success: True if capture successful
         """
         face_roi = self.ids.camera_feed.get_face_roi()
         
         if face_roi is not None:
             success = self.face_system.register_user(username, face_roi)
-            if success:
-                self.update_welcome_message(f"{username} Registered!")
-                return True
-            else:
-                self.update_welcome_message("Registration Failed")
-                return False
+            return success
         
-        self.update_welcome_message("No Face Detected")
         return False
     
     def on_time_type_change(self, time_type):
