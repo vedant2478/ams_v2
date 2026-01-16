@@ -139,10 +139,6 @@ class FaceAttendanceScreen(Screen):
         # Draw rectangles around detected faces
         for (x, y, w, h) in faces:
             cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
-            
-            # You can add face recognition logic here
-            # and update the welcome message
-            # self.update_welcome_message("Detected User")
         
         return frame
     
