@@ -13,7 +13,7 @@ class KivyCamera(Image):
     def __init__(self, **kwargs):
         super(KivyCamera, self).__init__(**kwargs)
         self.capture = None
-        self.fps = 10  # Reduced to avoid timeout
+        self.fps = 30  # Increased FPS for smoother feed
         
     def start(self, camera_index=1):
         """
@@ -26,10 +26,14 @@ class KivyCamera(Image):
                 print(f"Error: Could not open camera at index {camera_index}")
                 return
             
-            # Set lower resolution for better performance
+            # Optimized settings for smooth playback
             self.capture.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
             self.capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-            self.capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            self.capture.set(cv2.CAP_PROP_FPS, 30)
+            self.capture.set(cv2.CAP_PROP_BUFFERSIZE, 2)  # Small buffer for low latency
+            
+            # Set MJPEG format for better performance
+            self.capture.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M','J','P','G'))
             
             Clock.schedule_interval(self.update, 1.0 / self.fps)
             print(f"Camera started successfully")
@@ -39,22 +43,23 @@ class KivyCamera(Image):
     
     def update(self, dt):
         """
-        Update camera frame with rotation fix
+        Update camera frame - optimized for smooth playback
         """
         if self.capture and self.capture.isOpened():
-            ret, frame = self.capture.read()
-            
-            if ret and frame is not None:
-                # ROTATE 180 DEGREES to make face vertical
-                frame = cv2.rotate(frame, cv2.ROTATE_180)
+            # Use grab() and retrieve() for better performance
+            if self.capture.grab():
+                ret, frame = self.capture.retrieve()
                 
-                h, w = frame.shape[:2]
-                buf = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB).tobytes()
-                texture = Texture.create(size=(w, h), colorfmt='rgb')
-                texture.blit_buffer(buf, colorfmt='rgb', bufferfmt='ubyte')
-                self.texture = texture
-
-
+                if ret and frame is not None:
+                    # ROTATE 180 DEGREES
+                    frame = cv2.rotate(frame, cv2.ROTATE_180)
+                    
+                    h, w = frame.shape[:2]
+                    buf = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB).tobytes()
+                    texture = Texture.create(size=(w, h), colorfmt='rgb')
+                    texture.blit_buffer(buf, colorfmt='rgb', bufferfmt='ubyte')
+                    self.texture = texture
+    
     def stop(self):
         """
         Stop the camera capture
