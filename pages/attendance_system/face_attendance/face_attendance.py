@@ -45,8 +45,8 @@ class KivyCamera(Image):
             ret, frame = self.capture.read()
             
             if ret and frame is not None:
-                # ROTATE 90 DEGREES CLOCKWISE (RIGHT)
-                frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+                # ROTATE 180 DEGREES to make face vertical
+                frame = cv2.rotate(frame, cv2.ROTATE_180)
                 
                 h, w = frame.shape[:2]
                 buf = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB).tobytes()
