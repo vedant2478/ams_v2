@@ -42,4 +42,4 @@ class HomeScreen(BaseScreen):
         self.manager.current = "admin_home"
 
     def on_start_pressed(self):
-        self.manager.current = "auth"
+        self.manager.current = "module_select"
