@@ -47,39 +47,51 @@ class KivyCamera(Image):
             print(f"Error starting camera: {e}")
     
     def update(self, dt):
-        """
-        Update camera frame with error handling
-        """
-        if self.capture and self.capture.isOpened():
+        if not self.capture or not self.capture.isOpened():
+            return
+        
+        try:
             ret, frame = self.capture.read()
             
-            if ret and frame is not None:
-                try:
-                    # Flip horizontally for mirror effect
-                    frame = cv2.flip(frame, 1)
-                    
-                    # Convert BGR to RGB
-                    buf = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    
-                    # Convert to Kivy texture
-                    buf = buf.tobytes()
-                    texture = Texture.create(
-                        size=(frame.shape[1], frame.shape[0]), 
-                        colorfmt='rgb'
-                    )
-                    texture.blit_buffer(buf, colorfmt='rgb', bufferfmt='ubyte')
-                    
-                    # Display texture
-                    self.texture = texture
-                    
-                except Exception as e:
-                    # Ignore corrupt frame errors
-                    pass
+            if ret and frame is not None and frame.size > 0:
+                # Reset reconnect counter on successful read
+                self.reconnect_attempts = 0
+                
+                # Skip some frames if processing is slow
+                self.frame_skip = (self.frame_skip + 1) % 2
+                if self.frame_skip != 0:
+                    return
+                
+                # Remove or comment out this line to fix inversion:
+                # frame = cv2.flip(frame, 1)
+                
+                # Convert BGR to RGB
+                buf = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                
+                # Convert to Kivy texture
+                buf = buf.tobytes()
+                texture = Texture.create(
+                    size=(frame.shape[1], frame.shape[0]), 
+                    colorfmt='rgb'
+                )
+                texture.blit_buffer(buf, colorfmt='rgb', bufferfmt='ubyte')
+                
+                # Display texture
+                self.texture = texture
+                
             else:
-                # Try to reconnect if frame read fails
-                if not ret:
-                    print("Warning: Failed to read frame, attempting to reconnect...")
-    
+                # Handle failed frame read
+                self.reconnect_attempts += 1
+                if self.reconnect_attempts < self.max_reconnect_attempts:
+                    # Try to grab next frame
+                    self.capture.grab()
+                else:
+                    print("Camera connection lost")
+                    
+        except Exception as e:
+            # Silently ignore corrupt frame errors
+            pass
+
     def stop(self):
         """
         Stop the camera capture
