@@ -13,7 +13,7 @@ class KivyCamera(Image):
     def __init__(self, **kwargs):
         super(KivyCamera, self).__init__(**kwargs)
         self.capture = None
-        self.fps = 30
+        self.fps = 10  # Reduced to avoid timeout
         
     def start(self, camera_index=1):
         """
@@ -26,8 +26,10 @@ class KivyCamera(Image):
                 print(f"Error: Could not open camera at index {camera_index}")
                 return
             
+            # Set lower resolution for better performance
             self.capture.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
             self.capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+            self.capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
             
             Clock.schedule_interval(self.update, 1.0 / self.fps)
             print(f"Camera started successfully")
@@ -37,12 +39,15 @@ class KivyCamera(Image):
     
     def update(self, dt):
         """
-        Update camera frame
+        Update camera frame with rotation fix
         """
         if self.capture and self.capture.isOpened():
             ret, frame = self.capture.read()
             
             if ret and frame is not None:
+                # ROTATE 90 DEGREES CLOCKWISE to fix orientation
+                frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+                
                 h, w = frame.shape[:2]
                 buf = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB).tobytes()
                 texture = Texture.create(size=(w, h), colorfmt='rgb')
