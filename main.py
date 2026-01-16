@@ -46,6 +46,7 @@ Builder.load_file(os.path.join(BASE_DIR, "pages/admin_pages/peg_registration/peg
 Builder.load_file(
     os.path.join(BASE_DIR, "pages/admin_pages/admin_home/admin_home.kv")
 )
+Builder.load_file(os.path.join(BASE_DIR, "pages/module_select/module_select.kv"))
 
 # ================= SCREEN PY =================
 from pages.home.home import HomeScreen
@@ -57,6 +58,7 @@ from pages.key_dashboard.key_dashboard import KeyDashboardScreen
 from pages.activity_done.activity_done import ActivityDoneScreen
 from pages.admin_pages.admin_home.admin_home import AdminScreen
 from pages.admin_pages.peg_registration.peg_registration import PegScanScreen
+from pages.module_select.module_select import ModuleSelectScreen
 
 
 # ================= MAIN APP =================
@@ -110,6 +112,7 @@ class MainApp(App):
         sm.add_widget(ActivityDoneScreen(name="activity_done"))
         sm.add_widget(AdminScreen(name="admin_home"))
         sm.add_widget(PegScanScreen(name="peg_scan"))
+        sm.add_widget(ModuleSelectScreen(name="module_select"))
 
         sm.current = "home"
         return sm
