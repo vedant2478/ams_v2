@@ -215,6 +215,7 @@ class FaceAttendanceScreen(Screen):
         
         # Initialize face recognition system
         self.face_system = FaceAttendanceSystem(threshold=50)
+
         self.registration_popup = None
     
     def on_enter(self):
