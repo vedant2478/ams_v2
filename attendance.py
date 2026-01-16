@@ -5,33 +5,31 @@ from datetime import datetime
 
 class FaceAttendanceSystem:
     """
-    Lightweight face recognition using OpenCV only (no dlib required).
-    Uses Local Binary Patterns Histograms (LBPH) for face recognition.
+    Simple face recognition using template matching.
+    Works with basic opencv-python (no contrib needed).
     """
     
-    def __init__(self, threshold=50):
+    def __init__(self, threshold=0.6):
         """
         Initialize the attendance system.
         
         Args:
-            threshold: Recognition threshold (lower = stricter, default 50)
+            threshold: Similarity threshold (0.5-0.7 recommended)
         """
         self.threshold = threshold
-        self.face_recognizer = cv2.face.LBPHFaceRecognizer_create()
+        self.face_cascade = cv2.CascadeClassifier(
+            cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+        )
         
         # In-memory storage
-        self.users = {}  # {name: user_id}
-        self.user_id_counter = 0
-        self.face_samples = []  # List of face samples
-        self.face_labels = []   # Corresponding labels
+        self.users = {}  # {name: [face_template1, face_template2, ...]}
         self.attendance_log = []
-        self.is_trained = False
         
-        print(f"✅ FaceAttendanceSystem initialized (OpenCV LBPH)")
+        print(f"✅ FaceAttendanceSystem initialized (Template Matching)")
         print(f"   Threshold: {threshold}")
     
-    def _detect_face(self, image):
-        """Detect face in image and return face ROI."""
+    def _detect_and_extract_face(self, image):
+        """Detect and extract face from image."""
         try:
             if isinstance(image, str):
                 image = cv2.imread(image)
@@ -39,28 +37,32 @@ class FaceAttendanceSystem:
                     return None
             
             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-            face_cascade = cv2.CascadeClassifier(
-                cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
-            )
-            
-            faces = face_cascade.detectMultiScale(gray, 1.3, 5)
+            faces = self.face_cascade.detectMultiScale(gray, 1.3, 5)
             
             if len(faces) == 0:
                 print("⚠ No face detected")
                 return None
             
-            # Return first face
-            (x, y, w, h) = faces[0]
+            # Get largest face
+            (x, y, w, h) = max(faces, key=lambda f: f[2] * f[3])
             face_roi = gray[y:y+h, x:x+w]
             
-            # Resize to standard size
-            face_roi = cv2.resize(face_roi, (200, 200))
+            # Resize to standard size and normalize
+            face_roi = cv2.resize(face_roi, (100, 100))
+            face_roi = cv2.equalizeHist(face_roi)  # Normalize lighting
             
             return face_roi
         
         except Exception as e:
             print(f"❌ Face detection error: {e}")
             return None
+    
+    def _calculate_similarity(self, face1, face2):
+        """Calculate similarity between two face templates using correlation."""
+        # Template matching using normalized cross-correlation
+        result = cv2.matchTemplate(face1, face2, cv2.TM_CCOEFF_NORMED)
+        similarity = result[0][0]
+        return similarity
     
     def register_user(self, name, image):
         """
@@ -75,28 +77,18 @@ class FaceAttendanceSystem:
         """
         print(f"\n📝 Registering: {name}")
         
-        face_roi = self._detect_face(image)
+        face_template = self._detect_and_extract_face(image)
         
-        if face_roi is None:
+        if face_template is None:
             print(f"❌ Registration failed - no face detected")
             return False
         
-        # Assign user ID
         if name not in self.users:
-            self.users[name] = self.user_id_counter
-            self.user_id_counter += 1
+            self.users[name] = []
         
-        user_id = self.users[name]
+        self.users[name].append(face_template)
         
-        # Add face sample
-        self.face_samples.append(face_roi)
-        self.face_labels.append(user_id)
-        
-        # Retrain recognizer
-        self.face_recognizer.train(self.face_samples, np.array(self.face_labels))
-        self.is_trained = True
-        
-        print(f"✅ Registered: {name} (ID: {user_id}, Samples: {self.face_labels.count(user_id)})")
+        print(f"✅ Registered: {name} (Total templates: {len(self.users[name])})")
         return True
     
     def recognize_user(self, image):
@@ -107,49 +99,42 @@ class FaceAttendanceSystem:
             image: OpenCV image (BGR format)
         
         Returns:
-            (name, confidence, distance): Recognized name, confidence %, and distance
+            (name, confidence, similarity): Recognized name, confidence %, and similarity
         """
-        if not self.is_trained:
-            print("⚠ No trained users")
-            return "Unknown", 0.0, 100.0
+        query_face = self._detect_and_extract_face(image)
         
-        face_roi = self._detect_face(image)
+        if query_face is None:
+            return "Unknown", 0.0, 0.0
         
-        if face_roi is None:
-            return "Unknown", 0.0, 100.0
+        if len(self.users) == 0:
+            print("⚠ No registered users")
+            return "Unknown", 0.0, 0.0
         
-        # Predict
-        label, distance = self.face_recognizer.predict(face_roi)
+        best_name = "Unknown"
+        best_similarity = -1.0
         
-        # Find name from label
-        name = "Unknown"
-        for user_name, user_id in self.users.items():
-            if user_id == label:
-                name = user_name
-                break
+        # Compare with all stored templates
+        for name, templates in self.users.items():
+            for template in templates:
+                similarity = self._calculate_similarity(query_face, template)
+                
+                if similarity > best_similarity:
+                    best_similarity = similarity
+                    best_name = name
         
-        # Calculate confidence (inverse of distance)
-        confidence = max(0, (100 - distance))
+        # Calculate confidence
+        confidence = best_similarity * 100
         
-        if distance <= self.threshold:
-            print(f"✅ Recognized: {name} (distance: {distance:.1f}, confidence: {confidence:.1f}%)")
-            return name, confidence, distance
+        if best_similarity >= self.threshold:
+            print(f"✅ Recognized: {best_name} (similarity: {best_similarity:.3f}, confidence: {confidence:.1f}%)")
+            return best_name, confidence, best_similarity
         else:
-            print(f"❌ Unknown (closest: {name} at {distance:.1f})")
-            return "Unknown", 0.0, distance
+            print(f"❌ Unknown (closest: {best_name} at {best_similarity:.3f})")
+            return "Unknown", 0.0, best_similarity
     
     def mark_attendance(self, image, time_type="in"):
-        """
-        Mark attendance.
-        
-        Args:
-            image: OpenCV image (BGR format)
-            time_type: "in" or "out"
-        
-        Returns:
-            (success, name, confidence): Tuple
-        """
-        name, confidence, distance = self.recognize_user(image)
+        """Mark attendance."""
+        name, confidence, similarity = self.recognize_user(image)
         
         if name == "Unknown":
             print(f"❌ Attendance not marked: Unknown person")
@@ -158,7 +143,7 @@ class FaceAttendanceSystem:
         record = {
             "name": name,
             "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            "distance": round(distance, 1),
+            "similarity": round(similarity, 3),
             "confidence": round(confidence, 1),
             "type": time_type
         }
@@ -185,28 +170,14 @@ class FaceAttendanceSystem:
             return self.attendance_log[-limit:]
     
     def delete_user(self, name):
-        """Delete a user (requires retraining)."""
-        if name not in self.users:
+        """Delete a user."""
+        if name in self.users:
+            del self.users[name]
+            print(f"✅ Deleted user: {name}")
+            return True
+        else:
             print(f"❌ User not found: {name}")
             return False
-        
-        user_id = self.users[name]
-        del self.users[name]
-        
-        # Remove samples
-        indices_to_remove = [i for i, label in enumerate(self.face_labels) if label == user_id]
-        for index in sorted(indices_to_remove, reverse=True):
-            del self.face_samples[index]
-            del self.face_labels[index]
-        
-        # Retrain if samples remain
-        if len(self.face_samples) > 0:
-            self.face_recognizer.train(self.face_samples, np.array(self.face_labels))
-        else:
-            self.is_trained = False
-        
-        print(f"✅ Deleted user: {name}")
-        return True
     
     def clear_attendance_log(self):
         """Clear all attendance records."""
