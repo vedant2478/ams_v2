@@ -7,7 +7,7 @@ from attendance import FaceAttendanceSystem
 import cv2
 
 # Import the face recognition system
-from attendance import FaceAttendanceSystem
+from atten import FaceAttendanceSystem
 from face_detection_utils import is_face_in_box
 
 
