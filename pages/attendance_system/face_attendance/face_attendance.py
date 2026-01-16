@@ -1,9 +1,20 @@
+import os
+import sys
+from components.base_screen import BaseScreen
+# Suppress OpenCV warnings
+os.environ['OPENCV_LOG_LEVEL'] = 'SILENT'
+os.environ['OPENCV_VIDEOIO_DEBUG'] = '0'
+
+# Redirect stderr to suppress JPEG warnings
+import cv2
+cv2.setLogLevel(0)
+
 from kivy.uix.screenmanager import Screen
 from kivy.uix.image import Image
 from kivy.properties import StringProperty
 from kivy.clock import Clock
 from kivy.graphics.texture import Texture
-import cv2
+
 
 
 class KivyCamera(Image):
@@ -71,7 +82,7 @@ class KivyCamera(Image):
         print("Camera stopped")
 
 
-class FaceAttendanceScreen(Screen):
+class FaceAttendanceScreen(BaseScreen):
     
     current_time_type = StringProperty("in")
     current_user = StringProperty("USER_NAME")
