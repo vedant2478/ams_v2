@@ -116,7 +116,8 @@ class FaceAttendanceScreen(Screen):
         super(FaceAttendanceScreen, self).__init__(**kwargs)
         
         # Initialize face recognition system as an object
-        self.face_system = FaceAttendanceSystem(tolerance=0.6)
+        self.face_system = FaceAttendanceSystem(threshold=50)
+
     
     def on_enter(self):
         """Called when screen is entered"""
