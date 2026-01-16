@@ -1,0 +1,162 @@
+<AttendanceTypeScreen>:
+    name: "attendance_type"
+
+    FloatLayout:
+
+        # ===== Header (CONSTANT) =====
+        Header:
+            pos_hint: {"top": 1}
+
+        # ===== Back Button (PAGE LEVEL – TRANSPARENT) =====
+        BoxLayout:
+            orientation: "horizontal"
+            size_hint_y: None
+            height: "48dp"
+            padding: "16dp", 0
+            pos_hint: {"top": .95}
+
+            Button:
+                text: "Back"
+                size_hint_x: None
+                width: "100dp"
+                background_normal: ""
+                background_color: 0, 0, 0, 0   # fully transparent
+                color: 0.90, 0.95, 1, 1
+                font_size: "16sp"
+                on_release: root.go_back()
+
+            Widget:
+
+        # ===== Main Content =====
+        BoxLayout:
+            orientation: "vertical"
+            spacing: "26dp"
+            size_hint: None, None
+            size: "520dp", "540dp"
+            pos_hint: {"center_x": 0.5, "center_y": 0.55}
+
+            Label:
+                text: "Attendance System"
+                font_size: "24sp"
+                color: 0.9, 0.95, 1, 1
+                size_hint_y: None
+                height: "36dp"
+
+            # ===== Biometric Attendance Button =====
+            Button:
+                size_hint_y: None
+                height: "110dp"
+                background_normal: ""
+                background_color: 0, 0, 0, 0
+                on_release: root.on_biometric_attendance()
+
+                canvas.before:
+                    Color:
+                        rgba: 0.18, 0.35, 0.50, 0.85
+                    RoundedRectangle:
+                        pos: self.pos
+                        size: self.size
+                        radius: [18]
+
+                RelativeLayout:
+                    size: self.parent.size
+                    pos: self.parent.pos
+
+                    Image:
+                        source: "assets/icons/finger.png"
+                        size_hint: None, None
+                        size: "56dp", "56dp"
+                        pos_hint: {"center_y": 0.5, "center_x": 0.3}
+                        x: self.parent.x + dp(25)
+                        fit_mode: "contain"
+
+                    Label:
+                        text: "Biometric Attendance"
+                        font_size: "20sp"
+                        color: 0.85, 0.95, 1, 1
+                        halign: "left"
+                        valign: "middle"
+                        text_size: self.size
+                        pos_hint: {"center_y": 0.5, "center_x": 0.9}
+                        x: self.parent.x + dp(25) + dp(56) + dp(18)
+
+            # ===== Face Attendance Button =====
+            Button:
+                size_hint_y: None
+                height: "110dp"
+                background_normal: ""
+                background_color: 0, 0, 0, 0
+                on_release: root.on_face_attendance()
+
+                canvas.before:
+                    Color:
+                        rgba: 0.18, 0.35, 0.50, 0.85
+                    RoundedRectangle:
+                        pos: self.pos
+                        size: self.size
+                        radius: [18]
+
+                RelativeLayout:
+                    size: self.parent.size
+                    pos: self.parent.pos
+
+                    Image:
+                        source: "assets/icons/face.png"
+                        size_hint: None, None
+                        size: "56dp", "56dp"
+                        pos_hint: {"center_y": 0.5, "center_x": 0.3}
+                        x: self.parent.x + dp(25)
+                        fit_mode: "contain"
+
+                    Label:
+                        text: "Face Attendance"
+                        font_size: "20sp"
+                        color: 0.85, 0.95, 1, 1
+                        halign: "left"
+                        valign: "middle"
+                        text_size: self.size
+                        pos_hint: {"center_y": 0.5, "center_x": 0.9}
+                        x: self.parent.x + dp(25) + dp(56) + dp(18)
+
+            # ===== Register User Button =====
+            Button:
+                size_hint_y: None
+                height: "110dp"
+                background_normal: ""
+                background_color: 0, 0, 0, 0
+                on_release: root.on_register_user()
+
+                canvas.before:
+                    Color:
+                        rgba: 0.20, 0.42, 0.30, 0.85  # Green-tinted for distinction
+                    RoundedRectangle:
+                        pos: self.pos
+                        size: self.size
+                        radius: [18]
+
+                RelativeLayout:
+                    size: self.parent.size
+                    pos: self.parent.pos
+
+                    Image:
+                        source: "assets/icons/user_add.png"
+                        size_hint: None, None
+                        size: "56dp", "56dp"
+                        pos_hint: {"center_y": 0.5, "center_x": 0.3}
+                        x: self.parent.x + dp(25)
+                        fit_mode: "contain"
+
+                    Label:
+                        text: "Register User"
+                        font_size: "20sp"
+                        color: 0.85, 0.95, 1, 1
+                        halign: "left"
+                        valign: "middle"
+                        text_size: self.size
+                        pos_hint: {"center_y": 0.5, "center_x": 0.9}
+                        x: self.parent.x + dp(25) + dp(56) + dp(18)
+
+        # ===== Footer =====
+        Footer:
+            pos_hint: {"y": 0}
+            version_text: "Version: V1.1"

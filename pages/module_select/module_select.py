@@ -21,6 +21,7 @@ class ModuleSelectScreen(BaseScreen):
 
     def on_attendance(self):
         print("Attendance selected")
+        self.manager.current = "attendance_type"
 
 
     def on_kms(self):
