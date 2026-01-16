@@ -14,6 +14,7 @@ class AttendanceTypeScreen(BaseScreen):
     def on_face_attendance(self):
 
         print("Face Attendance selected")
+        self.manager.current = "face_attendance"
     
     def on_register_user(self):
         print("Register User selected")
