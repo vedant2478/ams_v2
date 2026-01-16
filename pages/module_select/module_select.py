@@ -25,5 +25,6 @@ class ModuleSelectScreen(BaseScreen):
 
     def on_kms(self):
         print("kms  selected")
+        self.manager.current = "auth"
 
 
