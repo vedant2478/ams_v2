@@ -1,138 +1,175 @@
-<FaceAttendanceScreen>:
-    name: "face_attendance"
-
-    FloatLayout:
-
-        # ===== Header (CONSTANT) =====
-        Header:
-            pos_hint: {"top": 1}
-
-        # ===== Back Button (PAGE LEVEL – TRANSPARENT) =====
-        BoxLayout:
-            orientation: "horizontal"
-            size_hint_y: None
-            height: "48dp"
-            padding: "16dp", 0
-            pos_hint: {"top": .95}
-
-            Button:
-                text: "Back"
-                size_hint_x: None
-                width: "100dp"
-                background_normal: ""
-                background_color: 0, 0, 0, 0   # fully transparent
-                color: 0.90, 0.95, 1, 1
-                font_size: "16sp"
-                on_release: root.go_back()
-
-            Widget:
-            
-            # Register Button
-            Button:
-                text: "Register User"
-                size_hint_x: None
-                width: "150dp"
-                background_normal: ""
-                background_color: 0.20, 0.42, 0.30, 0.85
-                color: 0.90, 0.95, 1, 1
-                font_size: "16sp"
-                on_release: root.show_registration_popup()
-
-        # ===== Main Content =====
+        # ===== Main Content Container =====
         BoxLayout:
             orientation: "vertical"
-            spacing: "20dp"
+            spacing: "24dp"
             size_hint: None, None
-            size: "460dp", "540dp"
-            pos_hint: {"center_x": 0.5, "center_y": 0.52}
+            size: "520dp", "580dp"
+            pos_hint: {"center_x": 0.5, "center_y": 0.48}
+            padding: "10dp"
 
-            # ===== Toggle Buttons (In-Time / Out-Time) =====
+            # ===== Toggle Buttons (Enhanced) =====
             BoxLayout:
                 orientation: "horizontal"
                 size_hint_y: None
-                height: "50dp"
-                spacing: "10dp"
-
-                ToggleButton:
-                    id: in_time_btn
-                    text: "In-Time"
-                    font_size: "18sp"
-                    group: "time_type"
-                    state: "down"
-                    background_normal: ""
-                    background_color: 0, 0, 0, 0
-                    color: 0.85, 0.95, 1, 1
-                    on_release: root.on_time_type_change("in")
-
-                    canvas.before:
-                        Color:
-                            rgba: (0.15, 0.30, 0.45, 0.95) if self.state == "down" else (0.18, 0.35, 0.50, 0.6)
-                        RoundedRectangle:
-                            pos: self.pos
-                            size: self.size
-                            radius: [25]
-
-                ToggleButton:
-                    id: out_time_btn
-                    text: "Out-Time"
-                    font_size: "18sp"
-                    group: "time_type"
-                    background_normal: ""
-                    background_color: 0, 0, 0, 0
-                    color: 0.85, 0.95, 1, 1
-                    on_release: root.on_time_type_change("out")
-
-                    canvas.before:
-                        Color:
-                            rgba: (0.15, 0.30, 0.45, 0.95) if self.state == "down" else (0.18, 0.35, 0.50, 0.6)
-                        RoundedRectangle:
-                            pos: self.pos
-                            size: self.size
-                            radius: [25]
-
-            # ===== Camera Feed Display =====
-            FloatLayout:
-                size_hint_y: None
-                height: "340dp"
-
+                height: "56dp"
+                spacing: "12dp"
+                padding: "4dp"
+                
                 canvas.before:
                     Color:
-                        rgba: 0.18, 0.35, 0.50, 0.5
-                    RoundedRectangle:
-                        pos: self.pos
-                        size: self.size
-                        radius: [20]
-
-                # Camera widget with rounded corners
-                KivyCamera:
-                    id: camera_feed
-                    size_hint: None, None
-                    size: "440dp", "320dp"
-                    pos_hint: {"center_x": 0.5, "center_y": 0.5}
-
-            # ===== Welcome Message =====
-            BoxLayout:
-                size_hint_y: None
-                height: "60dp"
-                padding: "10dp", 0
-
-                canvas.before:
-                    Color:
-                        rgba: 0.18, 0.35, 0.50, 0.85
+                        rgba: 0.12, 0.18, 0.25, 0.8
                     RoundedRectangle:
                         pos: self.pos
                         size: self.size
                         radius: [30]
 
+                ToggleButton:
+                    id: in_time_btn
+                    text: "⏱ In-Time"
+                    font_size: "18sp"
+                    bold: True
+                    group: "time_type"
+                    state: "down"
+                    background_normal: ""
+                    background_color: 0, 0, 0, 0
+                    color: (1, 1, 1, 1) if self.state == "down" else (0.7, 0.8, 0.9, 1)
+                    on_release: root.on_time_type_change("in")
+
+                    canvas.before:
+                        Color:
+                            rgba: (0.2, 0.5, 0.8, 1) if self.state == "down" else (0, 0, 0, 0)
+                        RoundedRectangle:
+                            pos: self.pos
+                            size: self.size
+                            radius: [26]
+                        # Glow effect when active
+                        Color:
+                            rgba: (0.2, 0.5, 0.8, 0.3) if self.state == "down" else (0, 0, 0, 0)
+                        RoundedRectangle:
+                            pos: self.x - 2, self.y - 2
+                            size: self.width + 4, self.height + 4
+                            radius: [28]
+
+                ToggleButton:
+                    id: out_time_btn
+                    text: "⏱ Out-Time"
+                    font_size: "18sp"
+                    bold: True
+                    group: "time_type"
+                    background_normal: ""
+                    background_color: 0, 0, 0, 0
+                    color: (1, 1, 1, 1) if self.state == "down" else (0.7, 0.8, 0.9, 1)
+                    on_release: root.on_time_type_change("out")
+
+                    canvas.before:
+                        Color:
+                            rgba: (0.8, 0.4, 0.2, 1) if self.state == "down" else (0, 0, 0, 0)
+                        RoundedRectangle:
+                            pos: self.pos
+                            size: self.size
+                            radius: [26]
+                        # Glow effect when active
+                        Color:
+                            rgba: (0.8, 0.4, 0.2, 0.3) if self.state == "down" else (0, 0, 0, 0)
+                        RoundedRectangle:
+                            pos: self.x - 2, self.y - 2
+                            size: self.width + 4, self.height + 4
+                            radius: [28]
+
+            # ===== Camera Feed Card =====
+            FloatLayout:
+                size_hint_y: None
+                height: "370dp"
+
+                canvas.before:
+                    # Outer shadow
+                    Color:
+                        rgba: 0, 0, 0, 0.4
+                    RoundedRectangle:
+                        pos: self.x + 4, self.y - 4
+                        size: self.size
+                        radius: [24]
+                    # Card background
+                    Color:
+                        rgba: 0.12, 0.20, 0.28, 0.95
+                    RoundedRectangle:
+                        pos: self.pos
+                        size: self.size
+                        radius: [24]
+                    # Inner border
+                    Color:
+                        rgba: 0.25, 0.45, 0.65, 0.4
+                    Line:
+                        rounded_rectangle: (self.x, self.y, self.width, self.height, 24)
+                        width: 1.5
+
+                # Camera Title
+                Label:
+                    text: "📹 Live Camera Feed"
+                    size_hint: None, None
+                    size: 200, 30
+                    pos_hint: {"center_x": 0.5, "top": 0.98}
+                    font_size: "16sp"
+                    bold: True
+                    color: 0.7, 0.85, 1, 1
+
+                # Camera Display
+                KivyCamera:
+                    id: camera_feed
+                    size_hint: None, None
+                    size: "480dp", "310dp"
+                    pos_hint: {"center_x": 0.5, "center_y": 0.48}
+                    
+                    canvas.before:
+                        Color:
+                            rgba: 0.08, 0.12, 0.18, 1
+                        RoundedRectangle:
+                            pos: self.pos
+                            size: self.size
+                            radius: [16]
+
+            # ===== Welcome Message Card =====
+            BoxLayout:
+                size_hint_y: None
+                height: "70dp"
+                padding: "20dp", "0dp"
+
+                canvas.before:
+                    # Shadow
+                    Color:
+                        rgba: 0, 0, 0, 0.3
+                    RoundedRectangle:
+                        pos: self.x + 3, self.y - 3
+                        size: self.size
+                        radius: [35]
+                    # Gradient background
+                    Color:
+                        rgba: 0.18, 0.42, 0.65, 1
+                    RoundedRectangle:
+                        pos: self.pos
+                        size: self.size
+                        radius: [35]
+                    # Highlight
+                    Color:
+                        rgba: 1, 1, 1, 0.1
+                    RoundedRectangle:
+                        pos: self.x, self.top - 35
+                        size: self.width, 35
+                        radius: [35, 35, 0, 0]
+
+                # Icon
+                Label:
+                    text: "👤"
+                    font_size: "32sp"
+                    size_hint_x: None
+                    width: "50dp"
+
+                # Welcome Text
                 Label:
                     id: welcome_label
-                    text: '"USER_NAME" --> Welcome'
-                    font_size: "18sp"
-                    color: 0.85, 0.95, 1, 1
+                    text: '"USER_NAME" → Welcome!'
+                    font_size: "20sp"
+                    bold: True
+                    color: 1, 1, 1, 1
                     halign: "center"
                     valign: "middle"
-
-        # ===== Footer =====
-        Footer:
-            pos_hint: {"y": 0}
-            version_text: "Version: 12.9.3"
