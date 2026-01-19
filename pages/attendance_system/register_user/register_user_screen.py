@@ -113,7 +113,7 @@ class RegisterUserScreen(Screen):
     def setup_camera(self, dt):
         """Setup and start camera feed"""
         try:
-            self.ids.camera_feed.start(camera_index=0)
+            self.ids.camera_feed.start(camera_index=1)
         except Exception as e:
             print(f"Camera setup error: {e}")
     
