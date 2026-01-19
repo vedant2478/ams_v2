@@ -5,6 +5,7 @@ from kivy.uix.label import Label
 from kivy.uix.textinput import TextInput
 from kivy.uix.button import Button
 from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.gridlayout import GridLayout
 from kivy.properties import StringProperty, BooleanProperty
 from kivy.clock import Clock
 from kivy.graphics.texture import Texture
@@ -78,8 +79,74 @@ class KivyCamera(Image):
         print("Camera stopped")
 
 
+class TouchKeyboard(BoxLayout):
+    """On-screen keyboard for touch devices"""
+    
+    def __init__(self, text_input, **kwargs):
+        super(TouchKeyboard, self).__init__(**kwargs)
+        self.orientation = 'vertical'
+        self.text_input = text_input
+        self.spacing = 5
+        self.padding = 5
+        
+        # Keyboard layout
+        keys = [
+            ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'],
+            ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'],
+            ['Z', 'X', 'C', 'V', 'B', 'N', 'M', '⌫']
+        ]
+        
+        # Create keyboard rows
+        for row in keys:
+            row_layout = BoxLayout(spacing=5, size_hint_y=None, height=50)
+            for key in row:
+                btn = Button(
+                    text=key,
+                    font_size='18sp',
+                    background_normal='',
+                    background_color=(0.18, 0.35, 0.50, 0.9)
+                )
+                btn.bind(on_release=lambda x, k=key: self.on_key_press(k))
+                row_layout.add_widget(btn)
+            self.add_widget(row_layout)
+        
+        # Space and Clear row
+        bottom_row = BoxLayout(spacing=5, size_hint_y=None, height=50)
+        
+        space_btn = Button(
+            text='SPACE',
+            font_size='16sp',
+            background_normal='',
+            background_color=(0.18, 0.35, 0.50, 0.9)
+        )
+        space_btn.bind(on_release=lambda x: self.on_key_press(' '))
+        
+        clear_btn = Button(
+            text='CLEAR',
+            font_size='16sp',
+            background_normal='',
+            background_color=(0.6, 0.2, 0.2, 0.9)
+        )
+        clear_btn.bind(on_release=lambda x: self.clear_text())
+        
+        bottom_row.add_widget(space_btn)
+        bottom_row.add_widget(clear_btn)
+        self.add_widget(bottom_row)
+    
+    def on_key_press(self, key):
+        """Handle key press"""
+        if key == '⌫':  # Backspace
+            self.text_input.text = self.text_input.text[:-1]
+        else:
+            self.text_input.text += key
+    
+    def clear_text(self):
+        """Clear all text"""
+        self.text_input.text = ''
+
+
 class RegistrationPopup(Popup):
-    """Popup for user registration"""
+    """Popup for user registration with on-screen keyboard"""
     
     def __init__(self, face_system, registered_faces, camera_widget, **kwargs):
         super(RegistrationPopup, self).__init__(**kwargs)
@@ -93,44 +160,60 @@ class RegistrationPopup(Popup):
         self.samples = []
         
         self.title = "Register New User"
-        self.size_hint = (0.8, 0.5)
+        self.size_hint = (0.95, 0.9)
         self.auto_dismiss = False
         
-        # Layout
-        layout = BoxLayout(orientation='vertical', padding=10, spacing=10)
+        # Main Layout
+        main_layout = BoxLayout(orientation='vertical', padding=10, spacing=10)
         
         # Instructions
         self.instruction_label = Label(
-            text="Step 1: Enter your name",
-            size_hint_y=0.3,
-            color=(0.9, 0.95, 1, 1)
+            text="Step 1: Enter your name using keyboard below",
+            size_hint_y=None,
+            height=40,
+            color=(0.9, 0.95, 1, 1),
+            font_size='16sp'
         )
-        layout.add_widget(self.instruction_label)
+        main_layout.add_widget(self.instruction_label)
         
-        # Name input
+        # Name input (read-only, no physical keyboard)
         self.name_input = TextInput(
-            hint_text="Enter your name",
+            text="",
             multiline=False,
-            size_hint_y=0.2
+            size_hint_y=None,
+            height=60,
+            font_size='22sp',
+            readonly=False,
+            hint_text="Name will appear here",
+            background_color=(0.15, 0.25, 0.35, 0.9),
+            foreground_color=(0.90, 0.95, 1, 1),
+            padding=[15, 15]
         )
-        layout.add_widget(self.name_input)
+        main_layout.add_widget(self.name_input)
+        
+        # On-screen keyboard
+        self.keyboard = TouchKeyboard(self.name_input, size_hint_y=None, height=220)
+        main_layout.add_widget(self.keyboard)
         
         # Status label
         self.status_label = Label(
             text="",
-            size_hint_y=0.2,
-            color=(0.9, 0.95, 1, 1)
+            size_hint_y=None,
+            height=40,
+            color=(0.9, 0.95, 1, 1),
+            font_size='16sp'
         )
-        layout.add_widget(self.status_label)
+        main_layout.add_widget(self.status_label)
         
         # Buttons
-        btn_layout = BoxLayout(size_hint_y=0.3, spacing=10)
+        btn_layout = BoxLayout(size_hint_y=None, height=60, spacing=10)
         
         self.capture_btn = Button(
             text="Capture Face",
             disabled=True,
             background_normal='',
-            background_color=(0.18, 0.35, 0.50, 0.85)
+            background_color=(0.18, 0.35, 0.50, 0.85),
+            font_size='18sp'
         )
         self.capture_btn.bind(on_release=self.on_capture)
         btn_layout.add_widget(self.capture_btn)
@@ -138,14 +221,15 @@ class RegistrationPopup(Popup):
         cancel_btn = Button(
             text="Cancel",
             background_normal='',
-            background_color=(0.5, 0.2, 0.2, 0.85)
+            background_color=(0.5, 0.2, 0.2, 0.85),
+            font_size='18sp'
         )
         cancel_btn.bind(on_release=self.dismiss)
         btn_layout.add_widget(cancel_btn)
         
-        layout.add_widget(btn_layout)
+        main_layout.add_widget(btn_layout)
         
-        self.content = layout
+        self.content = main_layout
         
         # Bind name input
         self.name_input.bind(text=self.on_name_change)
@@ -155,9 +239,10 @@ class RegistrationPopup(Popup):
         if value.strip():
             self.capture_btn.disabled = False
             self.username = value.strip()
-            self.instruction_label.text = f"Step 2: Look at camera and click 'Capture Face' ({self.target_samples} times)"
+            self.instruction_label.text = f"Step 2: Click 'Capture Face' {self.target_samples} times"
         else:
             self.capture_btn.disabled = True
+            self.instruction_label.text = "Step 1: Enter your name using keyboard below"
     
     def on_capture(self, instance):
         """Handle capture button press"""
