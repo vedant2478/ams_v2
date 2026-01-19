@@ -1,14 +1,14 @@
 from kivy.uix.screenmanager import Screen
 from kivy.uix.image import Image
+from kivy.uix.vkeyboard import VKeyboard
 from kivy.uix.label import Label
 from kivy.uix.textinput import TextInput
 from kivy.uix.button import Button
 from kivy.uix.boxlayout import BoxLayout
-from kivy.properties import StringProperty, NumericProperty
+from kivy.properties import StringProperty, NumericProperty, ObjectProperty
 from kivy.clock import Clock
 from kivy.graphics.texture import Texture
 from datetime import datetime
-from kivy.core.window import Window
 import cv2
 import numpy as np
 
@@ -83,6 +83,7 @@ class RegisterUserScreen(Screen):
     sample_count = NumericProperty(0)
     target_samples = NumericProperty(5)
     status_message = StringProperty("Enter name and capture face")
+    vkeyboard = ObjectProperty(None)
     
     def __init__(self, **kwargs):
         super(RegisterUserScreen, self).__init__(**kwargs)
@@ -96,16 +97,6 @@ class RegisterUserScreen(Screen):
         
         # Reference to main app's registered faces
         self.registered_faces = None
-        
-        # Bind to handle keyboard
-        Window.bind(on_keyboard=self.on_keyboard)
-    
-    def on_keyboard(self, instance, key, scancode, codepoint, modifier):
-        """Handle hardware keyboard events"""
-        if key == 27:  # ESC key
-            self.go_back()
-            return True
-        return False
     
     def on_enter(self):
         """Called when screen is entered"""
@@ -118,7 +109,6 @@ class RegisterUserScreen(Screen):
         # Clear text input
         if hasattr(self, 'ids') and 'name_input' in self.ids:
             self.ids.name_input.text = ""
-            self.ids.name_input.focus = False
         
         # Get reference to registered faces from face attendance screen
         if self.manager.has_screen('face_attendance'):
@@ -136,9 +126,36 @@ class RegisterUserScreen(Screen):
             print(f"Camera setup error: {e}")
             self.status_message = f"❌ Camera error: {e}"
     
-    def on_text_change(self, instance, value):
+    def on_keyboard_key(self, keyboard, keycode, text, modifiers):
+        """Handle virtual keyboard key presses"""
+        if keycode == 'backspace':
+            # Remove last character
+            if self.username:
+                self.username = self.username[:-1]
+                self.ids.name_input.text = self.username
+        elif keycode == 'spacebar':
+            # Add space
+            self.username += ' '
+            self.ids.name_input.text = self.username
+        elif keycode == 'enter':
+            # Trigger capture if name is entered
+            if self.username.strip():
+                self.on_capture()
+        elif keycode in ['shift', 'capslock', 'tab', 'escape', 'alt', 'ctrl']:
+            # Ignore modifier keys
+            pass
+        else:
+            # Add character to username
+            if text:
+                self.username += text
+                self.ids.name_input.text = self.username
+        
+        # Update status
+        self.on_text_change()
+    
+    def on_text_change(self):
         """Handle text input changes"""
-        self.username = value.strip()
+        self.username = self.ids.name_input.text.strip()
         
         # Update capture button state
         if self.username:
@@ -191,10 +208,6 @@ class RegisterUserScreen(Screen):
         except:
             pass
         
-        # Unfocus text input to hide keyboard
-        if hasattr(self, 'ids') and 'name_input' in self.ids:
-            self.ids.name_input.focus = False
-        
         self.manager.current = "attendance_type"
     
     def on_leave(self):
@@ -203,7 +216,3 @@ class RegisterUserScreen(Screen):
             self.ids.camera_feed.stop()
         except:
             pass
-        
-        # Unfocus to hide keyboard
-        if hasattr(self, 'ids') and 'name_input' in self.ids:
-            self.ids.name_input.focus = False
