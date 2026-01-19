@@ -8,23 +8,22 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.properties import StringProperty, BooleanProperty
 from kivy.clock import Clock
 from kivy.graphics.texture import Texture
+from datetime import datetime
 import cv2
+import numpy as np
 
-# Import the face recognition system
-from attendance import FaceAttendanceSystem
-from face_detection_utils import is_face_in_box
+# Import the generalized face recognition system
+from face_recognition_system import FaceRecognitionSystem
 
 
 class KivyCamera(Image):
-    """
-    Custom camera widget using OpenCV for live camera feed with face detection
-    """
+    """Custom camera widget using OpenCV for live camera feed"""
+    
     def __init__(self, **kwargs):
         super(KivyCamera, self).__init__(**kwargs)
         self.capture = None
         self.fps = 30
         self.current_frame = None
-        self.box_coords = None
         
     def start(self, camera_index=1):
         """Start the camera capture"""
@@ -41,17 +40,6 @@ class KivyCamera(Image):
             self.capture.set(cv2.CAP_PROP_BUFFERSIZE, 2)
             self.capture.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M','J','P','G'))
             
-            # Read one frame to get dimensions and set box coordinates
-            ret, frame = self.capture.read()
-            if ret:
-                height, width = frame.shape[:2]
-                box_size = min(width, height) // 2
-                x1 = (width - box_size) // 2
-                y1 = (height - box_size) // 2
-                x2 = x1 + box_size
-                y2 = y1 + box_size
-                self.box_coords = (x1, y1, x2, y2)
-            
             Clock.schedule_interval(self.update, 1.0 / self.fps)
             print(f"Camera started successfully")
             
@@ -59,7 +47,7 @@ class KivyCamera(Image):
             print(f"Error starting camera: {e}")
     
     def update(self, dt):
-        """Update camera frame with face detection box"""
+        """Update camera frame"""
         if self.capture and self.capture.isOpened():
             if self.capture.grab():
                 ret, frame = self.capture.retrieve()
@@ -67,22 +55,6 @@ class KivyCamera(Image):
                 if ret and frame is not None:
                     # Store current frame for face recognition
                     self.current_frame = frame.copy()
-                    
-                    # Draw detection box
-                    if self.box_coords:
-                        x1, y1, x2, y2 = self.box_coords
-                        
-                        # Check if face is in box
-                        face_in_box, _ = is_face_in_box(frame, self.box_coords)
-                        
-                        # Draw box (GREEN if no face, RED if face detected)
-                        box_color = (0, 0, 255) if face_in_box else (0, 255, 0)
-                        cv2.rectangle(frame, (x1, y1), (x2, y2), box_color, 3)
-                        
-                        # Draw status text
-                        status_text = "FACE DETECTED" if face_in_box else "Position face in box"
-                        cv2.putText(frame, status_text, (x1, y1 - 10),
-                                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, box_color, 2)
                     
                     # ROTATE 180 DEGREES
                     frame = cv2.rotate(frame, cv2.ROTATE_180)
@@ -93,13 +65,9 @@ class KivyCamera(Image):
                     texture.blit_buffer(buf, colorfmt='rgb', bufferfmt='ubyte')
                     self.texture = texture
     
-    def get_face_roi(self):
-        """Get the face ROI if face is detected in box"""
-        if self.current_frame is not None and self.box_coords:
-            face_in_box, face_roi = is_face_in_box(self.current_frame, self.box_coords)
-            if face_in_box:
-                return face_roi
-        return None
+    def get_current_frame(self):
+        """Get the current frame"""
+        return self.current_frame
     
     def stop(self):
         """Stop the camera capture"""
@@ -113,12 +81,16 @@ class KivyCamera(Image):
 class RegistrationPopup(Popup):
     """Popup for user registration"""
     
-    def __init__(self, callback, **kwargs):
+    def __init__(self, face_system, registered_faces, camera_widget, **kwargs):
         super(RegistrationPopup, self).__init__(**kwargs)
-        self.callback = callback
+        self.face_system = face_system
+        self.registered_faces = registered_faces
+        self.camera_widget = camera_widget
+        
         self.sample_count = 0
-        self.target_samples = 3
+        self.target_samples = 5
         self.username = None
+        self.samples = []
         
         self.title = "Register New User"
         self.size_hint = (0.8, 0.5)
@@ -183,27 +155,44 @@ class RegistrationPopup(Popup):
         if value.strip():
             self.capture_btn.disabled = False
             self.username = value.strip()
-            self.instruction_label.text = f"Step 2: Position face in box and click 'Capture Face' ({self.target_samples} times)"
+            self.instruction_label.text = f"Step 2: Look at camera and click 'Capture Face' ({self.target_samples} times)"
         else:
             self.capture_btn.disabled = True
     
     def on_capture(self, instance):
         """Handle capture button press"""
-        if self.username:
-            success = self.callback(self.username)
+        if not self.username:
+            return
+        
+        # Get current frame from camera
+        frame = self.camera_widget.get_current_frame()
+        
+        if frame is None:
+            self.status_label.text = "❌ No camera frame available!"
+            return
+        
+        # Register face from frame
+        result = self.face_system.register_face_from_frame(frame, self.username)
+        
+        if result['success']:
+            self.samples.append(result['embedding'])
+            self.sample_count += 1
+            self.status_label.text = f"✅ Sample {self.sample_count}/{self.target_samples} captured!"
             
-            if success:
-                self.sample_count += 1
-                self.status_label.text = f"✅ Sample {self.sample_count}/{self.target_samples} captured!"
+            if self.sample_count >= self.target_samples:
+                # Average all samples
+                avg_embedding = np.mean(self.samples, axis=0)
+                self.registered_faces[self.username] = avg_embedding
                 
-                if self.sample_count >= self.target_samples:
-                    self.status_label.text = f"✅ {self.username} registered successfully!"
-                    Clock.schedule_once(lambda dt: self.dismiss(), 1.5)
-            else:
-                self.status_label.text = "❌ No face detected. Position face in box!"
+                self.status_label.text = f"✅ {self.username} registered successfully!"
+                print(f"✓ {self.username} added to system")
+                Clock.schedule_once(lambda dt: self.dismiss(), 1.5)
+        else:
+            self.status_label.text = f"❌ {result['message']}"
 
 
 class FaceAttendanceScreen(Screen):
+    """Main attendance screen with face recognition"""
     
     current_time_type = StringProperty("in")
     current_user = StringProperty("USER_NAME")
@@ -214,14 +203,21 @@ class FaceAttendanceScreen(Screen):
         super(FaceAttendanceScreen, self).__init__(**kwargs)
         
         # Initialize face recognition system
-        self.face_system = FaceAttendanceSystem(threshold=0.6)
-        self.registration_popup = None
+        self.face_system = FaceRecognitionSystem()
+        
+        # Store data in variables (no database)
+        self.registered_faces = {}  # {name: embedding}
+        self.attendance_log = []    # [(name, timestamp, score, time_type), ...]
+        self.last_recognized = {}   # {name: datetime}
+        self.threshold = 180
     
     def on_enter(self):
         """Called when screen is entered"""
+        print(f"Loaded {len(self.registered_faces)} registered faces")
+        
         Clock.schedule_once(self.setup_camera, 0.5)
-        # Start auto-recognition every 3 seconds
-        Clock.schedule_interval(self.auto_recognize, 3.0)
+        # Start auto-recognition every 2 seconds
+        Clock.schedule_interval(self.auto_recognize, 2.0)
     
     def setup_camera(self, dt):
         """Setup and start camera feed"""
@@ -235,25 +231,46 @@ class FaceAttendanceScreen(Screen):
         if self.processing or self.registration_mode:
             return
         
+        if len(self.registered_faces) == 0:
+            return
+        
         try:
-            # Get face ROI from camera
-            face_roi = self.ids.camera_feed.get_face_roi()
+            # Get current frame from camera
+            frame = self.ids.camera_feed.get_current_frame()
             
-            if face_roi is not None:
-                self.processing = True
+            if frame is None:
+                return
+            
+            self.processing = True
+            
+            # Recognize faces in frame
+            results = self.face_system.detect_and_recognize_faces(
+                frame, self.registered_faces, threshold=self.threshold
+            )
+            
+            # Process recognition results
+            for result in results:
+                name = result['name']
+                score = result['score']
                 
-                # Mark attendance using the face_system object
-                success, name, confidence = self.face_system.mark_attendance(
-                    face_roi, 
-                    self.current_time_type
-                )
-                
-                if success:
-                    self.update_welcome_message(f"{name} ({confidence:.0f}%)")
-                else:
-                    self.update_welcome_message("Unknown Person")
-                
-                self.processing = False
+                if name != "Unknown" and score < self.threshold:
+                    # Check cooldown (60 seconds between same person)
+                    current_time = datetime.now()
+                    
+                    if name not in self.last_recognized or \
+                       (current_time - self.last_recognized[name]).seconds > 60:
+                        
+                        # Log attendance to variable
+                        timestamp = current_time.strftime("%Y-%m-%d %H:%M:%S")
+                        self.attendance_log.append((name, timestamp, score, self.current_time_type))
+                        
+                        # Update UI
+                        self.update_welcome_message(name)
+                        print(f"✓ {self.current_time_type.upper()} marked: {name} | {timestamp} | Score: {score:.0f}")
+                        
+                        self.last_recognized[name] = current_time
+            
+            self.processing = False
         
         except Exception as e:
             print(f"Auto-recognition error: {e}")
@@ -262,36 +279,23 @@ class FaceAttendanceScreen(Screen):
     def show_registration_popup(self):
         """Show registration popup"""
         self.registration_mode = True
-        self.registration_popup = RegistrationPopup(callback=self.register_user_capture)
+        self.registration_popup = RegistrationPopup(
+            face_system=self.face_system,
+            registered_faces=self.registered_faces,
+            camera_widget=self.ids.camera_feed
+        )
         self.registration_popup.bind(on_dismiss=self.on_registration_dismiss)
         self.registration_popup.open()
     
     def on_registration_dismiss(self, instance):
         """Called when registration popup is dismissed"""
         self.registration_mode = False
-    
-    def register_user_capture(self, username):
-        """
-        Capture face sample for registration
-        
-        Args:
-            username: Name of the user to register
-        
-        Returns:
-            success: True if capture successful
-        """
-        face_roi = self.ids.camera_feed.get_face_roi()
-        
-        if face_roi is not None:
-            success = self.face_system.register_user(username, face_roi)
-            return success
-        
-        return False
+        print(f"Total registered users: {len(self.registered_faces)}")
     
     def on_time_type_change(self, time_type):
         """Handle toggle button change"""
         self.current_time_type = time_type
-        print(f"Time type changed to: {time_type}")
+        print(f"Time type changed to: {time_type.upper()}")
     
     def update_welcome_message(self, username):
         """Update welcome message"""
@@ -300,11 +304,11 @@ class FaceAttendanceScreen(Screen):
     
     def get_user_list(self):
         """Get list of registered users"""
-        return self.face_system.get_user_list()
+        return list(self.registered_faces.keys())
     
     def get_attendance_log(self, limit=10):
         """Get recent attendance log"""
-        return self.face_system.get_attendance_log(limit=limit)
+        return self.attendance_log[-limit:]
     
     def go_back(self):
         """Navigate back to previous screen"""
@@ -314,7 +318,11 @@ class FaceAttendanceScreen(Screen):
         except:
             pass
         
-        print("Going back")
+        print(f"\n=== Session Summary ===")
+        print(f"Registered Users: {len(self.registered_faces)}")
+        print(f"Attendance Records: {len(self.attendance_log)}")
+        print("Going back...")
+        
         self.manager.current = "attendance_type"
     
     def on_leave(self):
