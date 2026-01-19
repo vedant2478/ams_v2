@@ -49,7 +49,7 @@ Builder.load_file(
 Builder.load_file(os.path.join(BASE_DIR, "pages/module_select/module_select.kv"))
 Builder.load_file(os.path.join(BASE_DIR, "pages/attendance_system/attendance_type/attendance_type.kv"))
 Builder.load_file(os.path.join(BASE_DIR, "pages/attendance_system/face_attendance/face_attendance.kv"))
-Builder.load_file(os.path.join(BASE_DIR, "pages/attendance_system/register_user/register_user_screen.kv"))
+Builder.load_file(os.path.join(BASE_DIR, "pages/attendance_system/register_user/register_user.kv"))
 
 # ================= SCREEN PY =================
 from pages.home.home import HomeScreen
