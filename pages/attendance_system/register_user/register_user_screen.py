@@ -1,11 +1,10 @@
 from kivy.uix.screenmanager import Screen
 from kivy.uix.image import Image
-from kivy.uix.vkeyboard import VKeyboard
 from kivy.uix.label import Label
 from kivy.uix.textinput import TextInput
 from kivy.uix.button import Button
 from kivy.uix.boxlayout import BoxLayout
-from kivy.properties import StringProperty, NumericProperty, ObjectProperty
+from kivy.properties import StringProperty, NumericProperty
 from kivy.clock import Clock
 from kivy.graphics.texture import Texture
 from datetime import datetime
@@ -83,7 +82,6 @@ class RegisterUserScreen(Screen):
     sample_count = NumericProperty(0)
     target_samples = NumericProperty(5)
     status_message = StringProperty("Enter name and capture face")
-    vkeyboard = ObjectProperty(None)
     
     def __init__(self, **kwargs):
         super(RegisterUserScreen, self).__init__(**kwargs)
@@ -126,31 +124,19 @@ class RegisterUserScreen(Screen):
             print(f"Camera setup error: {e}")
             self.status_message = f"❌ Camera error: {e}"
     
-    def on_keyboard_key(self, keyboard, keycode, text, modifiers):
-        """Handle virtual keyboard key presses"""
-        if keycode == 'backspace':
-            # Remove last character
+    def on_key_press(self, key):
+        """Handle keyboard key press"""
+        if key == '⌫':
+            # Backspace - remove last character
             if self.username:
                 self.username = self.username[:-1]
                 self.ids.name_input.text = self.username
-        elif keycode == 'spacebar':
-            # Add space
-            self.username += ' '
-            self.ids.name_input.text = self.username
-        elif keycode == 'enter':
-            # Trigger capture if name is entered
-            if self.username.strip():
-                self.on_capture()
-        elif keycode in ['shift', 'capslock', 'tab', 'escape', 'alt', 'ctrl']:
-            # Ignore modifier keys
-            pass
         else:
-            # Add character to username
-            if text:
-                self.username += text
-                self.ids.name_input.text = self.username
+            # Add character
+            self.username += key
+            self.ids.name_input.text = self.username
         
-        # Update status
+        # Update capture button state
         self.on_text_change()
     
     def on_text_change(self):
@@ -164,6 +150,12 @@ class RegisterUserScreen(Screen):
         else:
             self.ids.capture_btn.disabled = True
             self.status_message = "Enter name and capture face"
+    
+    def clear_text(self):
+        """Clear all text"""
+        self.username = ""
+        self.ids.name_input.text = ""
+        self.on_text_change()
     
     def on_capture(self):
         """Handle capture button press"""

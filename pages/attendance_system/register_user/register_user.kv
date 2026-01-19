@@ -215,12 +215,12 @@
                         rounded_rectangle: (self.x, self.y, self.width, self.height, 14)
                         width: 2
 
-            # ===== Virtual Keyboard =====
-            VKeyboard:
-                id: vkeyboard
-                size_hint_y: 0.4
-                layout: 'qwerty'
-                on_key_up: root.on_keyboard_key(self, args[0], args[1], args[2])
+            # ===== CUSTOM TOUCH KEYBOARD =====
+            BoxLayout:
+                orientation: "vertical"
+                size_hint_y: 0.42
+                spacing: "4dp"
+                padding: "8dp"
                 
                 canvas.before:
                     Color:
@@ -229,3 +229,384 @@
                         pos: self.pos
                         size: self.size
                         radius: [12]
+                
+                # Row 1: Numbers
+                BoxLayout:
+                    spacing: "4dp"
+                    size_hint_y: None
+                    height: "45dp"
+                    
+                    Button:
+                        text: "1"
+                        font_size: "16sp"
+                        bold: True
+                        background_normal: ""
+                        background_color: 0.15, 0.30, 0.45, 0.95
+                        color: 0.9, 0.95, 1, 1
+                        on_release: root.on_key_press('1')
+                    
+                    Button:
+                        text: "2"
+                        font_size: "16sp"
+                        bold: True
+                        background_normal: ""
+                        background_color: 0.15, 0.30, 0.45, 0.95
+                        color: 0.9, 0.95, 1, 1
+                        on_release: root.on_key_press('2')
+                    
+                    Button:
+                        text: "3"
+                        font_size: "16sp"
+                        bold: True
+                        background_normal: ""
+                        background_color: 0.15, 0.30, 0.45, 0.95
+                        color: 0.9, 0.95, 1, 1
+                        on_release: root.on_key_press('3')
+                    
+                    Button:
+                        text: "4"
+                        font_size: "16sp"
+                        bold: True
+                        background_normal: ""
+                        background_color: 0.15, 0.30, 0.45, 0.95
+                        color: 0.9, 0.95, 1, 1
+                        on_release: root.on_key_press('4')
+                    
+                    Button:
+                        text: "5"
+                        font_size: "16sp"
+                        bold: True
+                        background_normal: ""
+                        background_color: 0.15, 0.30, 0.45, 0.95
+                        color: 0.9, 0.95, 1, 1
+                        on_release: root.on_key_press('5')
+                    
+                    Button:
+                        text: "6"
+                        font_size: "16sp"
+                        bold: True
+                        background_normal: ""
+                        background_color: 0.15, 0.30, 0.45, 0.95
+                        color: 0.9, 0.95, 1, 1
+                        on_release: root.on_key_press('6')
+                    
+                    Button:
+                        text: "7"
+                        font_size: "16sp"
+                        bold: True
+                        background_normal: ""
+                        background_color: 0.15, 0.30, 0.45, 0.95
+                        color: 0.9, 0.95, 1, 1
+                        on_release: root.on_key_press('7')
+                    
+                    Button:
+                        text: "8"
+                        font_size: "16sp"
+                        bold: True
+                        background_normal: ""
+                        background_color: 0.15, 0.30, 0.45, 0.95
+                        color: 0.9, 0.95, 1, 1
+                        on_release: root.on_key_press('8')
+                    
+                    Button:
+                        text: "9"
+                        font_size: "16sp"
+                        bold: True
+                        background_normal: ""
+                        background_color: 0.15, 0.30, 0.45, 0.95
+                        color: 0.9, 0.95, 1, 1
+                        on_release: root.on_key_press('9')
+                    
+                    Button:
+                        text: "0"
+                        font_size: "16sp"
+                        bold: True
+                        background_normal: ""
+                        background_color: 0.15, 0.30, 0.45, 0.95
+                        color: 0.9, 0.95, 1, 1
+                        on_release: root.on_key_press('0')
+                
+                # Row 2: Q-P
+                BoxLayout:
+                    spacing: "4dp"
+                    size_hint_y: None
+                    height: "45dp"
+                    
+                    Button:
+                        text: "Q"
+                        font_size: "16sp"
+                        bold: True
+                        background_normal: ""
+                        background_color: 0.15, 0.30, 0.45, 0.95
+                        color: 0.9, 0.95, 1, 1
+                        on_release: root.on_key_press('Q')
+                    
+                    Button:
+                        text: "W"
+                        font_size: "16sp"
+                        bold: True
+                        background_normal: ""
+                        background_color: 0.15, 0.30, 0.45, 0.95
+                        color: 0.9, 0.95, 1, 1
+                        on_release: root.on_key_press('W')
+                    
+                    Button:
+                        text: "E"
+                        font_size: "16sp"
+                        bold: True
+                        background_normal: ""
+                        background_color: 0.15, 0.30, 0.45, 0.95
+                        color: 0.9, 0.95, 1, 1
+                        on_release: root.on_key_press('E')
+                    
+                    Button:
+                        text: "R"
+                        font_size: "16sp"
+                        bold: True
+                        background_normal: ""
+                        background_color: 0.15, 0.30, 0.45, 0.95
+                        color: 0.9, 0.95, 1, 1
+                        on_release: root.on_key_press('R')
+                    
+                    Button:
+                        text: "T"
+                        font_size: "16sp"
+                        bold: True
+                        background_normal: ""
+                        background_color: 0.15, 0.30, 0.45, 0.95
+                        color: 0.9, 0.95, 1, 1
+                        on_release: root.on_key_press('T')
+                    
+                    Button:
+                        text: "Y"
+                        font_size: "16sp"
+                        bold: True
+                        background_normal: ""
+                        background_color: 0.15, 0.30, 0.45, 0.95
+                        color: 0.9, 0.95, 1, 1
+                        on_release: root.on_key_press('Y')
+                    
+                    Button:
+                        text: "U"
+                        font_size: "16sp"
+                        bold: True
+                        background_normal: ""
+                        background_color: 0.15, 0.30, 0.45, 0.95
+                        color: 0.9, 0.95, 1, 1
+                        on_release: root.on_key_press('U')
+                    
+                    Button:
+                        text: "I"
+                        font_size: "16sp"
+                        bold: True
+                        background_normal: ""
+                        background_color: 0.15, 0.30, 0.45, 0.95
+                        color: 0.9, 0.95, 1, 1
+                        on_release: root.on_key_press('I')
+                    
+                    Button:
+                        text: "O"
+                        font_size: "16sp"
+                        bold: True
+                        background_normal: ""
+                        background_color: 0.15, 0.30, 0.45, 0.95
+                        color: 0.9, 0.95, 1, 1
+                        on_release: root.on_key_press('O')
+                    
+                    Button:
+                        text: "P"
+                        font_size: "16sp"
+                        bold: True
+                        background_normal: ""
+                        background_color: 0.15, 0.30, 0.45, 0.95
+                        color: 0.9, 0.95, 1, 1
+                        on_release: root.on_key_press('P')
+                
+                # Row 3: A-L
+                BoxLayout:
+                    spacing: "4dp"
+                    size_hint_y: None
+                    height: "45dp"
+                    
+                    Button:
+                        text: "A"
+                        font_size: "16sp"
+                        bold: True
+                        background_normal: ""
+                        background_color: 0.15, 0.30, 0.45, 0.95
+                        color: 0.9, 0.95, 1, 1
+                        on_release: root.on_key_press('A')
+                    
+                    Button:
+                        text: "S"
+                        font_size: "16sp"
+                        bold: True
+                        background_normal: ""
+                        background_color: 0.15, 0.30, 0.45, 0.95
+                        color: 0.9, 0.95, 1, 1
+                        on_release: root.on_key_press('S')
+                    
+                    Button:
+                        text: "D"
+                        font_size: "16sp"
+                        bold: True
+                        background_normal: ""
+                        background_color: 0.15, 0.30, 0.45, 0.95
+                        color: 0.9, 0.95, 1, 1
+                        on_release: root.on_key_press('D')
+                    
+                    Button:
+                        text: "F"
+                        font_size: "16sp"
+                        bold: True
+                        background_normal: ""
+                        background_color: 0.15, 0.30, 0.45, 0.95
+                        color: 0.9, 0.95, 1, 1
+                        on_release: root.on_key_press('F')
+                    
+                    Button:
+                        text: "G"
+                        font_size: "16sp"
+                        bold: True
+                        background_normal: ""
+                        background_color: 0.15, 0.30, 0.45, 0.95
+                        color: 0.9, 0.95, 1, 1
+                        on_release: root.on_key_press('G')
+                    
+                    Button:
+                        text: "H"
+                        font_size: "16sp"
+                        bold: True
+                        background_normal: ""
+                        background_color: 0.15, 0.30, 0.45, 0.95
+                        color: 0.9, 0.95, 1, 1
+                        on_release: root.on_key_press('H')
+                    
+                    Button:
+                        text: "J"
+                        font_size: "16sp"
+                        bold: True
+                        background_normal: ""
+                        background_color: 0.15, 0.30, 0.45, 0.95
+                        color: 0.9, 0.95, 1, 1
+                        on_release: root.on_key_press('J')
+                    
+                    Button:
+                        text: "K"
+                        font_size: "16sp"
+                        bold: True
+                        background_normal: ""
+                        background_color: 0.15, 0.30, 0.45, 0.95
+                        color: 0.9, 0.95, 1, 1
+                        on_release: root.on_key_press('K')
+                    
+                    Button:
+                        text: "L"
+                        font_size: "16sp"
+                        bold: True
+                        background_normal: ""
+                        background_color: 0.15, 0.30, 0.45, 0.95
+                        color: 0.9, 0.95, 1, 1
+                        on_release: root.on_key_press('L')
+                
+                # Row 4: Z-M + Backspace
+                BoxLayout:
+                    spacing: "4dp"
+                    size_hint_y: None
+                    height: "45dp"
+                    
+                    Button:
+                        text: "Z"
+                        font_size: "16sp"
+                        bold: True
+                        background_normal: ""
+                        background_color: 0.15, 0.30, 0.45, 0.95
+                        color: 0.9, 0.95, 1, 1
+                        on_release: root.on_key_press('Z')
+                    
+                    Button:
+                        text: "X"
+                        font_size: "16sp"
+                        bold: True
+                        background_normal: ""
+                        background_color: 0.15, 0.30, 0.45, 0.95
+                        color: 0.9, 0.95, 1, 1
+                        on_release: root.on_key_press('X')
+                    
+                    Button:
+                        text: "C"
+                        font_size: "16sp"
+                        bold: True
+                        background_normal: ""
+                        background_color: 0.15, 0.30, 0.45, 0.95
+                        color: 0.9, 0.95, 1, 1
+                        on_release: root.on_key_press('C')
+                    
+                    Button:
+                        text: "V"
+                        font_size: "16sp"
+                        bold: True
+                        background_normal: ""
+                        background_color: 0.15, 0.30, 0.45, 0.95
+                        color: 0.9, 0.95, 1, 1
+                        on_release: root.on_key_press('V')
+                    
+                    Button:
+                        text: "B"
+                        font_size: "16sp"
+                        bold: True
+                        background_normal: ""
+                        background_color: 0.15, 0.30, 0.45, 0.95
+                        color: 0.9, 0.95, 1, 1
+                        on_release: root.on_key_press('B')
+                    
+                    Button:
+                        text: "N"
+                        font_size: "16sp"
+                        bold: True
+                        background_normal: ""
+                        background_color: 0.15, 0.30, 0.45, 0.95
+                        color: 0.9, 0.95, 1, 1
+                        on_release: root.on_key_press('N')
+                    
+                    Button:
+                        text: "M"
+                        font_size: "16sp"
+                        bold: True
+                        background_normal: ""
+                        background_color: 0.15, 0.30, 0.45, 0.95
+                        color: 0.9, 0.95, 1, 1
+                        on_release: root.on_key_press('M')
+                    
+                    Button:
+                        text: "⌫"
+                        font_size: "20sp"
+                        bold: True
+                        background_normal: ""
+                        background_color: 0.5, 0.2, 0.2, 0.9
+                        color: 1, 1, 1, 1
+                        on_release: root.on_key_press('⌫')
+                
+                # Row 5: SPACE + CLEAR
+                BoxLayout:
+                    spacing: "4dp"
+                    size_hint_y: None
+                    height: "45dp"
+                    
+                    Button:
+                        text: "SPACE"
+                        font_size: "16sp"
+                        bold: True
+                        background_normal: ""
+                        background_color: 0.15, 0.30, 0.45, 0.95
+                        color: 0.9, 0.95, 1, 1
+                        on_release: root.on_key_press(' ')
+                    
+                    Button:
+                        text: "CLEAR"
+                        font_size: "16sp"
+                        bold: True
+                        background_normal: ""
+                        background_color: 0.5, 0.2, 0.2, 0.9
+                        color: 1, 1, 1, 1
+                        on_release: root.clear_text()
