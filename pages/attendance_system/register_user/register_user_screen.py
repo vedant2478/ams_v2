@@ -25,7 +25,7 @@ class KivyCamera(Image):
         self.fps = 30
         self.current_frame = None
         
-    def start(self, camera_index=0):
+    def start(self, camera_index=1):  # Camera 1
         """Start the camera capture"""
         try:
             self.capture = cv2.VideoCapture(camera_index)
@@ -52,6 +52,9 @@ class KivyCamera(Image):
             if ret and frame is not None:
                 # Store current frame for face recognition
                 self.current_frame = frame.copy()
+                
+                # ROTATE 180 for correct orientation
+                frame = cv2.rotate(frame, cv2.ROTATE_180)
                 
                 # Convert to RGB for display
                 h, w = frame.shape[:2]
@@ -102,6 +105,10 @@ class RegisterUserScreen(Screen):
         self.samples = []
         self.status_message = "Enter name and capture face"
         
+        # Clear text input
+        if hasattr(self, 'ids') and 'name_input' in self.ids:
+            self.ids.name_input.text = ""
+        
         # Get reference to registered faces from face attendance screen
         if self.manager.has_screen('face_attendance'):
             face_screen = self.manager.get_screen('face_attendance')
@@ -113,7 +120,7 @@ class RegisterUserScreen(Screen):
     def setup_camera(self, dt):
         """Setup and start camera feed"""
         try:
-            self.ids.camera_feed.start(camera_index=1)
+            self.ids.camera_feed.start(camera_index=1)  # Camera 1
         except Exception as e:
             print(f"Camera setup error: {e}")
     
@@ -124,8 +131,10 @@ class RegisterUserScreen(Screen):
         # Update capture button state
         if self.username:
             self.ids.capture_btn.disabled = False
+            self.status_message = f"Ready! Click Capture button"
         else:
             self.ids.capture_btn.disabled = True
+            self.status_message = "Enter name and capture face"
     
     def on_capture(self):
         """Handle capture button press"""
