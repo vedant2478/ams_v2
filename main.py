@@ -49,6 +49,7 @@ Builder.load_file(
 Builder.load_file(os.path.join(BASE_DIR, "pages/module_select/module_select.kv"))
 Builder.load_file(os.path.join(BASE_DIR, "pages/attendance_system/attendance_type/attendance_type.kv"))
 Builder.load_file(os.path.join(BASE_DIR, "pages/attendance_system/face_attendance/face_attendance.kv"))
+Builder.load_file(os.path.join(BASE_DIR, "pages/attendance_system/register_user.py/register_user_screen.kv"))
 
 # ================= SCREEN PY =================
 from pages.home.home import HomeScreen
@@ -63,6 +64,7 @@ from pages.admin_pages.peg_registration.peg_registration import PegScanScreen
 from pages.module_select.module_select import ModuleSelectScreen
 from pages.attendance_system.attendance_type.attendance_type import AttendanceTypeScreen
 from pages.attendance_system.face_attendance.face_attendance import FaceAttendanceScreen
+from pages.attendance_system.register_user.register_user_screen import RegisterUserScreen
 
 # ================= MAIN APP =================
 class MainApp(App):
@@ -118,6 +120,7 @@ class MainApp(App):
         sm.add_widget(ModuleSelectScreen(name="module_select"))
         sm.add_widget(AttendanceTypeScreen(name="attendance_type"))
         sm.add_widget(FaceAttendanceScreen(name="face_attendance"))
+        sm.add_widget(RegisterUserScreen(name="register_user"))
 
         sm.current = "home"
         return sm
