@@ -10,6 +10,7 @@ from kivy.properties import StringProperty, BooleanProperty
 from kivy.clock import Clock
 from kivy.graphics.texture import Texture
 from datetime import datetime
+from components.base_screen import BaseScreen
 import cv2
 import numpy as np
 
@@ -276,7 +277,7 @@ class RegistrationPopup(Popup):
             self.status_label.text = f"❌ {result['message']}"
 
 
-class FaceAttendanceScreen(Screen):
+class FaceAttendanceScreen(BaseScreen):
     """Main attendance screen with face recognition"""
     
     current_time_type = StringProperty("in")
