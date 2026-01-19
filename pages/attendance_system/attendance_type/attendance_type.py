@@ -18,6 +18,7 @@ class AttendanceTypeScreen(BaseScreen):
     
     def on_register_user(self):
         print("Register User selected")
+        self.manager.current = "register_user"
     
     
     def go_back(self):
