@@ -4,7 +4,6 @@
     name: "register_user"
 
     canvas.before:
-        # Background
         Color:
             rgba: 0.05, 0.08, 0.12, 1
         Rectangle:
@@ -68,33 +67,50 @@
         # ===== Main Content =====
         BoxLayout:
             orientation: "vertical"
-            spacing: "8dp"
-            padding: "12dp", "8dp"
+            spacing: "10dp"
+            padding: "15dp"
 
             # ===== Status Message =====
-            Label:
-                id: status_label
-                text: root.status_message
+            BoxLayout:
+                orientation: "vertical"
                 size_hint_y: None
-                height: "28dp"
-                font_size: "14sp"
-                color: 0.7, 0.9, 1, 1
-                halign: "center"
-                valign: "middle"
+                height: "50dp"
+                spacing: "5dp"
+                
+                canvas.before:
+                    Color:
+                        rgba: 0.1, 0.15, 0.22, 0.8
+                    RoundedRectangle:
+                        pos: self.pos
+                        size: self.size
+                        radius: [10]
+                
+                Label:
+                    id: status_label
+                    text: root.status_message
+                    font_size: "15sp"
+                    bold: True
+                    color: 0.7, 0.9, 1, 1
+                    halign: "center"
+                    valign: "middle"
+                    text_size: self.size
+                    padding: "10dp", "5dp"
 
             # ===== Camera Feed =====
             BoxLayout:
                 orientation: "vertical"
-                size_hint_y: 0.22
-                spacing: "5dp"
+                size_hint_y: 0.6
+                spacing: "8dp"
 
                 Label:
-                    text: "📹 Position Your Face"
+                    text: "📹 Position Your Face in Camera"
                     size_hint_y: None
-                    height: "22dp"
-                    font_size: "13sp"
+                    height: "30dp"
+                    font_size: "14sp"
                     bold: True
                     color: 0.7, 0.85, 1, 1
+                    halign: "center"
+                    valign: "middle"
 
                 FloatLayout:
                     canvas.before:
@@ -104,11 +120,18 @@
                             pos: self.pos
                             size: self.size
                             radius: [15]
+                        Color:
+                            rgba: 0.2, 0.5, 0.8, 0.6
+                        Line:
+                            rounded_rectangle: (self.x, self.y, self.width, self.height, 15)
+                            width: 2
 
                     KivyCamera:
                         id: camera_feed
-                        size_hint: 0.96, 0.96
+                        size_hint: 0.95, 0.95
                         pos_hint: {"center_x": 0.5, "center_y": 0.5}
+                        allow_stretch: True
+                        keep_ratio: True
                         
                         canvas.before:
                             Color:
@@ -118,83 +141,118 @@
                                 size: self.size
                                 radius: [12]
 
-            # ===== Name Input =====
+            # ===== Input Section =====
             BoxLayout:
                 orientation: "vertical"
                 size_hint_y: None
-                height: "65dp"
-                spacing: "4dp"
+                height: "140dp"
+                spacing: "10dp"
 
-                Label:
-                    text: "Enter User Name:"
+                # Name Input
+                BoxLayout:
+                    orientation: "vertical"
                     size_hint_y: None
-                    height: "18dp"
-                    font_size: "12sp"
-                    color: 0.8, 0.9, 1, 1
+                    height: "80dp"
+                    spacing: "6dp"
+
+                    Label:
+                        text: "👤 Enter User Name:"
+                        size_hint_y: None
+                        height: "25dp"
+                        font_size: "13sp"
+                        bold: True
+                        color: 0.8, 0.9, 1, 1
+                        halign: "left"
+                        valign: "middle"
+                        text_size: self.size
+                        padding: "5dp", 0
+
+                    TextInput:
+                        id: name_input
+                        hint_text: "Type full name here..."
+                        multiline: False
+                        size_hint_y: None
+                        height: "50dp"
+                        font_size: "18sp"
+                        background_color: 0, 0, 0, 0
+                        foreground_color: 0.9, 0.95, 1, 1
+                        cursor_color: 0.3, 0.6, 0.9, 1
+                        padding: "15dp", "12dp"
+                        on_text: root.on_text_change(self, self.text)
+                        
+                        canvas.before:
+                            Color:
+                                rgba: 0.12, 0.18, 0.25, 1
+                            RoundedRectangle:
+                                pos: self.pos
+                                size: self.size
+                                radius: [12]
+                            Color:
+                                rgba: 0.25, 0.45, 0.65, 0.6 if self.focus else 0.4
+                            Line:
+                                rounded_rectangle: (self.x, self.y, self.width, self.height, 12)
+                                width: 2 if self.focus else 1.5
+
+                # Capture Button
+                Button:
+                    id: capture_btn
+                    text: f"📸 Capture Sample ({root.sample_count}/{root.target_samples})"
+                    size_hint_y: None
+                    height: "55dp"
+                    disabled: True
+                    background_normal: ""
+                    background_color: 0, 0, 0, 0
+                    color: 1, 1, 1, 1
+                    font_size: "18sp"
+                    bold: True
+                    on_release: root.on_capture()
+                    
+                    canvas.before:
+                        Color:
+                            rgba: (0.15, 0.65, 0.35, 1) if not self.disabled else (0.3, 0.3, 0.3, 0.5)
+                        RoundedRectangle:
+                            pos: self.pos
+                            size: self.size
+                            radius: [14]
+                        Color:
+                            rgba: (0.2, 0.8, 0.5, 0.8) if not self.disabled else (0, 0, 0, 0)
+                        Line:
+                            rounded_rectangle: (self.x, self.y, self.width, self.height, 14)
+                            width: 2
+
+            # ===== Instructions =====
+            BoxLayout:
+                orientation: "vertical"
+                size_hint_y: None
+                height: "90dp"
+                spacing: "5dp"
+                padding: "5dp"
+                
+                canvas.before:
+                    Color:
+                        rgba: 0.1, 0.15, 0.2, 0.7
+                    RoundedRectangle:
+                        pos: self.pos
+                        size: self.size
+                        radius: [10]
+                
+                Label:
+                    text: "ℹ️  Instructions"
+                    size_hint_y: None
+                    height: "25dp"
+                    font_size: "13sp"
+                    bold: True
+                    color: 0.6, 0.8, 1, 1
                     halign: "left"
                     valign: "middle"
                     text_size: self.size
                     padding: "5dp", 0
-
-                TextInput:
-                    id: name_input
-                    hint_text: "Type name here..."
-                    multiline: False
-                    size_hint_y: None
-                    height: "43dp"
-                    font_size: "17sp"
-                    background_color: 0.12, 0.18, 0.25, 1
-                    foreground_color: 0.9, 0.95, 1, 1
-                    cursor_color: 0.2, 0.5, 0.8, 1
-                    padding: "12dp", "10dp"
-                    on_text: root.on_text_change(self, self.text)
-                    
-                    canvas.before:
-                        Color:
-                            rgba: 0.12, 0.18, 0.25, 1
-                        RoundedRectangle:
-                            pos: self.pos
-                            size: self.size
-                            radius: [10]
-                        Color:
-                            rgba: 0.25, 0.45, 0.65, 0.4
-                        Line:
-                            rounded_rectangle: (self.x, self.y, self.width, self.height, 10)
-                            width: 1.2
-
-            # ===== Capture Button =====
-            Button:
-                id: capture_btn
-                text: f"📸 Capture ({root.sample_count}/{root.target_samples})"
-                size_hint_y: None
-                height: "48dp"
-                disabled: True
-                background_normal: ""
-                background_color: 0, 0, 0, 0
-                color: 1, 1, 1, 1
-                font_size: "17sp"
-                bold: True
-                on_release: root.on_capture()
                 
-                canvas.before:
-                    Color:
-                        rgba: (0.15, 0.55, 0.35, 1) if not self.disabled else (0.3, 0.3, 0.3, 0.5)
-                    RoundedRectangle:
-                        pos: self.pos
-                        size: self.size
-                        radius: [12]
-
-            # ===== Virtual Keyboard (NOW VISIBLE) =====
-            VKeyboard:
-                id: vkeyboard
-                size_hint_y: 0.42
-                layout: 'qwerty'
-                target: name_input
-                
-                canvas.before:
-                    Color:
-                        rgba: 0.10, 0.15, 0.22, 0.98
-                    RoundedRectangle:
-                        pos: self.pos
-                        size: self.size
-                        radius: [12]
+                Label:
+                    text: "1. Enter your full name\\n2. Look at the camera and click Capture\\n3. Repeat 5 times for best results"
+                    font_size: "12sp"
+                    color: 0.7, 0.85, 0.95, 1
+                    halign: "left"
+                    valign: "top"
+                    text_size: self.size
+                    padding: "5dp", "5dp"

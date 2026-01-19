@@ -1,6 +1,5 @@
 from kivy.uix.screenmanager import Screen
 from kivy.uix.image import Image
-from kivy.uix.vkeyboard import VKeyboard
 from kivy.uix.label import Label
 from kivy.uix.textinput import TextInput
 from kivy.uix.button import Button
@@ -9,6 +8,7 @@ from kivy.properties import StringProperty, NumericProperty
 from kivy.clock import Clock
 from kivy.graphics.texture import Texture
 from datetime import datetime
+from kivy.core.window import Window
 import cv2
 import numpy as np
 
@@ -25,7 +25,7 @@ class KivyCamera(Image):
         self.fps = 30
         self.current_frame = None
         
-    def start(self, camera_index=1):  # Camera 1
+    def start(self, camera_index=1):
         """Start the camera capture"""
         try:
             self.capture = cv2.VideoCapture(camera_index)
@@ -96,6 +96,16 @@ class RegisterUserScreen(Screen):
         
         # Reference to main app's registered faces
         self.registered_faces = None
+        
+        # Bind to handle keyboard
+        Window.bind(on_keyboard=self.on_keyboard)
+    
+    def on_keyboard(self, instance, key, scancode, codepoint, modifier):
+        """Handle hardware keyboard events"""
+        if key == 27:  # ESC key
+            self.go_back()
+            return True
+        return False
     
     def on_enter(self):
         """Called when screen is entered"""
@@ -108,6 +118,7 @@ class RegisterUserScreen(Screen):
         # Clear text input
         if hasattr(self, 'ids') and 'name_input' in self.ids:
             self.ids.name_input.text = ""
+            self.ids.name_input.focus = False
         
         # Get reference to registered faces from face attendance screen
         if self.manager.has_screen('face_attendance'):
@@ -120,9 +131,10 @@ class RegisterUserScreen(Screen):
     def setup_camera(self, dt):
         """Setup and start camera feed"""
         try:
-            self.ids.camera_feed.start(camera_index=1)  # Camera 1
+            self.ids.camera_feed.start(camera_index=1)
         except Exception as e:
             print(f"Camera setup error: {e}")
+            self.status_message = f"❌ Camera error: {e}"
     
     def on_text_change(self, instance, value):
         """Handle text input changes"""
@@ -131,7 +143,7 @@ class RegisterUserScreen(Screen):
         # Update capture button state
         if self.username:
             self.ids.capture_btn.disabled = False
-            self.status_message = f"Ready! Click Capture button"
+            self.status_message = f"Ready! Click Capture ({self.sample_count}/{self.target_samples})"
         else:
             self.ids.capture_btn.disabled = True
             self.status_message = "Enter name and capture face"
@@ -179,6 +191,10 @@ class RegisterUserScreen(Screen):
         except:
             pass
         
+        # Unfocus text input to hide keyboard
+        if hasattr(self, 'ids') and 'name_input' in self.ids:
+            self.ids.name_input.focus = False
+        
         self.manager.current = "attendance_type"
     
     def on_leave(self):
@@ -187,3 +203,7 @@ class RegisterUserScreen(Screen):
             self.ids.camera_feed.stop()
         except:
             pass
+        
+        # Unfocus to hide keyboard
+        if hasattr(self, 'ids') and 'name_input' in self.ids:
+            self.ids.name_input.focus = False
