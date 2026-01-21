@@ -18,7 +18,7 @@ import time
 from face_recognition_system import FaceRecognitionSystem
 
 # Import database manager
-from pages.attendance_system.database.db_manager import DatabaseManager
+from database.db_manager import DatabaseManager
 
 
 class KivyCamera(Image):
@@ -42,32 +42,23 @@ class KivyCamera(Image):
         self.camera_ready = False
         
     def start(self, camera_index=1):
-        """Start camera with background thread"""
+        """Start camera with background thread - ONLY camera index 1"""
         try:
-            # Try multiple camera indices
-            camera_indices = [camera_index, 0, 1, 2]
-            camera_opened = False
+            print(f"Starting camera with index {camera_index}...")
+            self.capture = cv2.VideoCapture(camera_index)
             
-            for idx in camera_indices:
-                print(f"Trying camera index {idx}...")
-                self.capture = cv2.VideoCapture(idx)
-                
-                if self.capture.isOpened():
-                    ret, test_frame = self.capture.read()
-                    if ret and test_frame is not None:
-                        print(f"✓ Camera {idx} opened successfully")
-                        camera_index = idx
-                        camera_opened = True
-                        break
-                    else:
-                        self.capture.release()
-                        print(f"✗ Camera {idx} opened but cannot read frames")
-                else:
-                    print(f"✗ Camera {idx} not available")
-            
-            if not camera_opened:
-                print("✗ ERROR: No working camera found!")
+            if not self.capture.isOpened():
+                print(f"✗ ERROR: Could not open camera at index {camera_index}")
                 return
+            
+            # Test if we can read frames
+            ret, test_frame = self.capture.read()
+            if not ret or test_frame is None:
+                print(f"✗ ERROR: Camera {camera_index} opened but cannot read frames")
+                self.capture.release()
+                return
+            
+            print(f"✓ Camera {camera_index} opened successfully")
             
             # Optimized camera settings
             self.capture.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
@@ -261,7 +252,7 @@ class RegisterUserScreen(Screen):
         self.face_system = FaceRecognitionSystem()
         
         # Initialize database manager
-        self.db = DatabaseManager('sqlite:///attendance.db')
+        self.db = DatabaseManager('sqlite:///csi_attendance.dev.sqlite')
         
         # Store samples temporarily
         self.samples = []
@@ -298,7 +289,7 @@ class RegisterUserScreen(Screen):
         """Setup and start camera feed"""
         try:
             if hasattr(self, 'ids') and 'camera_feed' in self.ids:
-                self.ids.camera_feed.start(camera_index=0)  # Try 0 first, falls back to others
+                self.ids.camera_feed.start(camera_index=1)
         except Exception as e:
             print(f"Camera setup error: {e}")
             self.status_message = f"❌ Camera error: {e}"
@@ -426,7 +417,7 @@ class RegisterUserScreen(Screen):
         try:
             if hasattr(self, 'ids') and 'camera_feed' in self.ids:
                 self.ids.camera_feed.stop()
-                time.sleep(0.2)  # Give threads time to clean up
+                time.sleep(0.2)
         except Exception as e:
             print(f"Error stopping camera: {e}")
         
