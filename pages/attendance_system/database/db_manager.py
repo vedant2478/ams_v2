@@ -10,6 +10,12 @@ import os
 
 from .models import Base, User, Attendance, AttendanceSettings, AttendanceReport
 
+# Define constants HERE at module level
+USER_STATUS_ACTIVE = 1
+USER_STATUS_INACTIVE = 0
+ATTENDANCE_TYPE_IN = 'in'
+ATTENDANCE_TYPE_OUT = 'out'
+
 
 class DatabaseManager:
     """Database manager with all CRUD operations"""
@@ -160,15 +166,7 @@ class DatabaseManager:
             session.close()
     
     def get_user_by_id(self, user_id):
-        """
-        Get user by ID
-        
-        Args:
-            user_id (int): User ID
-            
-        Returns:
-            User: User object or None
-        """
+        """Get user by ID"""
         session = self.Session()
         try:
             user = session.query(User).filter_by(user_id=user_id, is_active=USER_STATUS_ACTIVE).first()
@@ -177,15 +175,7 @@ class DatabaseManager:
             session.close()
     
     def get_user_by_name(self, name):
-        """
-        Get user by name
-        
-        Args:
-            name (str): User's name
-            
-        Returns:
-            User: User object or None
-        """
+        """Get user by name"""
         session = self.Session()
         try:
             user = session.query(User).filter_by(
@@ -198,15 +188,7 @@ class DatabaseManager:
             session.close()
     
     def get_all_users(self, active_only=True):
-        """
-        Get all users
-        
-        Args:
-            active_only (bool): Return only active users
-            
-        Returns:
-            list: List of User objects
-        """
+        """Get all users"""
         session = self.Session()
         try:
             query = session.query(User).filter_by(deleted_at=None)
@@ -220,15 +202,7 @@ class DatabaseManager:
             session.close()
     
     def get_all_embeddings(self, active_only=True):
-        """
-        Get all user embeddings as dictionary
-        
-        Args:
-            active_only (bool): Return only active users
-            
-        Returns:
-            dict: {name: embedding_array}
-        """
+        """Get all user embeddings as dictionary"""
         session = self.Session()
         try:
             query = session.query(User.name, User.embedding).filter_by(deleted_at=None)
@@ -247,16 +221,7 @@ class DatabaseManager:
             session.close()
     
     def update_user(self, user_id, **kwargs):
-        """
-        Update user information
-        
-        Args:
-            user_id (int): User ID
-            **kwargs: Fields to update
-            
-        Returns:
-            dict: {'success': bool, 'message': str}
-        """
+        """Update user information"""
         session = self.Session()
         try:
             user = session.query(User).filter_by(user_id=user_id).first()
@@ -298,16 +263,7 @@ class DatabaseManager:
             session.close()
     
     def delete_user(self, user_id, soft_delete=True):
-        """
-        Delete user
-        
-        Args:
-            user_id (int): User ID
-            soft_delete (bool): Soft delete (mark as deleted) or hard delete
-            
-        Returns:
-            dict: {'success': bool, 'message': str}
-        """
+        """Delete user"""
         session = self.Session()
         try:
             user = session.query(User).filter_by(user_id=user_id).first()
@@ -348,19 +304,8 @@ class DatabaseManager:
     
     # ==================== ATTENDANCE OPERATIONS ====================
     
-    def mark_attendance(self, name, time_type=ATTENDANCE_TYPE_IN, recognition_score=None, **kwargs):
-        """
-        Mark attendance for a user
-        
-        Args:
-            name (str): User's name
-            time_type (str): 'in' or 'out'
-            recognition_score (float): Face recognition score
-            **kwargs: Additional fields (location, device_id, notes)
-            
-        Returns:
-            dict: {'success': bool, 'attendance_id': int, 'message': str}
-        """
+    def mark_attendance(self, name, time_type='in', recognition_score=None, **kwargs):
+        """Mark attendance for a user"""
         session = self.Session()
         try:
             # Get user
@@ -415,16 +360,7 @@ class DatabaseManager:
             session.close()
     
     def get_attendance_records(self, limit=50, offset=0):
-        """
-        Get attendance records
-        
-        Args:
-            limit (int): Number of records
-            offset (int): Offset for pagination
-            
-        Returns:
-            list: List of Attendance objects
-        """
+        """Get attendance records"""
         session = self.Session()
         try:
             records = session.query(Attendance)\
@@ -437,16 +373,7 @@ class DatabaseManager:
             session.close()
     
     def get_user_attendance(self, user_id, limit=50):
-        """
-        Get attendance records for a specific user
-        
-        Args:
-            user_id (int): User ID
-            limit (int): Number of records
-            
-        Returns:
-            list: List of Attendance objects
-        """
+        """Get attendance records for a specific user"""
         session = self.Session()
         try:
             records = session.query(Attendance)\
@@ -459,15 +386,7 @@ class DatabaseManager:
             session.close()
     
     def get_attendance_by_date(self, target_date=None):
-        """
-        Get attendance records for a specific date
-        
-        Args:
-            target_date (date): Target date (None for today)
-            
-        Returns:
-            list: List of Attendance objects
-        """
+        """Get attendance records for a specific date"""
         if target_date is None:
             target_date = date.today()
         
@@ -492,12 +411,7 @@ class DatabaseManager:
     # ==================== STATISTICS AND REPORTS ====================
     
     def get_statistics(self):
-        """
-        Get database statistics
-        
-        Returns:
-            dict: Statistics
-        """
+        """Get database statistics"""
         session = self.Session()
         try:
             stats = {
@@ -536,12 +450,7 @@ class DatabaseManager:
         print("✓ Database sessions closed")
     
     def backup_database(self, backup_path=None):
-        """
-        Backup database (for SQLite)
-        
-        Args:
-            backup_path (str): Backup file path
-        """
+        """Backup database (for SQLite)"""
         if not self.db_path.startswith('sqlite:///'):
             return {'success': False, 'error': 'Backup only supported for SQLite'}
         
@@ -559,38 +468,3 @@ class DatabaseManager:
         except Exception as e:
             print(f"✗ Backup error: {e}")
             return {'success': False, 'error': str(e)}
-
-
-# Example usage
-if __name__ == "__main__":
-    # Initialize database
-    db = DatabaseManager('sqlite:///test_attendance.db')
-    
-    # Test user creation
-    print("\n=== Testing User Operations ===")
-    embedding1 = np.random.rand(128)
-    result = db.create_user(
-        name="John Doe",
-        embedding=embedding1,
-        email="john@example.com",
-        department="Engineering"
-    )
-    print(result)
-    
-    # Get all users
-    print("\n=== All Users ===")
-    users = db.get_all_users()
-    for user in users:
-        print(f"{user.name} (ID: {user.user_id}) - {user.department}")
-    
-    # Mark attendance
-    print("\n=== Testing Attendance ===")
-    db.mark_attendance("John Doe", "in", 95.5)
-    
-    # Get statistics
-    print("\n=== Statistics ===")
-    stats = db.get_statistics()
-    print(stats)
-    
-    # Cleanup
-    db.close()
