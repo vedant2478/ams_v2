@@ -16,6 +16,9 @@ import numpy as np
 # Import the face recognition system
 from face_recognition_system import FaceRecognitionSystem
 
+# Import database manager
+from database.db_manager import DatabaseManager
+
 
 class KivyCamera(Image):
     """Optimized camera widget using OpenCV with multithreading"""
@@ -193,7 +196,7 @@ class KivyCamera(Image):
 
 
 class RegisterUserScreen(Screen):
-    """Optimized screen for registering new users with face recognition"""
+    """Optimized screen for registering new users with face recognition and database storage"""
     
     username = StringProperty("")
     sample_count = NumericProperty(0)
@@ -207,11 +210,11 @@ class RegisterUserScreen(Screen):
         # Initialize face recognition system
         self.face_system = FaceRecognitionSystem()
         
+        # Initialize database manager
+        self.db = DatabaseManager('sqlite:///attendance.db')
+        
         # Store samples temporarily
         self.samples = []
-        
-        # Reference to main app's registered faces
-        self.registered_faces = None
         
         # Scheduled events
         self._capture_scheduled = None
@@ -230,11 +233,6 @@ class RegisterUserScreen(Screen):
         if hasattr(self, 'ids') and 'name_input' in self.ids:
             self.ids.name_input.text = ""
             self.ids.capture_btn.disabled = True
-        
-        # Get reference to registered faces from face attendance screen
-        if self.manager.has_screen('face_attendance'):
-            face_screen = self.manager.get_screen('face_attendance')
-            self.registered_faces = face_screen.registered_faces
         
         # Delayed camera start for smoother transition
         if self._capture_scheduled:
@@ -335,15 +333,29 @@ class RegisterUserScreen(Screen):
                     # Average all samples for better accuracy
                     avg_embedding = np.mean(self.samples, axis=0)
                     
-                    # Store in registered faces
-                    if self.registered_faces is not None:
-                        self.registered_faces[self.username] = avg_embedding
+                    # Save to database
+                    db_result = self.db.create_user(
+                        name=self.username,
+                        embedding=avg_embedding
+                    )
                     
-                    self.status_message = f"✅ {self.username} registered successfully!"
-                    print(f"✓ {self.username} added to system with {self.target_samples} samples")
-                    
-                    # Navigate back after brief delay
-                    Clock.schedule_once(lambda dt: self.go_back(), 1.5)
+                    if db_result['success']:
+                        self.status_message = f"✅ {self.username} registered successfully!"
+                        print(f"✓ {self.username} saved to database (ID: {db_result['user_id']})")
+                        
+                        # Update face attendance screen's embeddings if it exists
+                        if self.manager.has_screen('face_attendance'):
+                            face_screen = self.manager.get_screen('face_attendance')
+                            # Reload embeddings from database
+                            face_screen.load_embeddings_from_db()
+                        
+                        # Navigate back after brief delay
+                        Clock.schedule_once(lambda dt: self.go_back(), 1.5)
+                    else:
+                        self.status_message = f"❌ Database error: {db_result['message']}"
+                        self._is_processing = False
+                        if hasattr(self, 'ids') and 'capture_btn' in self.ids:
+                            self.ids.capture_btn.disabled = False
                 else:
                     # Re-enable button for next sample
                     self._is_processing = False
