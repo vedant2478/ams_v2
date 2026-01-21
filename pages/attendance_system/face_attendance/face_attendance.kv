@@ -2,126 +2,199 @@
     name: "face_attendance"
 
     FloatLayout:
+        canvas.before:
+            Color:
+                rgba: 0.05, 0.15, 0.25, 1  # Dark blue background
+            Rectangle:
+                pos: self.pos
+                size: self.size
 
-        # ===== Header (CONSTANT) =====
-        Header:
-            pos_hint: {"top": 1}
-
-        # ===== Back Button (PAGE LEVEL – TRANSPARENT) =====
+        # ===== Header =====
         BoxLayout:
             orientation: "horizontal"
-            size_hint_y: None
-            height: "48dp"
-            padding: "16dp", 0
-            pos_hint: {"top": .95}
+            size_hint: 1, None
+            height: "60dp"
+            padding: "20dp", "10dp"
+            pos_hint: {"top": 1}
+            
+            canvas.before:
+                Color:
+                    rgba: 0.08, 0.18, 0.28, 1
+                Rectangle:
+                    pos: self.pos
+                    size: self.size
 
-            Button:
-                text: "Back"
-                size_hint_x: None
-                width: "100dp"
-                background_normal: ""
-                background_color: 0, 0, 0, 0   # fully transparent
-                color: 0.90, 0.95, 1, 1
-                font_size: "16sp"
-                on_release: root.go_back()
+            # System Status
+            Label:
+                text: "● SystemReady"
+                color: 0, 1, 0, 1
+                font_size: "14sp"
+                size_hint_x: 0.3
+                halign: "left"
+                valign: "middle"
+                text_size: self.size
 
-            Widget:
+            # Device ID
+            Label:
+                text: "DAKC R0 - 001"
+                color: 0.9, 0.95, 1, 1
+                font_size: "14sp"
+                size_hint_x: 0.4
+                halign: "center"
+                valign: "middle"
 
-        # ===== Main Content =====
+            # Time
+            Label:
+                id: time_label
+                text: "12:34"
+                color: 0.9, 0.95, 1, 1
+                font_size: "14sp"
+                size_hint_x: 0.3
+                halign: "right"
+                valign: "middle"
+                text_size: self.size
+
+        # ===== Back Button =====
+        Button:
+            text: "← Back"
+            size_hint: None, None
+            size: "100dp", "40dp"
+            pos_hint: {"x": 0.03, "top": 0.93}
+            background_normal: ""
+            background_color: 0, 0, 0, 0
+            color: 0.9, 0.95, 1, 1
+            font_size: "16sp"
+            on_release: root.go_back()
+
+        # ===== Main Content Container =====
         BoxLayout:
             orientation: "vertical"
             spacing: "20dp"
             size_hint: None, None
-            size: "460dp", "540dp"
-            pos_hint: {"center_x": 0.5, "center_y": 0.52}
+            size: "490dp", "560dp"
+            pos_hint: {"center_x": 0.5, "center_y": 0.48}
 
             # ===== Toggle Buttons (In-Time / Out-Time) =====
             BoxLayout:
                 orientation: "horizontal"
                 size_hint_y: None
-                height: "50dp"
-                spacing: "10dp"
+                height: "55dp"
+                spacing: "5dp"
 
                 ToggleButton:
                     id: in_time_btn
                     text: "In-Time"
                     font_size: "18sp"
+                    bold: True
                     group: "time_type"
                     state: "down"
                     background_normal: ""
                     background_color: 0, 0, 0, 0
-                    color: 0.85, 0.95, 1, 1
+                    color: (0.9, 0.95, 1, 1) if self.state == "down" else (0.6, 0.7, 0.8, 1)
                     on_release: root.on_time_type_change("in")
 
                     canvas.before:
                         Color:
-                            rgba: (0.15, 0.30, 0.45, 0.95) if self.state == "down" else (0.18, 0.35, 0.50, 0.6)
+                            rgba: (0.12, 0.25, 0.38, 1) if self.state == "down" else (0.15, 0.28, 0.40, 0.3)
                         RoundedRectangle:
                             pos: self.pos
                             size: self.size
-                            radius: [25]
+                            radius: [28, 28, 28, 28]
 
                 ToggleButton:
                     id: out_time_btn
                     text: "Out-Time"
                     font_size: "18sp"
+                    bold: True
                     group: "time_type"
                     background_normal: ""
                     background_color: 0, 0, 0, 0
-                    color: 0.85, 0.95, 1, 1
+                    color: (0.9, 0.95, 1, 1) if self.state == "down" else (0.6, 0.7, 0.8, 1)
                     on_release: root.on_time_type_change("out")
 
                     canvas.before:
                         Color:
-                            rgba: (0.15, 0.30, 0.45, 0.95) if self.state == "down" else (0.18, 0.35, 0.50, 0.6)
+                            rgba: (0.12, 0.25, 0.38, 1) if self.state == "down" else (0.15, 0.28, 0.40, 0.3)
                         RoundedRectangle:
                             pos: self.pos
                             size: self.size
-                            radius: [25]
+                            radius: [28, 28, 28, 28]
 
-            # ===== Camera Feed Display =====
+            # ===== Camera Feed Container =====
             FloatLayout:
                 size_hint_y: None
-                height: "340dp"
+                height: "380dp"
 
                 canvas.before:
                     Color:
-                        rgba: 0.18, 0.35, 0.50, 0.5
+                        rgba: 0.12, 0.25, 0.38, 0.8
                     RoundedRectangle:
                         pos: self.pos
                         size: self.size
-                        radius: [20]
+                        radius: [25, 25, 25, 25]
+                    
+                    # Inner border
+                    Color:
+                        rgba: 0.18, 0.35, 0.50, 0.5
+                    Line:
+                        rounded_rectangle: self.x + 2, self.y + 2, self.width - 4, self.height - 4, 25
+                        width: 2
 
-                # Camera widget with rounded corners
+                # Camera Feed
                 KivyCamera:
                     id: camera_feed
                     size_hint: None, None
-                    size: "440dp", "320dp"
+                    size: "470dp", "360dp"
                     pos_hint: {"center_x": 0.5, "center_y": 0.5}
 
-            # ===== Welcome Message =====
+                # Placeholder text (remove when camera is active)
+                Label:
+                    text: "Camera Feed Here"
+                    font_size: "20sp"
+                    color: 0.4, 0.5, 0.6, 0.5
+                    pos_hint: {"center_x": 0.5, "center_y": 0.5}
+                    opacity: 0 if camera_feed.camera_ready else 1
+
+            # ===== Welcome Message Box =====
             BoxLayout:
                 size_hint_y: None
-                height: "60dp"
-                padding: "10dp", 0
+                height: "70dp"
+                padding: "20dp", "10dp"
 
                 canvas.before:
                     Color:
-                        rgba: 0.18, 0.35, 0.50, 0.85
+                        rgba: 0.12, 0.25, 0.38, 0.9
                     RoundedRectangle:
                         pos: self.pos
                         size: self.size
-                        radius: [30]
+                        radius: [35, 35, 35, 35]
 
                 Label:
                     id: welcome_label
-                    text: '"USER_NAME" --> Welcome'
-                    font_size: "18sp"
-                    color: 0.85, 0.95, 1, 1
+                    text: 'USER_NAME --> Welcome'
+                    font_size: "20sp"
+                    color: 0.9, 0.95, 1, 1
                     halign: "center"
                     valign: "middle"
 
         # ===== Footer =====
-        Footer:
+        BoxLayout:
+            orientation: "horizontal"
+            size_hint: 1, None
+            height: "40dp"
+            padding: "20dp", "5dp"
             pos_hint: {"y": 0}
-            version_text: "Version: 12.9.3"
+
+            canvas.before:
+                Color:
+                    rgba: 0.08, 0.18, 0.28, 1
+                Rectangle:
+                    pos: self.pos
+                    size: self.size
+
+            Label:
+                text: "Version: 12.9.3"
+                color: 0.6, 0.7, 0.8, 1
+                font_size: "12sp"
+                halign: "center"
+                valign: "middle"
