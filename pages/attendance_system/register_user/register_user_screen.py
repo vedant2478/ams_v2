@@ -12,6 +12,7 @@ from threading import Thread
 import queue
 import cv2
 import numpy as np
+import time
 
 # Import the face recognition system
 from face_recognition_system import FaceRecognitionSystem
@@ -19,8 +20,9 @@ from face_recognition_system import FaceRecognitionSystem
 # Import database manager
 from pages.attendance_system.database.db_manager import DatabaseManager
 
+
 class KivyCamera(Image):
-    """Optimized camera widget using OpenCV with multithreading"""
+    """Optimized camera widget with multithreading and safe cleanup"""
     
     def __init__(self, **kwargs):
         super(KivyCamera, self).__init__(**kwargs)
@@ -28,31 +30,60 @@ class KivyCamera(Image):
         self.fps = 30
         self.current_frame = None
         self.stopped = False
-        self.frame_queue = queue.Queue(maxsize=2)  # Limit buffer to reduce latency
+        self.frame_queue = queue.Queue(maxsize=2)
         self.face_cascade = cv2.CascadeClassifier(
             cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
         )
         self.show_bbox = True
         self.thread = None
-        self.frame_skip = 2  # Process every Nth frame for face detection
+        self.frame_skip = 2
         self.frame_count = 0
-        self.last_faces = []  # Cache last detected faces
+        self.last_faces = []
+        self.camera_ready = False
         
     def start(self, camera_index=1):
-        """Start the camera capture with background thread"""
+        """Start camera with background thread"""
         try:
-            self.capture = cv2.VideoCapture(camera_index)
+            # Try multiple camera indices
+            camera_indices = [camera_index, 0, 1, 2]
+            camera_opened = False
             
-            if not self.capture.isOpened():
-                print(f"Error: Could not open camera at index {camera_index}")
+            for idx in camera_indices:
+                print(f"Trying camera index {idx}...")
+                self.capture = cv2.VideoCapture(idx)
+                
+                if self.capture.isOpened():
+                    ret, test_frame = self.capture.read()
+                    if ret and test_frame is not None:
+                        print(f"✓ Camera {idx} opened successfully")
+                        camera_index = idx
+                        camera_opened = True
+                        break
+                    else:
+                        self.capture.release()
+                        print(f"✗ Camera {idx} opened but cannot read frames")
+                else:
+                    print(f"✗ Camera {idx} not available")
+            
+            if not camera_opened:
+                print("✗ ERROR: No working camera found!")
                 return
             
             # Optimized camera settings
             self.capture.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
             self.capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
             self.capture.set(cv2.CAP_PROP_FPS, 30)
-            self.capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Minimum buffer
-            self.capture.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M','J','P','G'))
+            self.capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            
+            try:
+                self.capture.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M','J','P','G'))
+            except:
+                print("MJPEG codec not available, using default")
+            
+            # Verify settings
+            actual_width = self.capture.get(cv2.CAP_PROP_FRAME_WIDTH)
+            actual_height = self.capture.get(cv2.CAP_PROP_FRAME_HEIGHT)
+            print(f"Camera resolution: {int(actual_width)}x{int(actual_height)}")
             
             # Start background capture thread
             self.stopped = False
@@ -61,34 +92,50 @@ class KivyCamera(Image):
             
             # Schedule UI updates
             Clock.schedule_interval(self.update, 1.0 / self.fps)
-            print(f"Camera started successfully with multithreading")
+            self.camera_ready = True
+            print(f"✓ Camera started successfully with multithreading")
             
         except Exception as e:
-            print(f"Error starting camera: {e}")
+            print(f"✗ Error starting camera: {e}")
+            import traceback
+            traceback.print_exc()
     
     def _capture_frames(self):
         """Background thread continuously captures frames"""
-        while not self.stopped:
-            if self.capture and self.capture.isOpened():
-                ret, frame = self.capture.read()
-                if ret:
-                    # Remove old frame if queue is full
-                    if not self.frame_queue.empty():
-                        try:
-                            self.frame_queue.get_nowait()
-                        except queue.Empty:
-                            pass
-                    
-                    # Add new frame
+        print("Camera capture thread started")
+        try:
+            while not self.stopped:
+                if self.capture and self.capture.isOpened():
                     try:
-                        self.frame_queue.put_nowait(frame)
-                    except queue.Full:
-                        pass
+                        ret, frame = self.capture.read()
+                        if ret and frame is not None:
+                            # Remove old frame if queue is full
+                            if not self.frame_queue.empty():
+                                try:
+                                    self.frame_queue.get_nowait()
+                                except queue.Empty:
+                                    pass
+                            
+                            # Add new frame
+                            try:
+                                self.frame_queue.put_nowait(frame)
+                            except queue.Full:
+                                pass
+                        else:
+                            time.sleep(0.01)
+                    except Exception as e:
+                        print(f"Frame capture error: {e}")
+                        time.sleep(0.1)
+                else:
+                    break
+        except Exception as e:
+            print(f"Camera thread exception: {e}")
+        finally:
+            print("Camera capture thread stopped")
     
     def update(self, dt):
-        """Update camera frame display (runs on main thread)"""
+        """Update camera frame display"""
         try:
-            # Get latest frame from queue
             frame = self.frame_queue.get_nowait()
             
             # Store for face recognition
@@ -109,8 +156,9 @@ class KivyCamera(Image):
             self.texture = texture
             
         except queue.Empty:
-            # No frame available, skip this update
             pass
+        except Exception as e:
+            print(f"Display update error: {e}")
     
     def draw_face_boxes(self, frame):
         """Draw bounding boxes around detected faces with optimization"""
@@ -119,79 +167,82 @@ class KivyCamera(Image):
         # Process face detection only every Nth frame
         if self.frame_count % self.frame_skip == 0:
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            
-            # Histogram equalization for better detection
             gray = cv2.equalizeHist(gray)
             
-            # Optimized detection parameters
             faces = self.face_cascade.detectMultiScale(
                 gray,
-                scaleFactor=1.2,  # Faster than 1.1
-                minNeighbors=4,   # Reduced for speed
-                minSize=(80, 80), # Reduced from 100x100
+                scaleFactor=1.2,
+                minNeighbors=4,
+                minSize=(80, 80),
                 flags=cv2.CASCADE_SCALE_IMAGE
             )
             
             self.last_faces = faces
         else:
-            # Use cached face positions
             faces = self.last_faces
         
         # Draw rectangles around detected faces
         for (x, y, w, h) in faces:
-            # Green box
             cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
+            cv2.putText(frame, 'Face Detected', (x, y - 10),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
             
-            # Label
-            cv2.putText(
-                frame,
-                'Face Detected',
-                (x, y - 10),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.6,
-                (0, 255, 0),
-                2
-            )
-            
-            # Center point
             center_x = x + w // 2
             center_y = y + h // 2
             cv2.circle(frame, (center_x, center_y), 5, (0, 255, 0), -1)
         
-        # Show message if no face detected
         if len(faces) == 0:
-            cv2.putText(
-                frame,
-                'No Face Detected',
-                (frame.shape[1]//2 - 100, 30),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.7,
-                (0, 0, 255),
-                2
-            )
+            cv2.putText(frame, 'No Face Detected', (frame.shape[1]//2 - 100, 30),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
         
         return frame
     
     def get_current_frame(self):
         """Get the current frame for face registration"""
-        return self.current_frame
+        if self.current_frame is not None:
+            return self.current_frame.copy()
+        return None
     
     def stop(self):
-        """Stop the camera and background thread"""
-        # Unschedule UI updates
-        Clock.unschedule(self.update)
+        """Stop camera and thread safely"""
+        print("Stopping camera...")
         
-        # Stop background thread
+        # Unschedule UI updates
+        try:
+            Clock.unschedule(self.update)
+        except:
+            pass
+        
+        # Signal thread to stop
         self.stopped = True
+        self.camera_ready = False
+        
+        # Wait for thread to finish
         if self.thread and self.thread.is_alive():
-            self.thread.join(timeout=1.0)
+            print("Waiting for camera thread to finish...")
+            self.thread.join(timeout=2.0)
+            if self.thread.is_alive():
+                print("Warning: Camera thread did not stop gracefully")
+        
+        # Clear the queue
+        try:
+            while not self.frame_queue.empty():
+                self.frame_queue.get_nowait()
+        except:
+            pass
         
         # Release camera
         if self.capture:
-            self.capture.release()
+            try:
+                self.capture.release()
+            except Exception as e:
+                print(f"Camera release error: {e}")
             self.capture = None
         
-        print("Camera stopped")
+        # Clear current frame
+        self.current_frame = None
+        
+        print("Camera stopped successfully")
 
 
 class RegisterUserScreen(Screen):
@@ -217,10 +268,12 @@ class RegisterUserScreen(Screen):
         
         # Scheduled events
         self._capture_scheduled = None
-        self._is_processing = False  # Prevent concurrent captures
+        self._is_processing = False
     
     def on_enter(self):
         """Called when screen is entered"""
+        print("RegisterUserScreen: Entering...")
+        
         # Reset state
         self.username = ""
         self.sample_count = 0
@@ -235,14 +288,17 @@ class RegisterUserScreen(Screen):
         
         # Delayed camera start for smoother transition
         if self._capture_scheduled:
-            self._capture_scheduled.cancel()
+            try:
+                self._capture_scheduled.cancel()
+            except:
+                pass
         self._capture_scheduled = Clock.schedule_once(self.setup_camera, 0.1)
     
     def setup_camera(self, dt):
         """Setup and start camera feed"""
         try:
             if hasattr(self, 'ids') and 'camera_feed' in self.ids:
-                self.ids.camera_feed.start(camera_index=1)
+                self.ids.camera_feed.start(camera_index=0)  # Try 0 first, falls back to others
         except Exception as e:
             print(f"Camera setup error: {e}")
             self.status_message = f"❌ Camera error: {e}"
@@ -250,18 +306,15 @@ class RegisterUserScreen(Screen):
     def on_key_press(self, key):
         """Handle keyboard key press"""
         if key == '⌫':
-            # Backspace - remove last character
             if self.username:
                 self.username = self.username[:-1]
                 if hasattr(self, 'ids') and 'name_input' in self.ids:
                     self.ids.name_input.text = self.username
         else:
-            # Add character
             self.username += key
             if hasattr(self, 'ids') and 'name_input' in self.ids:
                 self.ids.name_input.text = self.username
         
-        # Update capture button state
         self.on_text_change()
     
     def on_text_change(self):
@@ -269,7 +322,6 @@ class RegisterUserScreen(Screen):
         if hasattr(self, 'ids') and 'name_input' in self.ids:
             self.username = self.ids.name_input.text.strip()
             
-            # Update capture button state
             if self.username and not self._is_processing:
                 self.ids.capture_btn.disabled = False
                 self.status_message = f"Ready! Click Capture ({self.sample_count}/{self.target_samples})"
@@ -287,7 +339,6 @@ class RegisterUserScreen(Screen):
     
     def on_capture(self):
         """Handle capture button press with debouncing"""
-        # Prevent concurrent captures
         if self._is_processing:
             return
         
@@ -295,12 +346,10 @@ class RegisterUserScreen(Screen):
             self.status_message = "⚠️ Please enter a name first!"
             return
         
-        # Set processing flag and disable button
         self._is_processing = True
         if hasattr(self, 'ids') and 'capture_btn' in self.ids:
             self.ids.capture_btn.disabled = True
         
-        # Get current frame from camera
         if hasattr(self, 'ids') and 'camera_feed' in self.ids:
             frame = self.ids.camera_feed.get_current_frame()
         else:
@@ -313,13 +362,11 @@ class RegisterUserScreen(Screen):
                 self.ids.capture_btn.disabled = False
             return
         
-        # Process capture asynchronously to avoid UI freeze
         Clock.schedule_once(lambda dt: self._process_capture(frame), 0)
     
     def _process_capture(self, frame):
         """Process face capture without blocking UI thread"""
         try:
-            # Register face from frame
             result = self.face_system.register_face_from_frame(frame, self.username)
             
             if result['success']:
@@ -327,7 +374,6 @@ class RegisterUserScreen(Screen):
                 self.sample_count += 1
                 self.status_message = f"✅ Sample {self.sample_count}/{self.target_samples} captured!"
                 
-                # Check if all samples collected
                 if self.sample_count >= self.target_samples:
                     # Average all samples for better accuracy
                     avg_embedding = np.mean(self.samples, axis=0)
@@ -342,13 +388,12 @@ class RegisterUserScreen(Screen):
                         self.status_message = f"✅ {self.username} registered successfully!"
                         print(f"✓ {self.username} saved to database (ID: {db_result['user_id']})")
                         
-                        # Update face attendance screen's embeddings if it exists
+                        # Update face attendance screen's embeddings
                         if self.manager.has_screen('face_attendance'):
                             face_screen = self.manager.get_screen('face_attendance')
-                            # Reload embeddings from database
-                            face_screen.load_embeddings_from_db()
+                            if hasattr(face_screen, 'load_embeddings_from_db'):
+                                face_screen.load_embeddings_from_db()
                         
-                        # Navigate back after brief delay
                         Clock.schedule_once(lambda dt: self.go_back(), 1.5)
                     else:
                         self.status_message = f"❌ Database error: {db_result['message']}"
@@ -356,12 +401,10 @@ class RegisterUserScreen(Screen):
                         if hasattr(self, 'ids') and 'capture_btn' in self.ids:
                             self.ids.capture_btn.disabled = False
                 else:
-                    # Re-enable button for next sample
                     self._is_processing = False
                     if hasattr(self, 'ids') and 'capture_btn' in self.ids:
                         self.ids.capture_btn.disabled = False
             else:
-                # Registration failed
                 self.status_message = f"❌ {result['message']}"
                 self._is_processing = False
                 if hasattr(self, 'ids') and 'capture_btn' in self.ids:
@@ -369,6 +412,8 @@ class RegisterUserScreen(Screen):
         
         except Exception as e:
             print(f"Error processing capture: {e}")
+            import traceback
+            traceback.print_exc()
             self.status_message = f"❌ Error: {str(e)}"
             self._is_processing = False
             if hasattr(self, 'ids') and 'capture_btn' in self.ids:
@@ -376,30 +421,41 @@ class RegisterUserScreen(Screen):
     
     def go_back(self):
         """Navigate back to attendance type screen"""
-        # Stop camera before leaving
+        print("RegisterUserScreen: Going back...")
+        
         try:
             if hasattr(self, 'ids') and 'camera_feed' in self.ids:
                 self.ids.camera_feed.stop()
+                time.sleep(0.2)  # Give threads time to clean up
         except Exception as e:
             print(f"Error stopping camera: {e}")
         
-        # Navigate to previous screen
         if hasattr(self, 'manager') and self.manager:
             self.manager.current = "attendance_type"
     
     def on_leave(self):
         """Called when screen is left - cleanup resources"""
+        print("RegisterUserScreen: Cleaning up...")
+        
         # Cancel scheduled camera setup
         if self._capture_scheduled:
-            self._capture_scheduled.cancel()
+            try:
+                self._capture_scheduled.cancel()
+            except:
+                pass
             self._capture_scheduled = None
         
-        # Stop camera
+        # Stop camera safely
         try:
             if hasattr(self, 'ids') and 'camera_feed' in self.ids:
-                self.ids.camera_feed.stop()
+                camera = self.ids.camera_feed
+                if camera:
+                    camera.stop()
+                    time.sleep(0.1)
         except Exception as e:
-            print(f"Error in cleanup: {e}")
+            print(f"Error in camera cleanup: {e}")
         
         # Reset processing flag
         self._is_processing = False
+        
+        print("RegisterUserScreen: Cleanup complete")
