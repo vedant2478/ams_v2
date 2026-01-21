@@ -14,7 +14,7 @@ import numpy as np
 from face_recognition_system import FaceRecognitionSystem
 
 # Import database manager
-from database.db_manager import DatabaseManager
+from pages.attendance_system.database.db_manager import DatabaseManager
 
 
 class KivyCamera(Image):
