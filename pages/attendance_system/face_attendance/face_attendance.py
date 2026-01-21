@@ -13,6 +13,9 @@ import numpy as np
 # Import the generalized face recognition system
 from face_recognition_system import FaceRecognitionSystem
 
+# Import database manager
+from database.db_manager import DatabaseManager
+
 
 class KivyCamera(Image):
     """Optimized camera widget with multithreading"""
@@ -107,7 +110,7 @@ class KivyCamera(Image):
 
 
 class FaceAttendanceScreen(BaseScreen):
-    """Optimized attendance screen with face recognition"""
+    """Optimized attendance screen with face recognition and database integration"""
     
     current_time_type = StringProperty("in")
     current_user = StringProperty("USER_NAME")
@@ -119,9 +122,11 @@ class FaceAttendanceScreen(BaseScreen):
         # Initialize face recognition system
         self.face_system = FaceRecognitionSystem()
         
-        # Data storage
+        # Initialize database manager
+        self.db = DatabaseManager('sqlite:///attendance.db')
+        
+        # Data storage (cached from database)
         self.registered_faces = {}
-        self.attendance_log = []
         self.last_recognized = {}
         self.threshold = 180
         
@@ -140,7 +145,10 @@ class FaceAttendanceScreen(BaseScreen):
     
     def on_enter(self):
         """Called when screen is entered"""
-        print(f"Loaded {len(self.registered_faces)} registered faces")
+        # Load registered faces from database
+        self.load_embeddings_from_db()
+        
+        print(f"Loaded {len(self.registered_faces)} registered faces from database")
         
         # Setup camera with delay
         if self._camera_setup_event:
@@ -156,6 +164,15 @@ class FaceAttendanceScreen(BaseScreen):
         if self._auto_recognize_event:
             self._auto_recognize_event.cancel()
         self._auto_recognize_event = Clock.schedule_interval(self.capture_for_recognition, 2.0)
+    
+    def load_embeddings_from_db(self):
+        """Load all user embeddings from database"""
+        try:
+            self.registered_faces = self.db.get_all_embeddings(active_only=True)
+            print(f"✓ Loaded {len(self.registered_faces)} embeddings from database")
+        except Exception as e:
+            print(f"✗ Error loading embeddings: {e}")
+            self.registered_faces = {}
     
     def setup_camera(self, dt):
         """Setup camera feed"""
@@ -209,7 +226,7 @@ class FaceAttendanceScreen(BaseScreen):
             time.sleep(0.1)
     
     def _process_recognition_results(self, results):
-        """Process recognition results on main thread"""
+        """Process recognition results on main thread and save to database"""
         if self.processing:
             return
         
@@ -228,15 +245,22 @@ class FaceAttendanceScreen(BaseScreen):
                         if name not in self.last_recognized or \
                            (current_time - self.last_recognized[name]).seconds > 60:
                             
-                            # Log attendance
-                            timestamp = current_time.strftime("%Y-%m-%d %H:%M:%S")
-                            self.attendance_log.append((name, timestamp, score, self.current_time_type))
+                            # Save attendance to database
+                            db_result = self.db.mark_attendance(
+                                name=name,
+                                time_type=self.current_time_type,
+                                recognition_score=score
+                            )
                             
-                            # Update UI
-                            self.update_welcome_message(name)
-                            print(f"✓ {self.current_time_type.upper()} marked: {name} | {timestamp} | Score: {score:.0f}")
-                            
-                            self.last_recognized[name] = current_time
+                            if db_result['success']:
+                                # Update UI
+                                self.update_welcome_message(name)
+                                timestamp = db_result.get('timestamp', current_time.strftime("%Y-%m-%d %H:%M:%S"))
+                                print(f"✓ {self.current_time_type.upper()} marked: {name} | {timestamp} | Score: {score:.0f}")
+                                
+                                self.last_recognized[name] = current_time
+                            else:
+                                print(f"✗ Database error: {db_result['message']}")
             
             self.processing = False
         
@@ -256,23 +280,58 @@ class FaceAttendanceScreen(BaseScreen):
             self.ids.welcome_label.text = f'"{username}" --> Welcome'
     
     def get_user_list(self):
-        """Get registered users list"""
-        with self.data_lock:
-            return list(self.registered_faces.keys())
+        """Get registered users list from database"""
+        try:
+            users = self.db.get_all_users(active_only=True)
+            return [user.name for user in users]
+        except Exception as e:
+            print(f"✗ Error getting user list: {e}")
+            return []
     
     def get_attendance_log(self, limit=10):
-        """Get recent attendance log"""
-        with self.data_lock:
-            return self.attendance_log[-limit:]
+        """Get recent attendance log from database"""
+        try:
+            records = self.db.get_attendance_records(limit=limit)
+            return [
+                (record.name, record.timestamp.strftime("%Y-%m-%d %H:%M:%S"), 
+                 record.recognition_score, record.time_type)
+                for record in records
+            ]
+        except Exception as e:
+            print(f"✗ Error getting attendance log: {e}")
+            return []
+    
+    def get_today_attendance(self):
+        """Get today's attendance records"""
+        try:
+            records = self.db.get_attendance_by_date()
+            return records
+        except Exception as e:
+            print(f"✗ Error getting today's attendance: {e}")
+            return []
+    
+    def get_statistics(self):
+        """Get attendance statistics"""
+        try:
+            return self.db.get_statistics()
+        except Exception as e:
+            print(f"✗ Error getting statistics: {e}")
+            return {}
     
     def go_back(self):
         """Navigate back with cleanup"""
         self._cleanup()
         
-        print(f"\n=== Session Summary ===")
-        print(f"Registered Users: {len(self.registered_faces)}")
-        print(f"Attendance Records: {len(self.attendance_log)}")
-        print("Going back...")
+        # Get final statistics from database
+        try:
+            stats = self.db.get_statistics()
+            print(f"\n=== Session Summary ===")
+            print(f"Registered Users: {stats.get('total_users', 0)}")
+            print(f"Total Attendance Records: {stats.get('total_attendance', 0)}")
+            print(f"Today's Attendance: {stats.get('today_attendance', 0)}")
+            print("Going back...")
+        except Exception as e:
+            print(f"Error getting statistics: {e}")
         
         if hasattr(self, 'manager') and self.manager:
             self.manager.current = "attendance_type"
