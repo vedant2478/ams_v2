@@ -161,7 +161,7 @@ class RegisterUserScreen(Screen):
         """Handle capture button press"""
         if not self.username:
             self.status_message = "⚠️ Please enter a name first!"
-            return
+            return          
         
         # Get current frame from camera
         frame = self.ids.camera_feed.get_current_frame()
