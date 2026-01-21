@@ -11,8 +11,10 @@ from datetime import datetime
 import cv2
 import numpy as np
 
+
 # Import the face recognition system
 from face_recognition_system import FaceRecognitionSystem
+
 
 
 class KivyCamera(Image):
@@ -23,6 +25,10 @@ class KivyCamera(Image):
         self.capture = None
         self.fps = 30
         self.current_frame = None
+        self.face_cascade = cv2.CascadeClassifier(
+            cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+        )
+        self.show_bbox = True  # Flag to show/hide bounding box
         
     def start(self, camera_index=1):
         """Start the camera capture"""
@@ -33,9 +39,12 @@ class KivyCamera(Image):
                 print(f"Error: Could not open camera at index {camera_index}")
                 return
             
+            # Optimized settings for smoother frames
             self.capture.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
             self.capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
             self.capture.set(cv2.CAP_PROP_FPS, 30)
+            self.capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Reduce buffer for less latency
+            self.capture.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M','J','P','G'))
             
             Clock.schedule_interval(self.update, 1.0 / self.fps)
             print(f"Camera started successfully")
@@ -44,23 +53,76 @@ class KivyCamera(Image):
             print(f"Error starting camera: {e}")
     
     def update(self, dt):
-        """Update camera frame"""
+        """Update camera frame with face detection"""
         if self.capture and self.capture.isOpened():
-            ret, frame = self.capture.read()
+            # Use grab() and retrieve() for faster capture
+            if self.capture.grab():
+                ret, frame = self.capture.retrieve()
+                
+                if ret and frame is not None:
+                    # Store current frame for face recognition
+                    self.current_frame = frame.copy()
+                    
+                    # ROTATE 180 for correct orientation
+                    frame = cv2.rotate(frame, cv2.ROTATE_180)
+                    
+                    # Detect faces and draw bounding boxes
+                    if self.show_bbox:
+                        frame = self.draw_face_boxes(frame)
+                    
+                    # Convert to RGB for display
+                    h, w = frame.shape[:2]
+                    buf = cv2.flip(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), 0).tobytes()
+                    texture = Texture.create(size=(w, h), colorfmt='rgb')
+                    texture.blit_buffer(buf, colorfmt='rgb', bufferfmt='ubyte')
+                    self.texture = texture
+    
+    def draw_face_boxes(self, frame):
+        """Draw bounding boxes around detected faces"""
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        
+        # Detect faces
+        faces = self.face_cascade.detectMultiScale(
+            gray,
+            scaleFactor=1.1,
+            minNeighbors=5,
+            minSize=(100, 100)
+        )
+        
+        # Draw rectangles around faces
+        for (x, y, w, h) in faces:
+            # Green box for detected face
+            cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 3)
             
-            if ret and frame is not None:
-                # Store current frame for face recognition
-                self.current_frame = frame.copy()
-                
-                # ROTATE 180 for correct orientation
-                frame = cv2.rotate(frame, cv2.ROTATE_180)
-                
-                # Convert to RGB for display
-                h, w = frame.shape[:2]
-                buf = cv2.flip(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), 0).tobytes()
-                texture = Texture.create(size=(w, h), colorfmt='rgb')
-                texture.blit_buffer(buf, colorfmt='rgb', bufferfmt='ubyte')
-                self.texture = texture
+            # Add label "Face Detected"
+            cv2.putText(
+                frame,
+                'Face Detected',
+                (x, y - 10),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (0, 255, 0),
+                2
+            )
+            
+            # Optional: Draw center crosshair
+            center_x = x + w // 2
+            center_y = y + h // 2
+            cv2.circle(frame, (center_x, center_y), 5, (0, 255, 0), -1)
+        
+        # If no face detected, show message
+        if len(faces) == 0:
+            cv2.putText(
+                frame,
+                'No Face Detected',
+                (frame.shape[1]//2 - 100, 30),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.8,
+                (0, 0, 255),
+                2
+            )
+        
+        return frame
     
     def get_current_frame(self):
         """Get the current frame"""
@@ -73,6 +135,7 @@ class KivyCamera(Image):
             self.capture.release()
             self.capture = None
         print("Camera stopped")
+
 
 
 class RegisterUserScreen(Screen):
