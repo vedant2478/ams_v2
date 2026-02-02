@@ -3,6 +3,7 @@ from kivy.uix.image import Image
 from kivy.properties import StringProperty, BooleanProperty
 from kivy.clock import Clock
 from kivy.graphics.texture import Texture
+from kivy.network.urlrequest import UrlRequest  # ✅ Add this
 from datetime import datetime
 from components.base_screen import BaseScreen
 from threading import Thread, Lock
@@ -10,6 +11,7 @@ import queue
 import cv2
 import numpy as np
 import time
+import json  # ✅ Add this
 
 # Import the generalized face recognition system
 from face_recognition_system import FaceRecognitionSystem
@@ -174,11 +176,14 @@ class KivyCamera(Image):
 
 
 class FaceAttendanceScreen(BaseScreen):
-    """Optimized attendance screen with face recognition and database integration"""
+    """Optimized attendance screen with face recognition and Django API integration"""
     
     current_time_type = StringProperty("in")
     current_user = StringProperty("USER_NAME")
     processing = BooleanProperty(False)
+    
+    # ✅ Django API Configuration
+    API_BASE_URL = "http://192.168.1.83:8000/api/attendance"  # Change to your server IP
     
     def __init__(self, **kwargs):
         super(FaceAttendanceScreen, self).__init__(**kwargs)
@@ -206,6 +211,97 @@ class FaceAttendanceScreen(BaseScreen):
         # Scheduled events
         self._auto_recognize_event = None
         self._camera_setup_event = None
+    
+    # ✅ Django API Methods
+    def hit_django_api(self, name, time_type):
+        """Hit Django API for sign-in or sign-out"""
+        try:
+            # Determine which endpoint to hit
+            if time_type == "in":
+                url = f"{self.API_BASE_URL}/create-vedant-attendance/"
+                action = "Sign In"
+            else:
+                url = f"{self.API_BASE_URL}/signout-vedant-attendance/"
+                action = "Sign Out"
+            
+            print(f"→ Hitting Django API: {action} for {name}")
+            print(f"   URL: {url}")
+            
+            # Make async request
+            UrlRequest(
+                url,
+                on_success=lambda req, result: self.on_api_success(req, result, name, action),
+                on_failure=lambda req, result: self.on_api_failure(req, result, name, action),
+                on_error=lambda req, error: self.on_api_error(req, error, name, action),
+                timeout=10
+            )
+            
+        except Exception as e:
+            print(f"✗ API request error: {e}")
+    
+    def on_api_success(self, request, result, name, action):
+        """Handle successful API response"""
+        try:
+            print(f"✓ {action} API Response:")
+            print(f"   Status: {result.get('status')}")
+            print(f"   Message: {result.get('message')}")
+            
+            if result.get('status') == 'success':
+                data = result.get('data', {})
+                print(f"   Employee: {data.get('employee')}")
+                print(f"   Time: {data.get('sign_in_time') or data.get('sign_out_time')}")
+                
+                if action == "Sign Out":
+                    print(f"   Total Hours: {data.get('total_hours')}")
+                    print(f"   Overtime: {data.get('overtime')}")
+                
+                # Show success message on UI (optional)
+                self.show_api_status(f"{action} successful!", "success")
+            else:
+                print(f"✗ API returned error: {result.get('message')}")
+                self.show_api_status(result.get('message', 'Error'), "error")
+                
+        except Exception as e:
+            print(f"✗ Error processing API response: {e}")
+    
+    def on_api_failure(self, request, result):
+        """Handle API request failure"""
+        print(f"✗ API Request Failed:")
+        print(f"   Result: {result}")
+        self.show_api_status("API request failed", "error")
+    
+    def on_api_error(self, request, error):
+        """Handle API request error"""
+        print(f"✗ API Request Error:")
+        print(f"   Error: {error}")
+        self.show_api_status(f"Connection error: {error}", "error")
+    
+    def show_api_status(self, message, status_type):
+        """Show API status message on UI (optional - implement based on your UI)"""
+        try:
+            if hasattr(self, 'ids') and 'status_label' in self.ids:
+                self.ids.status_label.text = message
+                
+                # Color based on status
+                if status_type == "success":
+                    self.ids.status_label.color = (0, 1, 0, 1)  # Green
+                else:
+                    self.ids.status_label.color = (1, 0, 0, 1)  # Red
+                
+                # Clear after 3 seconds
+                Clock.schedule_once(lambda dt: self.clear_status(), 3)
+        except:
+            pass
+    
+    def clear_status(self):
+        """Clear status message"""
+        try:
+            if hasattr(self, 'ids') and 'status_label' in self.ids:
+                self.ids.status_label.text = ""
+        except:
+            pass
+    
+    # Existing methods continue...
     
     def on_enter(self):
         """Called when screen is entered"""
@@ -303,7 +399,7 @@ class FaceAttendanceScreen(BaseScreen):
             print("Recognition worker thread stopped")
     
     def _process_recognition_results(self, results):
-        """Process recognition results on main thread and save to database"""
+        """Process recognition results and hit Django API"""
         if self.processing:
             return
         
@@ -322,7 +418,7 @@ class FaceAttendanceScreen(BaseScreen):
                         if name not in self.last_recognized or \
                            (current_time - self.last_recognized[name]).seconds > 60:
                             
-                            # Save attendance to database
+                            # Save to local database
                             db_result = self.db.mark_attendance(
                                 name=name,
                                 time_type=self.current_time_type,
@@ -334,6 +430,9 @@ class FaceAttendanceScreen(BaseScreen):
                                 self.update_welcome_message(name)
                                 timestamp = db_result.get('timestamp', current_time.strftime("%Y-%m-%d %H:%M:%S"))
                                 print(f"✓ {self.current_time_type.upper()} marked: {name} | {timestamp} | Score: {score:.0f}")
+                                
+                                # ✅ HIT DJANGO API
+                                self.hit_django_api(name, self.current_time_type)
                                 
                                 self.last_recognized[name] = current_time
                             else:
