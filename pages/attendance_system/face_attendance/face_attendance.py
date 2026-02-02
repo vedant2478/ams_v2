@@ -183,7 +183,7 @@ class FaceAttendanceScreen(BaseScreen):
     processing = BooleanProperty(False)
     
     # ✅ Django API Configuration
-    API_BASE_URL = "http://192.168.1.100:8000/api/attendance"  # Change to your server IP
+    API_BASE_URL = "http://127.0.0.1:8000/api/attendance"  # Change to your server IP
     
     def __init__(self, **kwargs):
         super(FaceAttendanceScreen, self).__init__(**kwargs)
