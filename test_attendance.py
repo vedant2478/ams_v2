@@ -2,7 +2,7 @@ import requests
 import json
 
 # Change to your server IP
-BASE_URL = "http://192.168.1.100:8000/api/attendance"
+BASE_URL = "http://192.168.1.83:8000/api/attendance"
 
 def test_sign_in():
     """Test sign-in endpoint"""
