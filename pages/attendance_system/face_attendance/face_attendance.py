@@ -3,7 +3,7 @@ from kivy.uix.image import Image
 from kivy.properties import StringProperty, BooleanProperty
 from kivy.clock import Clock
 from kivy.graphics.texture import Texture
-from kivy.network.urlrequest import UrlRequest  # ✅ Add this
+from kivy.network.urlrequest import UrlRequest
 from datetime import datetime
 from components.base_screen import BaseScreen
 from threading import Thread, Lock
@@ -11,7 +11,7 @@ import queue
 import cv2
 import numpy as np
 import time
-import json  # ✅ Add this
+import json
 
 # Import the generalized face recognition system
 from face_recognition_system import FaceRecognitionSystem
@@ -182,8 +182,8 @@ class FaceAttendanceScreen(BaseScreen):
     current_user = StringProperty("USER_NAME")
     processing = BooleanProperty(False)
     
-    # ✅ Django API Configuration
-    API_BASE_URL = "http://192.168.1.83:8000/api/attendance"  # Change to your server IP
+    # Django API Configuration - CHANGE THIS TO YOUR SERVER IP
+    API_BASE_URL = "http://192.168.1.83:8000/api/attendance"  # ✅ Change to your computer's IP
     
     def __init__(self, **kwargs):
         super(FaceAttendanceScreen, self).__init__(**kwargs)
@@ -212,7 +212,8 @@ class FaceAttendanceScreen(BaseScreen):
         self._auto_recognize_event = None
         self._camera_setup_event = None
     
-    # ✅ Django API Methods
+    # ==================== Django API Methods ====================
+    
     def hit_django_api(self, name, time_type):
         """Hit Django API for sign-in or sign-out"""
         try:
@@ -255,7 +256,7 @@ class FaceAttendanceScreen(BaseScreen):
                     print(f"   Total Hours: {data.get('total_hours')}")
                     print(f"   Overtime: {data.get('overtime')}")
                 
-                # Show success message on UI (optional)
+                # Show success message on UI
                 self.show_api_status(f"{action} successful!", "success")
             else:
                 print(f"✗ API returned error: {result.get('message')}")
@@ -264,20 +265,22 @@ class FaceAttendanceScreen(BaseScreen):
         except Exception as e:
             print(f"✗ Error processing API response: {e}")
     
-    def on_api_failure(self, request, result):
+    def on_api_failure(self, request, result, name, action):
         """Handle API request failure"""
-        print(f"✗ API Request Failed:")
+        print(f"✗ API Request Failed for {action}:")
+        print(f"   User: {name}")
         print(f"   Result: {result}")
         self.show_api_status("API request failed", "error")
     
-    def on_api_error(self, request, error):
+    def on_api_error(self, request, error, name, action):
         """Handle API request error"""
-        print(f"✗ API Request Error:")
+        print(f"✗ API Request Error for {action}:")
+        print(f"   User: {name}")
         print(f"   Error: {error}")
         self.show_api_status(f"Connection error: {error}", "error")
     
     def show_api_status(self, message, status_type):
-        """Show API status message on UI (optional - implement based on your UI)"""
+        """Show API status message on UI"""
         try:
             if hasattr(self, 'ids') and 'status_label' in self.ids:
                 self.ids.status_label.text = message
@@ -301,7 +304,7 @@ class FaceAttendanceScreen(BaseScreen):
         except:
             pass
     
-    # Existing methods continue...
+    # ==================== Screen Lifecycle ====================
     
     def on_enter(self):
         """Called when screen is entered"""
@@ -363,6 +366,8 @@ class FaceAttendanceScreen(BaseScreen):
                         self.frame_for_recognition = frame.copy()
         except Exception as e:
             print(f"Frame capture error: {e}")
+    
+    # ==================== Face Recognition ====================
     
     def _recognition_worker(self):
         """Background thread for face recognition processing"""
@@ -431,7 +436,7 @@ class FaceAttendanceScreen(BaseScreen):
                                 timestamp = db_result.get('timestamp', current_time.strftime("%Y-%m-%d %H:%M:%S"))
                                 print(f"✓ {self.current_time_type.upper()} marked: {name} | {timestamp} | Score: {score:.0f}")
                                 
-                                # ✅ HIT DJANGO API
+                                # Hit Django API
                                 self.hit_django_api(name, self.current_time_type)
                                 
                                 self.last_recognized[name] = current_time
@@ -444,6 +449,8 @@ class FaceAttendanceScreen(BaseScreen):
             print(f"Recognition processing error: {e}")
             self.processing = False
     
+    # ==================== UI Updates ====================
+    
     def on_time_type_change(self, time_type):
         """Handle time type toggle"""
         self.current_time_type = time_type
@@ -454,6 +461,8 @@ class FaceAttendanceScreen(BaseScreen):
         self.current_user = username
         if hasattr(self, 'ids') and 'welcome_label' in self.ids:
             self.ids.welcome_label.text = f'"{username}" --> Welcome'
+    
+    # ==================== Database Queries ====================
     
     def get_user_list(self):
         """Get registered users list from database"""
@@ -493,6 +502,8 @@ class FaceAttendanceScreen(BaseScreen):
         except Exception as e:
             print(f"✗ Error getting statistics: {e}")
             return {}
+    
+    # ==================== Navigation & Cleanup ====================
     
     def go_back(self):
         """Navigate back with cleanup"""
