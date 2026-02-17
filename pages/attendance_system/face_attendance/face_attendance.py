@@ -12,12 +12,16 @@ import cv2
 import numpy as np
 import time
 import json
+import requests
+
 
 # Import the generalized face recognition system
 from face_recognition_system import FaceRecognitionSystem
 
+
 # Import database manager
 from pages.attendance_system.database.db_manager import DatabaseManager             
+
 
 
 class KivyCamera(Image):
@@ -175,15 +179,19 @@ class KivyCamera(Image):
         print("Camera stopped successfully")
 
 
+
 class FaceAttendanceScreen(BaseScreen):
     """Optimized attendance screen with face recognition and Django API integration"""
     
     current_time_type = StringProperty("in")
     current_user = StringProperty("USER_NAME")
     processing = BooleanProperty(False)
+    employee_code = StringProperty("")  # NEW: Store employee code input
+    verification_mode = BooleanProperty(False)  # NEW: Toggle between auto and manual mode
     
     # Django API Configuration - CHANGE THIS TO YOUR SERVER IP
-    API_BASE_URL = "http://192.168.1.83:8000/api/attendance"  # ✅ Change to your computer's IP
+    API_BASE_URL = "http://192.168.1.47:8080/api/attendance"  # ✅ Change to your computer's IP
+    EMPLOYEE_API_BASE = "http://192.168.1.47:8080/api/employees"  # For verification endpoint
     
     def __init__(self, **kwargs):
         super(FaceAttendanceScreen, self).__init__(**kwargs)
@@ -197,7 +205,7 @@ class FaceAttendanceScreen(BaseScreen):
         # Data storage (cached from database)
         self.registered_faces = {}
         self.last_recognized = {}
-        self.threshold = 180
+        self.threshold = 0.4  # Adjusted for new embedding system
         
         # Thread-safe locks
         self.recognition_lock = Lock()
@@ -211,6 +219,173 @@ class FaceAttendanceScreen(BaseScreen):
         # Scheduled events
         self._auto_recognize_event = None
         self._camera_setup_event = None
+    
+    # ==================== NEW: Keypad & Verification Methods ====================
+    
+    def on_key_press(self, key):
+        """Handle numeric keypad key press"""
+        if key == '⌫':
+            if self.employee_code:
+                self.employee_code = self.employee_code[:-1]
+                if hasattr(self, 'ids') and 'employee_code_input' in self.ids:
+                    self.ids.employee_code_input.text = self.employee_code
+        else:
+            if key.isdigit():
+                self.employee_code += key
+                if hasattr(self, 'ids') and 'employee_code_input' in self.ids:
+                    self.ids.employee_code_input.text = self.employee_code
+    
+    def clear_employee_code(self):
+        """Clear employee code input"""
+        self.employee_code = ""
+        if hasattr(self, 'ids') and 'employee_code_input' in self.ids:
+            self.ids.employee_code_input.text = ""
+        self.clear_status()
+    
+    def verify_employee(self):
+        """Verify employee code with current face using Django backend"""
+        if not self.employee_code:
+            self.show_api_status("⚠️ Please enter employee code", "error")
+            return
+        
+        if self.processing:
+            return
+        
+        try:
+            self.processing = True
+            
+            # Get current frame
+            if hasattr(self, 'ids') and 'camera_feed' in self.ids:
+                frame = self.ids.camera_feed.get_current_frame()
+            else:
+                frame = None
+            
+            if frame is None:
+                self.show_api_status("❌ No camera frame available", "error")
+                self.processing = False
+                return
+            
+            # Extract face embedding from current frame
+            result = self.face_system.register_face_from_frame(frame, self.employee_code)
+            
+            if not result['success']:
+                self.show_api_status(f"❌ {result['message']}", "error")
+                self.processing = False
+                return
+            
+            current_embedding = result['embedding'].tolist()
+            
+            # Send to Django backend for verification
+            try:
+                payload = {
+                    "employee_code": self.employee_code,
+                    "face_encoding": current_embedding
+                }
+                
+                print(f"→ Verifying employee {self.employee_code} with backend...")
+                print(f"   Encoding length: {len(current_embedding)}")
+                
+                response = requests.post(
+                    f"{self.EMPLOYEE_API_BASE}/verify_face_by_code/",
+                    json=payload,
+                    timeout=10
+                )
+                
+                print(f"Backend response: {response.status_code}")
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    
+                    if data.get('success') and data.get('is_match'):
+                        # MATCH!
+                        employee_name = data['employee_name']
+                        self.update_welcome_message(employee_name)
+                        self.show_api_status(f"✅ Verified: {employee_name}", "success")
+                        
+                        print(f"✓ Face matched! {employee_name}")
+                        print(f"  Distance: {data['distance']:.4f}, Threshold: {data['threshold']}")
+                        
+                        # Mark attendance in local DB
+                        db_result = self.db.mark_attendance(
+                            name=employee_name,
+                            time_type=self.current_time_type,
+                            recognition_score=data['distance']
+                        )
+                        
+                        if db_result['success']:
+                            timestamp = db_result.get('timestamp', datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+                            print(f"✓ {self.current_time_type.upper()} marked: {employee_name} | {timestamp}")
+                            
+                            # Hit Django attendance API
+                            self.hit_django_api(employee_name, self.current_time_type)
+                        
+                        # Clear input after 2 seconds
+                        Clock.schedule_once(lambda dt: self.clear_employee_code(), 2)
+                        
+                    elif data.get('success') and not data.get('is_match'):
+                        # NO MATCH
+                        self.show_api_status(
+                            f"❌ Face does not match employee {self.employee_code}", 
+                            "error"
+                        )
+                        print(f"✗ Face verification failed:")
+                        print(f"  Distance: {data.get('distance', 'N/A')}")
+                        print(f"  Threshold: {data.get('threshold', 'N/A')}")
+                    else:
+                        # Error from backend
+                        error_msg = data.get('error', 'Unknown error')
+                        self.show_api_status(f"❌ {error_msg}", "error")
+                        print(f"✗ Backend error: {error_msg}")
+                else:
+                    error_text = response.text[:200]
+                    self.show_api_status(f"❌ Backend error: {response.status_code}", "error")
+                    print(f"✗ HTTP {response.status_code}: {error_text}")
+            
+            except requests.exceptions.ConnectionError:
+                self.show_api_status("❌ Cannot connect to backend", "error")
+                print(f"✗ Connection error to {self.EMPLOYEE_API_BASE}")
+            except requests.exceptions.Timeout:
+                self.show_api_status("❌ Backend timeout", "error")
+                print("✗ Request timed out")
+            except Exception as e:
+                self.show_api_status(f"❌ Error: {str(e)}", "error")
+                print(f"✗ Verification exception: {e}")
+                import traceback
+                traceback.print_exc()
+            
+            self.processing = False
+            
+        except Exception as e:
+            print(f"Verification error: {e}")
+            import traceback
+            traceback.print_exc()
+            self.show_api_status(f"❌ Error: {str(e)}", "error")
+            self.processing = False
+    
+    def toggle_verification_mode(self):
+        """Toggle between auto-recognition and manual verification mode"""
+        self.verification_mode = not self.verification_mode
+        
+        if self.verification_mode:
+            # Manual mode: stop auto-recognition
+            if self._auto_recognize_event:
+                try:
+                    self._auto_recognize_event.cancel()
+                except:
+                    pass
+                self._auto_recognize_event = None
+            print("✓ Switched to MANUAL verification mode")
+            self.show_api_status("📋 Manual Mode: Enter employee code", "success")
+        else:
+            # Auto mode: restart auto-recognition
+            if self._auto_recognize_event:
+                try:
+                    self._auto_recognize_event.cancel()
+                except:
+                    pass
+            self._auto_recognize_event = Clock.schedule_interval(self.capture_for_recognition, 2.0)
+            print("✓ Switched to AUTO recognition mode")
+            self.show_api_status("🤖 Auto Mode: Face detection active", "success")
     
     # ==================== Django API Methods ====================
     
@@ -328,13 +503,14 @@ class FaceAttendanceScreen(BaseScreen):
         self.recognition_thread = Thread(target=self._recognition_worker, daemon=True)
         self.recognition_thread.start()
         
-        # Schedule frame capture for recognition
-        if self._auto_recognize_event:
-            try:
-                self._auto_recognize_event.cancel()
-            except:
-                pass
-        self._auto_recognize_event = Clock.schedule_interval(self.capture_for_recognition, 2.0)
+        # Schedule frame capture for recognition (only if in auto mode)
+        if not self.verification_mode:
+            if self._auto_recognize_event:
+                try:
+                    self._auto_recognize_event.cancel()
+                except:
+                    pass
+            self._auto_recognize_event = Clock.schedule_interval(self.capture_for_recognition, 2.0)
     
     def load_embeddings_from_db(self):
         """Load all user embeddings from database"""
@@ -405,7 +581,7 @@ class FaceAttendanceScreen(BaseScreen):
     
     def _process_recognition_results(self, results):
         """Process recognition results and hit Django API"""
-        if self.processing:
+        if self.processing or self.verification_mode:  # Skip auto-recognition in manual mode
             return
         
         try:
@@ -434,7 +610,7 @@ class FaceAttendanceScreen(BaseScreen):
                                 # Update UI
                                 self.update_welcome_message(name)
                                 timestamp = db_result.get('timestamp', current_time.strftime("%Y-%m-%d %H:%M:%S"))
-                                print(f"✓ {self.current_time_type.upper()} marked: {name} | {timestamp} | Score: {score:.0f}")
+                                print(f"✓ {self.current_time_type.upper()} marked: {name} | {timestamp} | Score: {score:.4f}")
                                 
                                 # Hit Django API
                                 self.hit_django_api(name, self.current_time_type)
