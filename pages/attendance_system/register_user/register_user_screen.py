@@ -13,12 +13,19 @@ import queue
 import cv2
 import numpy as np
 import time
+import requests  # Add this import for HTTP requests
+
 
 # Import the face recognition system
 from face_recognition_system import FaceRecognitionSystem
 
+
 # Import database manager
 from pages.attendance_system.database.db_manager import DatabaseManager
+
+
+# Backend API configuration
+BACKEND_URL = "http://192.168.1.47:8080"  # Change to your backend IP
 
 
 class KivyCamera(Image):
@@ -261,7 +268,7 @@ class RegisterUserScreen(Screen):
         # Initialize face recognition system
         self.face_system = FaceRecognitionSystem()
 
-        # Initialize database manager
+        # Initialize database manager (local SQLite for backwards compatibility)
         self.db = DatabaseManager('sqlite:///csi_attendance.dev.sqlite')
 
         # Store samples temporarily
@@ -395,19 +402,15 @@ class RegisterUserScreen(Screen):
                     # Average all samples for better accuracy
                     avg_embedding = np.mean(self.samples, axis=0)
 
-                    # Save to database
-                    db_result = self.db.create_user(
-                        name=self.username,  # here you can rename to employee_code if your DB supports it
-                        embedding=avg_embedding
-                    )
+                    # Send to Django backend
+                    backend_result = self.send_to_backend(self.username, avg_embedding)
 
-                    if db_result['success']:
+                    if backend_result['success']:
                         self.status_message = (
                             f"✅ {self.username} registered successfully!"
                         )
                         print(
-                            f"✓ {self.username} saved to database "
-                            f"(ID: {db_result['user_id']})"
+                            f"✓ {self.username} saved to backend database"
                         )
 
                         # Update face attendance screen's embeddings
@@ -419,7 +422,7 @@ class RegisterUserScreen(Screen):
                         Clock.schedule_once(lambda dt: self.go_back(), 1.5)
                     else:
                         self.status_message = (
-                            f"❌ Database error: {db_result['message']}"
+                            f"❌ Backend error: {backend_result['message']}"
                         )
                         self._is_processing = False
                         if hasattr(self, 'ids') and 'capture_btn' in self.ids:
@@ -442,6 +445,64 @@ class RegisterUserScreen(Screen):
             self._is_processing = False
             if hasattr(self, 'ids') and 'capture_btn' in self.ids:
                 self.ids.capture_btn.disabled = False
+
+    def send_to_backend(self, employee_code, embedding):
+        """Send face encoding to Django backend"""
+        try:
+            # Convert numpy array to list
+            embedding_list = embedding.tolist()
+
+            payload = {
+                "employee_code": employee_code,
+                "face_encoding": embedding_list
+            }
+
+            print(f"Sending to backend: {BACKEND_URL}/api/employees/update_face_encoding/")
+            print(f"Employee code: {employee_code}, Encoding length: {len(embedding_list)}")
+
+            response = requests.post(
+                f"{BACKEND_URL}/api/employees/update_face_encoding/",
+                json=payload,
+                timeout=10
+            )
+
+            print(f"Backend response status: {response.status_code}")
+            print(f"Backend response: {response.text}")
+
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('success'):
+                    return {
+                        'success': True,
+                        'message': data.get('message', 'Saved successfully'),
+                        'employee_id': data.get('employee_id')
+                    }
+                else:
+                    return {
+                        'success': False,
+                        'message': data.get('error', 'Unknown error')
+                    }
+            else:
+                return {
+                    'success': False,
+                    'message': f"HTTP {response.status_code}: {response.text}"
+                }
+
+        except requests.exceptions.Timeout:
+            return {
+                'success': False,
+                'message': 'Backend request timed out'
+            }
+        except requests.exceptions.ConnectionError:
+            return {
+                'success': False,
+                'message': f'Cannot connect to backend at {BACKEND_URL}'
+            }
+        except Exception as e:
+            return {
+                'success': False,
+                'message': f'Backend error: {str(e)}'
+            }
 
     def go_back(self):
         """Navigate back to attendance type screen"""
