@@ -60,14 +60,15 @@ class KivyCamera(Image):
 
             print(f"✓ Camera {camera_index} opened successfully")
 
-            # LOWER RESOLUTION AND FPS FOR SPEED
-            self.capture.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
-            self.capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
+            # Balanced resolution: good quality, still relatively fast
+            self.capture.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+            self.capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)
             self.capture.set(cv2.CAP_PROP_FPS, 24)
             self.capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
             try:
-                self.capture.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
+                self.capture.set(cv2.CAP_PROP_FOURCC,
+                                 cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
             except:
                 print("MJPEG codec not available, using default")
 
@@ -157,7 +158,7 @@ class KivyCamera(Image):
 
         # Process face detection only every Nth frame
         if self.frame_count % self.frame_skip == 0:
-            # DOWNSCALE BEFORE DETECTION FOR SPEED
+            # Downscale for faster detection
             small_frame = cv2.resize(frame, (0, 0), fx=0.5, fy=0.5)
             gray_small = cv2.cvtColor(small_frame, cv2.COLOR_BGR2GRAY)
             gray_small = cv2.equalizeHist(gray_small)
@@ -166,7 +167,7 @@ class KivyCamera(Image):
                 gray_small,
                 scaleFactor=1.2,
                 minNeighbors=4,
-                minSize=(40, 40),  # half, because frame is downscaled
+                minSize=(40, 40),  # half of earlier 80x80
                 flags=cv2.CASCADE_SCALE_IMAGE
             )
 
@@ -190,7 +191,8 @@ class KivyCamera(Image):
             cv2.circle(frame, (center_x, center_y), 5, (0, 255, 0), -1)
 
         if len(faces) == 0:
-            cv2.putText(frame, 'No Face Detected', (frame.shape[1] // 2 - 100, 30),
+            cv2.putText(frame, 'No Face Detected',
+                        (frame.shape[1] // 2 - 100, 30),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
         return frame
@@ -244,12 +246,13 @@ class KivyCamera(Image):
 
 
 class RegisterUserScreen(Screen):
-    """Optimized screen for registering new users with face recognition and database storage"""
+    """Screen for registering new users with face recognition and database storage"""
 
+    # Now this will store employee code (numeric)
     username = StringProperty("")
     sample_count = NumericProperty(0)
     target_samples = NumericProperty(5)
-    status_message = StringProperty("Enter name and capture face")
+    status_message = StringProperty("Enter employee code and capture face")
 
     def __init__(self, **kwargs):
         super(RegisterUserScreen, self).__init__(**kwargs)
@@ -276,7 +279,7 @@ class RegisterUserScreen(Screen):
         self.username = ""
         self.sample_count = 0
         self.samples = []
-        self.status_message = "Enter name and capture face"
+        self.status_message = "Enter employee code and capture face"
         self._is_processing = False
 
         # Clear text input
@@ -302,31 +305,42 @@ class RegisterUserScreen(Screen):
             self.status_message = f"❌ Camera error: {e}"
 
     def on_key_press(self, key):
-        """Handle keyboard key press"""
+        """Handle numeric keyboard key press for employee code"""
+        # Here we only accept digits and backspace
         if key == '⌫':
             if self.username:
                 self.username = self.username[:-1]
                 if hasattr(self, 'ids') and 'name_input' in self.ids:
                     self.ids.name_input.text = self.username
         else:
-            self.username += key
-            if hasattr(self, 'ids') and 'name_input' in self.ids:
-                self.ids.name_input.text = self.username
+            # ignore non-digit keys if you want strict numeric
+            if key.isdigit():
+                self.username += key
+                if hasattr(self, 'ids') and 'name_input' in self.ids:
+                    self.ids.name_input.text = self.username
 
         self.on_text_change()
 
     def on_text_change(self):
         """Handle text input changes"""
         if hasattr(self, 'ids') and 'name_input' in self.ids:
-            self.username = self.ids.name_input.text.strip()
+            # Ensure only digits (if user pastes, etc.)
+            raw = self.ids.name_input.text
+            filtered = ''.join(ch for ch in raw if ch.isdigit())
+            if filtered != raw:
+                # replace with digits-only
+                self.ids.name_input.text = filtered
+            self.username = filtered.strip()
 
             if self.username and not self._is_processing:
                 self.ids.capture_btn.disabled = False
-                self.status_message = f"Ready! Click Capture ({self.sample_count}/{self.target_samples})"
+                self.status_message = (
+                    f"Ready! Click Capture ({self.sample_count}/{self.target_samples})"
+                )
             else:
                 self.ids.capture_btn.disabled = True
                 if not self._is_processing and not self.username:
-                    self.status_message = "Enter name and capture face"
+                    self.status_message = "Enter employee code and capture face"
 
     def clear_text(self):
         """Clear all text"""
@@ -341,7 +355,7 @@ class RegisterUserScreen(Screen):
             return
 
         if not self.username:
-            self.status_message = "⚠️ Please enter a name first!"
+            self.status_message = "⚠️ Please enter an employee code first!"
             return
 
         self._is_processing = True
@@ -365,12 +379,17 @@ class RegisterUserScreen(Screen):
     def _process_capture(self, frame):
         """Process face capture without blocking UI thread"""
         try:
-            result = self.face_system.register_face_from_frame(frame, self.username)
+            result = self.face_system.register_face_from_frame(
+                frame,
+                self.username  # employee code as identifier
+            )
 
             if result['success']:
                 self.samples.append(result['embedding'])
                 self.sample_count += 1
-                self.status_message = f"✅ Sample {self.sample_count}/{self.target_samples} captured!"
+                self.status_message = (
+                    f"✅ Sample {self.sample_count}/{self.target_samples} captured!"
+                )
 
                 if self.sample_count >= self.target_samples:
                     # Average all samples for better accuracy
@@ -378,13 +397,18 @@ class RegisterUserScreen(Screen):
 
                     # Save to database
                     db_result = self.db.create_user(
-                        name=self.username,
+                        name=self.username,  # here you can rename to employee_code if your DB supports it
                         embedding=avg_embedding
                     )
 
                     if db_result['success']:
-                        self.status_message = f"✅ {self.username} registered successfully!"
-                        print(f"✓ {self.username} saved to database (ID: {db_result['user_id']})")
+                        self.status_message = (
+                            f"✅ {self.username} registered successfully!"
+                        )
+                        print(
+                            f"✓ {self.username} saved to database "
+                            f"(ID: {db_result['user_id']})"
+                        )
 
                         # Update face attendance screen's embeddings
                         if self.manager.has_screen('face_attendance'):
@@ -394,7 +418,9 @@ class RegisterUserScreen(Screen):
 
                         Clock.schedule_once(lambda dt: self.go_back(), 1.5)
                     else:
-                        self.status_message = f"❌ Database error: {db_result['message']}"
+                        self.status_message = (
+                            f"❌ Database error: {db_result['message']}"
+                        )
                         self._is_processing = False
                         if hasattr(self, 'ids') and 'capture_btn' in self.ids:
                             self.ids.capture_btn.disabled = False
