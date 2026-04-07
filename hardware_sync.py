@@ -64,6 +64,12 @@ def sync_hardware_to_db(session, ams_can):
     total_present = 0
     total_empty = 0
     
+    # Temporarily unlock all strips to allow hardware polling
+    print("  [Auto-Sync] Unlocking keystrips momentarily for deep hardware scan...")
+    for strip_id in ams_can.key_lists:
+        ams_can.unlock_all_positions(strip_id)
+    sleep(0.5)
+
     for strip_id in ams_can.key_lists:
         if strip_id not in strips_in_db:
             print(f"\n⚠️  Strip {strip_id} has no DB records, skipping...")
@@ -99,6 +105,11 @@ def sync_hardware_to_db(session, ams_can):
             
             total_synced += 1
             sleep(0.2)
+            
+    # Re-lock all strips after scanning
+    print("  [Auto-Sync] Re-locking keystrips...")
+    for strip_id in ams_can.key_lists:
+        ams_can.lock_all_positions(strip_id)
     
     # Commit all changes
     try:
