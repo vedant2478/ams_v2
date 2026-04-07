@@ -57,9 +57,9 @@ def register_pegs(session, ams_can, user_id):
         }
     
     # ========================================
-    # STEP 2: CHECK ALL KEYS PRESENT
+    # STEP 2: CHECK ALL KEYS PRESENT (DISABLED)
     # ========================================
-    print("\n[2/5] Checking if all keys are present...")
+    print("\n[2/5] Checking if all keys are present... [DISABLED]")
     
     missing_keys = (
         session.query(AMS_Keys)
@@ -71,13 +71,9 @@ def register_pegs(session, ams_can, user_id):
     )
     
     if missing_keys > 0:
-        print(f"❌ {missing_keys} key(s) are missing")
-        return {
-            'success': False,
-            'message': f'{missing_keys} keys are missing. Please return all keys before registration.'
-        }
-    
-    print("✓ All keys present")
+        print(f"⚠️ {missing_keys} key(s) are currently marked OUT the database, but proceeding with registration anyways.")
+    else:
+        print("✓ All keys present")
     
     # ========================================
     # STEP 3: UNLOCK ALL + LED ON

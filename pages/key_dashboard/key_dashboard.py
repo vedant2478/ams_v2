@@ -601,7 +601,10 @@ class KeyDashboardScreen(BaseScreen):
         # KEY TAKEN (removed)
         if self.ams_can.key_taken_event:
             peg_id = self.ams_can.key_taken_id
-            self.handle_key_taken_commit(peg_id)
+            actual_pos = self.ams_can.key_taken_position_slot
+            actual_strip = self.ams_can.key_taken_position_list
+            
+            self.handle_key_taken_commit(peg_id, actual_strip, actual_pos)
 
             key_name = self._get_key_name_by_peg(peg_id)
             taken_time = datetime.now(TZ_INDIA)
@@ -656,6 +659,33 @@ class KeyDashboardScreen(BaseScreen):
 
             # -------- EXISTING LOGIC (DB + interactions) --------
             updated = False
+
+            # SELF-HEALING: If DB misses this peg_id but the physical slot matches a known slot,
+            # bind the hardware ID permanently dynamically!
+            session = self.manager.db_session
+            key_record = session.query(AMS_Keys).filter(
+                AMS_Keys.peg_id == str(peg_id)
+            ).first()
+
+            if not key_record:
+                log.warning(f"[DB] Inserted peg_id={peg_id} not found. Attempting fallback on Strip {actual_strip} Slot {actual_pos}")
+                key_record = session.query(AMS_Keys).filter(
+                    AMS_Keys.keyStrip == actual_strip,
+                    AMS_Keys.keyPosition == actual_pos,
+                    AMS_Keys.deletedAt == None
+                ).first()
+
+                if key_record:
+                    log.info(f"[DB] Self-healing DB (INSERT): Updating {key_record.keyName} to peg_id {peg_id}")
+                    key_record.peg_id = str(peg_id)
+                    session.commit()
+                    key_name = key_record.keyName
+
+                    for k in self.keys_data:
+                        if k.get("id") == key_record.id:
+                            k["peg_id"] = str(peg_id)
+                            break
+            
             for ev in reversed(self.key_interactions):
                 if ev["key_name"] == key_name and ev["returned_timestamp"] is None:
                     ev["returned_timestamp"] = returned_time
@@ -665,11 +695,6 @@ class KeyDashboardScreen(BaseScreen):
             if not updated:
                 # Key not in session → fetch taken time from DB
                 log.info(f"[KEY INSERT] Key {key_name} returned but not in session history - fetching from DB")
-
-                session = self.manager.db_session
-                key_record = session.query(AMS_Keys).filter(
-                    AMS_Keys.peg_id == peg_id
-                ).first()
 
                 taken_timestamp = None
                 if key_record and key_record.keyTakenAtTime:
@@ -693,18 +718,43 @@ class KeyDashboardScreen(BaseScreen):
     # =====================================================
     # DB COMMIT
     # =====================================================
-    def handle_key_taken_commit(self, peg_id):
+    # =====================================================
+    # DB COMMIT
+    # =====================================================
+    def handle_key_taken_commit(self, peg_id, strip, slot):
         session = self.manager.db_session
         user = self.manager.card_info
 
         key_record = session.query(AMS_Keys).filter(
             AMS_Keys.peg_id == peg_id
         ).first()
+        
+        # SELF-HEALING: If DB has the wrong peg_id (hardware mismatch),
+        # look up the physical slot instead and correct the peg_id automatically!
         if not key_record:
+            log.warning(f"[DB] No key found for peg_id={peg_id}. Attempting slot lookup strip={strip} pos={slot}")
+            key_record = session.query(AMS_Keys).filter(
+                AMS_Keys.keyStrip == strip,
+                AMS_Keys.keyPosition == slot,
+                AMS_Keys.deletedAt == None
+            ).first()
+            
+            if key_record:
+                log.info(f"[DB] Self-healing DB: Updating {key_record.keyName} to new peg_id: {peg_id}")
+                key_record.peg_id = str(peg_id)
+                session.commit()
+                
+                # Update keys_data dict loaded in memory
+                for k in self.keys_data:
+                    if k.get("id") == key_record.id:
+                        k["peg_id"] = str(peg_id)
+
+        if not key_record:
+            log.error(f"[DB] Failed to bind key taken: Strip {strip} Slot {slot} is not in DB")
             return
 
         session.query(AMS_Keys).filter(
-            AMS_Keys.peg_id == peg_id
+            AMS_Keys.id == key_record.id
         ).update(
             {
                 "keyTakenBy": user["id"],
