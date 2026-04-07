@@ -104,7 +104,8 @@ class PegScanScreen(BaseScreen):
             result = register_pegs(
                 session=self.manager.db_session,
                 ams_can=self.ams_can,
-                user_id=self.manager.user_id
+                user_id=self.manager.user_id,
+                status_callback=lambda msg, prog: Clock.schedule_once(lambda dt, m=msg, p=prog: self._update_status(m, p))
             )
             
             # Update progress during scan

@@ -23,7 +23,7 @@ from hardware_sync import sync_hardware_to_db
 TZ_INDIA = pytz.timezone("Asia/Kolkata")
 
 
-def register_pegs(session, ams_can, user_id):
+def register_pegs(session, ams_can, user_id, status_callback=None):
     """
     Complete peg registration flow:
     1. Sync hardware to DB
@@ -36,6 +36,7 @@ def register_pegs(session, ams_can, user_id):
         session: SQLAlchemy session
         ams_can: Existing AMS_CAN instance (must be initialized)
         user_id: User performing registration
+        status_callback: Optional callable for live GUI updates
     
     Returns:
         dict with 'success', 'message', and optional 'pegs_registered'
@@ -105,6 +106,15 @@ def register_pegs(session, ams_can, user_id):
     print("\n[4/5] Waiting for door to open and close...")
     print("Please open the door, then close it to start scanning...")
     
+    if status_callback:
+        status_callback("Please open the cabinet door...", 50)
+    
+    import subprocess
+    subprocess.Popen(
+        ["sudo", "python3", "solenoid.py", "1"],
+        cwd="/home/rock/Desktop/ams_v2",
+    )
+    
     door_event = Event()
     door_opened = {'value': False}
     
@@ -118,9 +128,20 @@ def register_pegs(session, ams_can, user_id):
         if value == 1 and not door_opened['value']:
             door_opened['value'] = True
             print("✓ Door opened")
+            if status_callback:
+                status_callback("Door opened. Please close door to scan lock...", 55)
+            # Standard practice is to also lock the solenoid when opened so it can latch shut.
+            subprocess.Popen(
+                ["sudo", "python3", "solenoid.py", "0"],
+                cwd="/home/rock/Desktop/ams_v2",
+            )
         
         elif value == 0 and door_opened['value']:
             print("✓ Door closed - starting peg scan")
+            subprocess.Popen(
+                ["sudo", "python3", "solenoid.py", "0"],
+                cwd="/home/rock/Desktop/ams_v2",
+            )
             door_event.set()
     
     try:
