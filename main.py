@@ -88,9 +88,28 @@ class MainApp(App):
         sm = ScreenManager(transition=NoTransition())
 
         # -------------------------------------------------
-        # SHARED STATE (NO CAN HERE)
+        # SHARED STATE
         # -------------------------------------------------
+        from amscan import AMS_CAN
+        import threading
+        import time
+
+        try:
+            print("[MAIN] Initializing Global AMS_CAN")
+            ams_can = AMS_CAN()
+            
+            def init_can():
+                for strip_id in range(1, 10):
+                    ams_can.get_version_number(strip_id)
+                time.sleep(1)
+            
+            threading.Thread(target=init_can, daemon=True).start()
+        except Exception as e:
+            print(f"[MAIN] Failed to initialize AMS_CAN: {e}")
+            ams_can = None
+
         sm.db_session = db_session
+        sm.ams_can = ams_can
         sm.auth_mode = None
         sm.final_auth_mode = None
         sm.ams_access_log = None
@@ -128,6 +147,12 @@ class MainApp(App):
     def on_stop(self):
         print("[MAIN] Shutting down application")
 
+        try:
+            if hasattr(self.root, 'ams_can') and self.root.ams_can:
+                self.root.ams_can.cleanup()
+        except Exception:
+            pass
+            
         try:
             self.root.db_session.close()
         except Exception:

@@ -241,21 +241,14 @@ class KeyDashboardScreen(BaseScreen):
             Clock.schedule_once(lambda dt: self._update_activity_ui(), 0)
 
             # -------- CAN INIT --------
-            Clock.schedule_once(lambda dt: self._update_popup_status("Initializing CAN bus..."), 0)
-            log.info("[CAN] Initializing AMS_CAN")
-            self.ams_can = AMS_CAN()
+            Clock.schedule_once(lambda dt: self._update_popup_status("Connecting to CAN bus..."), 0)
+            log.info("[CAN] Using Global AMS_CAN")
+            self.ams_can = self.manager.ams_can
 
-            # Auto-detect strips
-            time.sleep(6)  # Wait for CAN to settle
-
-            Clock.schedule_once(lambda dt: self._update_popup_status("Detecting key strips..."), 0)
-            log.info("[CAN] Detecting key strips...")
-            self.ams_can.get_version_number(1)
-            self.ams_can.get_version_number(2)
-            time.sleep(0.5)
-
-            log.info(f"[CAN] Detected {len(self.ams_can.key_lists)} strip(s)")
-
+            if self.ams_can:
+                log.info(f"[CAN] Connected. Detected {len(self.ams_can.key_lists)} strip(s)")
+            else:
+                log.warning("[CAN] Global AMS_CAN instance is not available")
             # -------- HARDWARE SYNC --------
             Clock.schedule_once(lambda dt: self._update_popup_status("Syncing hardware state..."), 0)
             log.info("[SYNC] Starting hardware sync to database...")
@@ -571,8 +564,8 @@ class KeyDashboardScreen(BaseScreen):
             self._mqtt_client = None
             log.info("[SHUTDOWN] MQTT disconnected")
 
-        # CAN cleanup
-        if self.ams_can:
+        # CAN cleanup (Locks and LEDs only)
+        if hasattr(self, 'ams_can') and self.ams_can:
             try:
                 for strip in self.ams_can.key_lists:
                     self.ams_can.unlock_all_positions(strip)
@@ -580,9 +573,8 @@ class KeyDashboardScreen(BaseScreen):
             except Exception as e:
                 log.error(f"[SHUTDOWN] CAN error: {e}")
 
-            self.ams_can.cleanup()
             self.ams_can = None
-            log.info("[SHUTDOWN] CAN cleaned up")
+            log.info("[SHUTDOWN] CAN activities stopped")
 
         log.info("[SHUTDOWN] Complete")
 

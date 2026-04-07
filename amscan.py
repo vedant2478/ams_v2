@@ -215,6 +215,22 @@ class AMS_CAN(object):
             self._current_function_response = False
             self._current_function_response_data = None
 
+        # HARDWARE BUG WORKAROUND:
+        # The key strips sometimes respond to a CAN_MSG_TYPE_GET request by echoing 
+        # the exact requested arbitration ID and appending the data payload.
+        # In this echoed ID, source is CAN_IMX_ID and destination is the list_ID!
+        if (
+            message_type == CAN_MSG_TYPE_GET
+            and len(msg.data) > 0
+            and function_type == self._current_function
+            and destination == self._current_function_list_id
+        ):
+            self._current_function_response = True
+            self._current_function_response_data = msg.data
+            if function_type == CAN_FUNCTION_VERSION:
+                if destination not in self.key_lists:
+                    self.key_lists.append(destination)
+
         # Normal commands to IMX
         if (
             destination == CAN_IMX_ID

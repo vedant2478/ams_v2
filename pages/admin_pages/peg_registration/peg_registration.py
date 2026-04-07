@@ -75,12 +75,16 @@ class PegScanScreen(BaseScreen):
                 lambda dt: self._update_status("Initializing CAN bus...", 10)
             )
             
-            self.ams_can = AMS_CAN()
+            self.ams_can = self.manager.ams_can
+            if not self.ams_can:
+                raise Exception("Global CAN instance not found")
+
+            # Quick refresh ping
             for strip_id in range(1, 10):
                 self.ams_can.get_version_number(strip_id)
             
             from time import sleep
-            sleep(2)
+            sleep(1)
             
             Clock.schedule_once(
                 lambda dt: self._update_status("CAN bus ready", 20)
@@ -133,11 +137,8 @@ class PegScanScreen(BaseScreen):
             )
         
         finally:
-            # Cleanup
-            if self.ams_can:
-                self.ams_can.cleanup()
-                self.ams_can = None
-            
+            # Cleanup (No CAN cleanup since it is global)
+            self.ams_can = None
             self.scan_in_progress = False
     
     def _update_status(self, message, progress_value):
