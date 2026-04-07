@@ -82,19 +82,25 @@ def sync_hardware_to_db(session, ams_can):
             
             # Check hardware
             key_id = ams_can.get_key_id(strip_id, position)
-            is_present = bool(key_id and key_id != "00000" and key_id != False)
             
-            # Update DB
-            old_status = key_record.keyStatus
-            
-            # Status convention: 0 = IN/PRESENT, 1 = OUT/EMPTY
-            if is_present:
-                new_status = 0  # IN
-                total_present += 1
+            # If the hardware firmare offers zero data response (times out), we retain the current DB status 
+            # to avoid aggressively purging physically inserted keys on boot.
+            if key_id is False:
+                new_status = key_record.keyStatus
+                if new_status == 0:
+                    total_present += 1
+                else:
+                    total_empty += 1
             else:
-                new_status = 1  # OUT
-                total_empty += 1
+                is_present = bool(key_id and key_id != "00000")
+                if is_present:
+                    new_status = 0  # IN
+                    total_present += 1
+                else:
+                    new_status = 1  # OUT
+                    total_empty += 1
             
+            old_status = key_record.keyStatus
             key_record.keyStatus = new_status
             
             # Log changes
