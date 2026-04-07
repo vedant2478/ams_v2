@@ -457,10 +457,16 @@ class AMS_CAN(object):
         arb_id = self.create_arbitration_id(
             self._can_controller_id, list_ID, CAN_MSG_TYPE_GET, can_function
         )
-        msg = can.Message(arbitration_id=arb_id, data=[], is_extended_id=True)
+        msg = can.Message(
+            arbitration_id=arb_id, 
+            data=[], 
+            is_extended_id=True,
+            is_remote_frame=True,
+            dlc=5
+        )
         self._current_function = can_function
         self._current_function_list_id = list_ID
-        self._currekey_listsnt_function_ack = False
+        self._current_function_ack = False
         self._current_function_response = False
         self._current_function_response_data = None
         self.send_message(msg)
