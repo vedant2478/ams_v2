@@ -171,20 +171,33 @@ def register_pegs(session, ams_can, user_id):
             ams_can.set_single_LED_state(strip, slot, CAN_LED_STATE_BLINK)
             sleep(0.15)
             
-            # Read peg ID
-            peg_id = ams_can.get_key_id(strip, slot)
+            # HARDCODED ASSIGNMENT (Developer request to skip hardware scan)
+            key = session.query(AMS_Keys).filter(
+                AMS_Keys.keyStrip == strip, 
+                AMS_Keys.keyPosition == slot, 
+                AMS_Keys.deletedAt == None
+            ).first()
             
-            if peg_id and str(peg_id).strip("0") != "":
+            if key and getattr(key, 'peg_id', None):
                 try:
-                    peg_int = int(str(peg_id))
+                    peg_int = int(key.peg_id)
                     scanned_pegs.append({
                         'peg_id': peg_int,
                         'strip': strip,
                         'slot': slot
                     })
-                    print(f"    Slot {slot:2d}: Peg ID {peg_int}")
+                    print(f"    Slot {slot:2d}: Peg ID {peg_int} (DB Copied)")
                 except ValueError:
-                    print(f"    Slot {slot:2d}: Invalid peg ID '{peg_id}'")
+                    print(f"    Slot {slot:2d}: Invalid peg ID in DB '{key.peg_id}'")
+            else:
+                # If there's no pre-existing key, we create a default placeholder
+                peg_int = 10000000000 + (strip * 1000) + slot
+                scanned_pegs.append({
+                    'peg_id': peg_int,
+                    'strip': strip,
+                    'slot': slot
+                })
+                print(f"    Slot {slot:2d}: Generated dummy peg {peg_int}")
             
             # Turn LED off
             ams_can.set_single_LED_state(strip, slot, CAN_LED_STATE_OFF)

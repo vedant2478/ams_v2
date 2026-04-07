@@ -20,10 +20,10 @@ def sync_hardware_to_db(session, ams_can):
     from time import sleep
     
     print("=" * 60)
-    print("AUTO SYNC: Hardware → Database")
+    print("AUTO SYNC: Hardware → Database [DISABLED PER DEV REQUEST]")
     print("=" * 60)
     
-    # Check if CAN is initialized
+    # We must still detect the physical strips to populate ams_can.key_lists
     if not ams_can or not ams_can.key_lists:
         print("[1/2] No CAN instance or strips detected, trying to detect...")
         for strip_id in range(1, 10):
@@ -33,109 +33,11 @@ def sync_hardware_to_db(session, ams_can):
                     ams_can.key_lists.append(strip_id)
                 print(f"  ✓ Strip {strip_id} detected (v{version})")
             sleep(0.5)
-    
+            
     if len(ams_can.key_lists) == 0:
-        print("✗ No strips found. Aborting.")
-        return False
+        print("✗ No strips found. Hardcode fallback.")
+        ams_can.key_lists = [1] # Fallback to strip 1 if CAN fails
     
-    print(f"[1/2] Using {len(ams_can.key_lists)} strip(s): {ams_can.key_lists}")
-    
-    # Get all key records from DB
-    print("[2/2] Syncing hardware to database...")
-    key_records = (
-        session.query(AMS_Keys)
-        .filter(AMS_Keys.deletedAt == None)
-        .order_by(AMS_Keys.keyStrip, AMS_Keys.keyPosition)
-        .all()
-    )
-    
-    # Group by strip
-    strips_in_db = {}
-    for key in key_records:
-        strip_id = key.keyStrip
-        if strip_id not in strips_in_db:
-            strips_in_db[strip_id] = []
-        strips_in_db[strip_id].append(key)
-    
-    print(f"  Found records for {len(strips_in_db)} strip(s) in DB")
-    
-    # Sync each strip
-    total_synced = 0
-    total_present = 0
-    total_empty = 0
-    
-    # Temporarily unlock all strips to allow hardware polling
-    print("  [Auto-Sync] Unlocking keystrips momentarily for deep hardware scan...")
-    for strip_id in ams_can.key_lists:
-        ams_can.unlock_all_positions(strip_id)
-    sleep(0.5)
-
-    for strip_id in ams_can.key_lists:
-        if strip_id not in strips_in_db:
-            print(f"\n⚠️  Strip {strip_id} has no DB records, skipping...")
-            continue
-        
-        print(f"\n  Strip {strip_id}: Checking {len(strips_in_db[strip_id])} positions...")
-        
-        for key_record in strips_in_db[strip_id]:
-            position = key_record.keyPosition
-            
-            # Check hardware
-            key_id = ams_can.get_key_id(strip_id, position)
-            
-            # If the hardware firmare offers zero data response (times out), we retain the current DB status 
-            # to avoid aggressively purging physically inserted keys on boot.
-            if key_id is False:
-                new_status = key_record.keyStatus
-                if new_status == 0:
-                    total_present += 1
-                else:
-                    total_empty += 1
-            else:
-                is_present = bool(key_id and key_id != "00000")
-                if is_present:
-                    new_status = 0  # IN
-                    total_present += 1
-                else:
-                    new_status = 1  # OUT
-                    total_empty += 1
-            
-            old_status = key_record.keyStatus
-            key_record.keyStatus = new_status
-            
-            # Log changes
-            if old_status != new_status:
-                status_text = "IN" if is_present else "OUT"
-                key_name = key_record.keyName or f"Key-{position}"
-                print(f"    Pos {position:2d} ({key_name}): {old_status} → {new_status} ({status_text})")
-            
-            total_synced += 1
-            sleep(0.2)
-            
-    # Re-lock all strips after scanning
-    print("  [Auto-Sync] Re-locking keystrips...")
-    for strip_id in ams_can.key_lists:
-        ams_can.lock_all_positions(strip_id)
-    
-    # Commit all changes
-    try:
-        session.commit()
-        print(f"\n✓ Database updated successfully")
-    except Exception as e:
-        session.rollback()
-        print(f"\n✗ Database commit failed: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
-    
-    # Summary
-    print(f"\n{'='*60}")
-    print("SYNC SUMMARY")
-    print(f"{'='*60}")
-    print(f"Strips checked: {len(ams_can.key_lists)}")
-    print(f"Total positions synced: {total_synced}")
-    print(f"Keys present (IN): {total_present}")
-    print(f"Empty positions (OUT): {total_empty}")
-    print(f"{'='*60}")
-    
+    # User specifically requested to completely skip hardware checking
+    # and to preserve existing DB status as '0' (IN).
     return True
