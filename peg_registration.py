@@ -110,6 +110,12 @@ def register_pegs(session, ams_can, user_id, status_callback=None):
         status_callback("Please open the cabinet door...", 50)
     
     import subprocess
+    # Start the door publishing monitor
+    subprocess.Popen(
+        ["sudo", "python3", "pub.py"],
+        cwd="/home/rock/Desktop/ams_v2",
+    )
+    # Unlock the solenoid
     subprocess.Popen(
         ["sudo", "python3", "solenoid.py", "1"],
         cwd="/home/rock/Desktop/ams_v2",
@@ -142,6 +148,8 @@ def register_pegs(session, ams_can, user_id, status_callback=None):
                 ["sudo", "python3", "solenoid.py", "0"],
                 cwd="/home/rock/Desktop/ams_v2",
             )
+            # Door closed, stop publishing script
+            subprocess.Popen(["sudo", "pkill", "-f", "pub.py"])
             door_event.set()
     
     try:
@@ -161,6 +169,7 @@ def register_pegs(session, ams_can, user_id, status_callback=None):
         mqtt_client.disconnect()
         
         # Cleanup
+        subprocess.Popen(["sudo", "pkill", "-f", "pub.py"])
         for strip in ams_can.key_lists:
             ams_can.unlock_all_positions(strip)
             ams_can.set_all_LED_OFF(strip)

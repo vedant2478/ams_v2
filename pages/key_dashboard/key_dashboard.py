@@ -424,6 +424,10 @@ class KeyDashboardScreen(BaseScreen):
         # Update status and activate solenoid
         self._update_popup_status("Opening door lock...")
         subprocess.Popen(
+            ["sudo", "python3", "pub.py"],
+            cwd="/home/rock/Desktop/ams_v2",
+        )
+        subprocess.Popen(
             ["sudo", "python3", "solenoid.py", "1"],
             cwd="/home/rock/Desktop/ams_v2",
         )
@@ -510,6 +514,8 @@ class KeyDashboardScreen(BaseScreen):
         log.info("[DOOR] Closed")
         self._door_open = False
 
+        subprocess.Popen(["sudo", "pkill", "-f", "pub.py"])
+
         if self._door_timer_event:
             self._door_timer_event.cancel()
             self._door_timer_event = None
@@ -563,6 +569,9 @@ class KeyDashboardScreen(BaseScreen):
             self._mqtt_client.disconnect()
             self._mqtt_client = None
             log.info("[SHUTDOWN] MQTT disconnected")
+
+        # Kill pub.py if it was running
+        subprocess.Popen(["sudo", "pkill", "-f", "pub.py"])
 
         # CAN cleanup (Locks and LEDs only)
         if hasattr(self, 'ams_can') and self.ams_can:
