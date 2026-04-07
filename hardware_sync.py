@@ -26,9 +26,11 @@ def sync_hardware_to_db(session, ams_can):
     # Check if CAN is initialized
     if not ams_can or not ams_can.key_lists:
         print("[1/2] No CAN instance or strips detected, trying to detect...")
-        for strip_id in range(1, 5):
+        for strip_id in range(1, 10):
             version = ams_can.get_version_number(strip_id)
             if version:
+                if strip_id not in ams_can.key_lists:
+                    ams_can.key_lists.append(strip_id)
                 print(f"  ✓ Strip {strip_id} detected (v{version})")
             sleep(0.5)
     

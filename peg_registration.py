@@ -53,7 +53,7 @@ def register_pegs(session, ams_can, user_id):
     if not sync_hardware_to_db(session, ams_can):
         return {
             'success': False,
-            'message': 'Hardware sync failed - no strips detected'
+            'message': 'Hardware sync failed - no keystrip detected or database error'
         }
     
     # ========================================
@@ -127,7 +127,12 @@ def register_pegs(session, ams_can, user_id):
             print("✓ Door closed - starting peg scan")
             door_event.set()
     
-    mqtt_client = mqtt.Client("peg-registration")
+    try:
+        # Paho MQTT 2.0+ requires callback_api_version
+        mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION1, "peg-registration")
+    except AttributeError:
+        # Fallback for Paho MQTT 1.x
+        mqtt_client = mqtt.Client("peg-registration")
     mqtt_client.on_connect = on_connect
     mqtt_client.on_message = on_message
     mqtt_client.connect("localhost", 1883, 60)

@@ -76,8 +76,8 @@ class PegScanScreen(BaseScreen):
             )
             
             self.ams_can = AMS_CAN()
-            self.ams_can.get_version_number(1)
-            self.ams_can.get_version_number(2)
+            for strip_id in range(1, 10):
+                self.ams_can.get_version_number(strip_id)
             
             from time import sleep
             sleep(2)
