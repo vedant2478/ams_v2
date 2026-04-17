@@ -14,9 +14,9 @@ from kivy.uix.progressbar import ProgressBar
 from kivy.graphics import Color, RoundedRectangle
 from kivy.properties import (
     StringProperty,
-    ListProperty,
     ObjectProperty,
     NumericProperty,
+    BooleanProperty,
 )
 from kivy.clock import Clock
 
@@ -160,6 +160,7 @@ class KeyDashboardScreen(BaseScreen):
     progress_value = NumericProperty(0.0)
     keys_data = ListProperty([])
     key_interactions = ListProperty([])
+    is_door_open = BooleanProperty(False)
 
     MAX_DOOR_TIME = 60
     MIN_DOOR_OPEN_TIME = 3
@@ -168,7 +169,6 @@ class KeyDashboardScreen(BaseScreen):
         super().__init__(**kwargs)
 
         self.key_widgets = {}
-        self._door_open = False
         self.door_open_seconds = 0
         self._door_opened_timestamp = None
 
@@ -282,7 +282,7 @@ class KeyDashboardScreen(BaseScreen):
         """Called on main thread after background init is done."""
         self.populate_keys()
 
-        self._door_open = False
+        self.is_door_open = False
         self.door_open_seconds = 0
         self._door_opened_timestamp = None
         self.time_remaining = str(self.MAX_DOOR_TIME)
@@ -631,9 +631,9 @@ class KeyDashboardScreen(BaseScreen):
         except ValueError:
             return
 
-        if value == 1 and not self._door_open:
+        if value == 1 and not self.is_door_open:
             Clock.schedule_once(lambda dt: self.on_door_opened())
-        elif value == 0 and self._door_open:
+        elif value == 0 and self.is_door_open:
             Clock.schedule_once(lambda dt: self.on_door_closed())
 
     # =====================================================
@@ -649,7 +649,7 @@ class KeyDashboardScreen(BaseScreen):
             cwd="/home/rock/Desktop/ams_v2",
         )
 
-        self._door_open = True
+        self.is_door_open = True
         self._door_opened_timestamp = datetime.now()
         self.door_open_seconds = 0
         self.time_remaining = str(self.MAX_DOOR_TIME)
@@ -682,7 +682,7 @@ class KeyDashboardScreen(BaseScreen):
                 return
 
         log.info("[DOOR] Closed")
-        self._door_open = False
+        self.is_door_open = False
 
         subprocess.Popen(["sudo", "pkill", "-f", "pub.py"])
 

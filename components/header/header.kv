@@ -12,13 +12,6 @@
         Rectangle:
             pos: self.pos
             size: self.size
-        
-        # Bright Accent Underline: #3B82F6 (Blue 500)
-        Color:
-            rgba: 0.231, 0.510, 0.965, 1.0
-        Rectangle:
-            pos: self.x, self.y
-            size: self.width, dp(2)
 
     # ---- Status pill (left) ----
     BoxLayout:
@@ -46,12 +39,12 @@
 
     # ---- Site name (center) ----
     Label:
-        text: root.site_text
+        text: getattr(root, 'site_text', getattr(app, 'site_name', 'SITE'))
         halign: "center"
         color: 0.973, 0.980, 0.988, 1.0  # #F8FAFC
-        font_size: "16sp"
+        font_size: "26sp"
         bold: True
-        letter_spacing: "1.5sp"
+        letter_spacing: "4sp"
 
     # ---- Time (right) ----
     Label:

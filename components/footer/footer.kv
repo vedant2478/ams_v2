@@ -11,13 +11,6 @@
         Rectangle:
             pos: self.pos
             size: self.size
-        
-        # Subtle Top Border: #334155 (Slate 700)
-        Color:
-            rgba: 0.200, 0.255, 0.333, 1.0
-        Rectangle:
-            pos: self.x, self.top - 1
-            size: self.width, 1
 
     Label:
         text: "v" + root.version

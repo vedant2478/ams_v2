@@ -105,33 +105,28 @@
                 Widget:
                     size_hint_y: 0.15
 
-            # ================= CONFIG BUTTON =================
+            # ================= ADMIN BUTTON =================
             Button:
-                text: "⚙"
+                text: "ADMIN"
                 size_hint: None, None
-                size: "60dp", "60dp"
+                size: "120dp", "48dp"
                 pos_hint: {"x": 0.03, "y": 0.03}
                 background_normal: ""
                 background_color: 0, 0, 0, 0
-                color: 0.580, 0.639, 0.722, 1.0  # 94A3B8
-                font_size: "30sp"
+                color: 0.580, 0.639, 0.722, 1.0  # Slate 400
+                font_size: "15sp"
+                bold: True
+                letter_spacing: "2sp"
                 on_release: root.open_config()
 
                 canvas.before:
                     # Slate 800 background
                     Color:
-                        rgba: 0.118, 0.161, 0.231, 0.9
-                    Ellipse:
+                        rgba: 0.118, 0.161, 0.231, 1.0
+                    RoundedRectangle:
                         pos: self.pos
                         size: self.size
-
-                canvas.after:
-                    # Slate 600 Border
-                    Color:
-                        rgba: 0.278, 0.353, 0.471, 0.8
-                    Line:
-                        circle: (self.center_x, self.center_y, self.width / 2)
-                        width: 1.5
+                        radius: [12]
 
         # ================= FOOTER =================
         Footer:
