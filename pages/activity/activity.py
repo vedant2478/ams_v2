@@ -48,6 +48,8 @@ class ActivityCodeScreen(BaseScreen):
                 self.code.append(value)
                 self.code_length = len(self.code)
                 print(f"Code: {'*' * len(self.code)}")
+                if self.code_length == self.MAX_CODE:
+                    self.on_keypad("ENTER")
 
         elif value == "BACK":
             if self.code:

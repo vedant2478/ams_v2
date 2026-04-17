@@ -119,6 +119,8 @@ class PinScreen(BaseScreen):
             if len(self.pin) < self.MAX_PIN:
                 self.pin.append(value)
                 self.pin_length = len(self.pin)
+                if self.pin_length == self.MAX_PIN:
+                    self.on_keypad("ENTER")
 
         elif value == "BACK":
             if self.pin:

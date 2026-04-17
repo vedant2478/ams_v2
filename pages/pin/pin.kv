@@ -7,37 +7,43 @@
         Header:
             pos_hint: {"top": 1}
             
+        # ====== BACK BAR ======
         BoxLayout:
             orientation: "horizontal"
             size_hint_y: None
             height: "48dp"
             padding: "16dp", 0
-            pos_hint: {"top": .95}
+            spacing: "12dp"
+            pos_hint: {"top": .938}
 
             Button:
-                text: "Back"
+                text: "< Back"
                 size_hint_x: None
                 width: "100dp"
                 background_normal: ""
                 background_color: 0, 0, 0, 0   # fully transparent
-                color: 0.90, 0.95, 1, 1
+                color: 0.580, 0.639, 0.722, 1.0  # Slate 400
                 font_size: "16sp"
+                bold: True
                 on_release: root.go_back()
 
             Widget:
+
         # ===== Main Content =====
         BoxLayout:
             orientation: "vertical"
             spacing: "26dp"
             size_hint: None, None
             size: "520dp", "720dp"
-            pos_hint: {"center_x": 0.5, "center_y": 0.55}
+            pos_hint: {"center_x": 0.5, "center_y": 0.52}
 
             # ---- Title ----
             Label:
-                text: "Enter PIN"
-                font_size: "24sp"
-                color: 0.9, 0.95, 1, 1
+                text: "ENTER PIN"
+                font_size: "22sp"
+                bold: True
+                letter_spacing: "2sp"
+                color: 0.973, 0.980, 0.988, 1.0  # Slate 50
                 size_hint_y: None
                 height: "40dp"
                 halign: "center"
@@ -47,7 +53,7 @@
             # ---- PIN Dots ----
             BoxLayout:
                 orientation: "horizontal"
-                spacing: "18dp"
+                spacing: "20dp"
                 size_hint: None, None
                 height: "32dp"
                 width: self.minimum_width
@@ -55,50 +61,51 @@
 
                 Widget:
                     size_hint: None, None
-                    size: "16dp", "16dp"
+                    size: "20dp", "20dp"
                     canvas:
                         Color:
-                            rgba: (1,1,1,0.9) if root.pin_length >= 1 else (1,1,1,0.25)
+                            # Blue 500 if active, Slate 600 if empty
+                            rgba: (0.231, 0.510, 0.965, 1.0) if root.pin_length >= 1 else (0.278, 0.353, 0.471, 1.0)
                         Ellipse:
                             pos: self.pos
                             size: self.size
 
                 Widget:
                     size_hint: None, None
-                    size: "16dp", "16dp"
+                    size: "20dp", "20dp"
                     canvas:
                         Color:
-                            rgba: (1,1,1,0.9) if root.pin_length >= 2 else (1,1,1,0.25)
+                            rgba: (0.231, 0.510, 0.965, 1.0) if root.pin_length >= 2 else (0.278, 0.353, 0.471, 1.0)
                         Ellipse:
                             pos: self.pos
                             size: self.size
 
                 Widget:
                     size_hint: None, None
-                    size: "16dp", "16dp"
+                    size: "20dp", "20dp"
                     canvas:
                         Color:
-                            rgba: (1,1,1,0.9) if root.pin_length >= 3 else (1,1,1,0.25)
+                            rgba: (0.231, 0.510, 0.965, 1.0) if root.pin_length >= 3 else (0.278, 0.353, 0.471, 1.0)
                         Ellipse:
                             pos: self.pos
                             size: self.size
 
                 Widget:
                     size_hint: None, None
-                    size: "16dp", "16dp"
+                    size: "20dp", "20dp"
                     canvas:
                         Color:
-                            rgba: (1,1,1,0.9) if root.pin_length >= 4 else (1,1,1,0.25)
+                            rgba: (0.231, 0.510, 0.965, 1.0) if root.pin_length >= 4 else (0.278, 0.353, 0.471, 1.0)
                         Ellipse:
                             pos: self.pos
                             size: self.size
 
                 Widget:
                     size_hint: None, None
-                    size: "16dp", "16dp"
+                    size: "20dp", "20dp"
                     canvas:
                         Color:
-                            rgba: (1,1,1,0.9) if root.pin_length >= 5 else (1,1,1,0.25)
+                            rgba: (0.231, 0.510, 0.965, 1.0) if root.pin_length >= 5 else (0.278, 0.353, 0.471, 1.0)
                         Ellipse:
                             pos: self.pos
                             size: self.size
@@ -107,7 +114,8 @@
             Label:
                 text: root.message
                 font_size: "16sp"
-                color: (1, 0.3, 0.3, 1) if root.message else (1,1,1,0)
+                # Amber 500
+                color: (0.961, 0.620, 0.043, 1.0) if root.message else (1,1,1,0)
                 size_hint_y: None
                 height: "30dp"
                 halign: "center"
@@ -124,23 +132,23 @@
                 height: "1dp"
                 canvas:
                     Color:
-                        rgba: 1,1,1,0.25
+                        rgba: 0.118, 0.161, 0.231, 1.0  # Slate 800
                     Rectangle:
                         pos: self.pos
                         size: self.size
 
             Widget:
                 size_hint_y: None
-                height: "20dp"
+                height: "10dp"
 
             # ---- Keypad ----
             Keypad:
                 callback: root.on_keypad
                 size_hint: None, None
-                size: "420dp", "420dp"
+                size: "480dp", "440dp"
                 pos_hint: {"center_x": 0.5}
 
         # ===== Footer =====
         Footer:
             pos_hint: {"y": 0}
-            version_text: "Version: 12.9.3"
+            version_text: "12.9.3"
