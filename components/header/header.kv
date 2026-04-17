@@ -11,7 +11,6 @@
         Rectangle:
             pos: self.pos
             size: self.size
-        # Bottom separator
         Color:
             rgba: 0.15, 0.30, 0.50, 0.50
         Rectangle:
@@ -21,16 +20,13 @@
     # ---- Status pill (left) ----
     BoxLayout:
         size_hint_x: None
-        width: status_label.texture_size[0] + dp(20)
+        width: status_label.texture_size[0] + dp(24)
         size_hint_y: None
         height: "28dp"
         pos_hint: {"center_y": 0.5}
         canvas.before:
             Color:
-                rgba: \
-                    (0.10, 0.55, 0.20, 0.85) if root.status_text == "SYSTEM READY" else \
-                    (0.70, 0.45, 0.05, 0.85) if root.status_text == "BUSY" else \
-                    (0.60, 0.10, 0.10, 0.85)
+                rgba: (0.10, 0.55, 0.20, 0.85) if root.status_text == "SYSTEM READY" else (0.70, 0.45, 0.05, 0.85) if root.status_text == "BUSY" else (0.60, 0.10, 0.10, 0.85)
             RoundedRectangle:
                 radius: [14]
                 pos: self.pos
