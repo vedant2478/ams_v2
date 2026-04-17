@@ -14,6 +14,7 @@ from kivy.uix.progressbar import ProgressBar
 from kivy.graphics import Color, RoundedRectangle
 from kivy.properties import (
     StringProperty,
+    ListProperty,
     ObjectProperty,
     NumericProperty,
     BooleanProperty,
