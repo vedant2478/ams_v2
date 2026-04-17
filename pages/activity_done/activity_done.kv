@@ -7,22 +7,23 @@
     returned_text: ""
     orientation: "vertical"
     size_hint_y: None
-    height: "90dp"
-    padding: "10dp"
-    spacing: "4dp"
+    height: "96dp"
+    padding: "16dp"
+    spacing: "8dp"
     canvas.before:
         Color:
-            rgba: 0.08, 0.16, 0.26, 1
+            # Slate 900
+            rgba: 0.059, 0.090, 0.165, 1.0
         RoundedRectangle:
             pos: self.pos
             size: self.size
-            radius: [15, 15, 15, 15]
+            radius: [12]
 
     Label:
         text: root.key_name
         font_size: "18sp"
         bold: True
-        color: 1, 1, 1, 1
+        color: 0.973, 0.980, 0.988, 1.0  # Slate 50
         size_hint_y: None
         height: "26dp"
         halign: "left"
@@ -32,9 +33,9 @@
     Label:
         text: "Taken    :  " + root.taken_text
         font_size: "14sp"
-        color: 0.85, 0.9, 0.95, 1
+        color: 0.580, 0.639, 0.722, 1.0  # Slate 400
         size_hint_y: None
-        height: "22dp"
+        height: "20dp"
         halign: "left"
         valign: "middle"
         text_size: self.size
@@ -42,9 +43,9 @@
     Label:
         text: "Returned :  " + root.returned_text
         font_size: "14sp"
-        color: 0.85, 0.9, 0.95, 1
+        color: 0.580, 0.639, 0.722, 1.0  # Slate 400
         size_hint_y: None
-        height: "22dp"
+        height: "20dp"
         halign: "left"
         valign: "middle"
         text_size: self.size
@@ -58,9 +59,7 @@
         Header:
             pos_hint: {"top": 1}
 
-        GradientBackground:
-            pos: self.parent.pos
-            size: self.parent.size
+        # (GradientBackground removed - BaseScreen provides SolidBackground)
 
         BoxLayout:
             orientation: "vertical"
@@ -68,59 +67,65 @@
             size: "540dp", "640dp"
             pos_hint: {"center_x": 0.5, "center_y": 0.50}
             padding: "30dp"
-            spacing: "18dp"
+            spacing: "24dp"
 
             # Big check
             Widget:
                 size_hint_y: None
-                height: "170dp"
+                height: "140dp"
                 canvas:
                     Color:
-                        rgba: 0, 1, 0, 1
+                        # Emerald 500
+                        rgba: 0.063, 0.725, 0.506, 1.0
                     Line:
-                        circle: (self.center_x, self.center_y, 70)
-                        width: 6
+                        circle: (self.center_x, self.center_y, 60)
+                        width: 5
                     Line:
-                        points: self.center_x - 35, self.center_y, self.center_x - 5, self.center_y - 35, self.center_x + 45, self.center_y + 35
-                        width: 6
+                        points: self.center_x - 30, self.center_y, self.center_x - 5, self.center_y - 25, self.center_x + 35, self.center_y + 25
+                        width: 5
 
             Label:
-                text: "ACTIVITY\nCOMPLETED"
-                font_size: "30sp"
+                text: "ACTIVITY COMPLETED"
+                font_size: "26sp"
                 bold: True
-                color: 0, 1, 0, 1
+                letter_spacing: "3sp"
+                color: 0.063, 0.725, 0.506, 1.0  # Emerald 500
                 halign: "center"
                 valign: "middle"
                 text_size: self.size
                 size_hint_y: None
-                height: "80dp"
+                height: "40dp"
 
             # Cards panel
             BoxLayout:
                 orientation: "vertical"
                 size_hint_y: None
                 height: self.minimum_height
-                padding: "14dp"
-                spacing: "10dp"
+                padding: "16dp"
+                spacing: "12dp"
                 canvas.before:
                     Color:
-                        rgba: 0.05, 0.12, 0.22, 1
+                        # Slate 800
+                        rgba: 0.118, 0.161, 0.231, 1.0
                     RoundedRectangle:
                         pos: self.pos
                         size: self.size
-                        radius: [22, 22, 22, 22]
+                        radius: [16]
 
                 ScrollView:
                     size_hint_y: None
                     height: "260dp"
                     do_scroll_x: False
+                    bar_width: dp(6)
+                    bar_color: 0.200, 0.255, 0.333, 0.8
+                    bar_inactive_color: 0.118, 0.161, 0.231, 0.4
 
                     BoxLayout:
                         id: cards_container
                         orientation: "vertical"
                         size_hint_y: None
                         padding: "8dp"
-                        spacing: "10dp"
+                        spacing: "12dp"
                         height: self.minimum_height
 
             Widget:
@@ -130,8 +135,8 @@
             Label:
                 text: "Auto-dismissing in [b]" + str(root.countdown) + "[/b] seconds..."
                 markup: True
-                font_size: "16sp"
-                color: 0.9, 0.95, 1, 1
+                font_size: "15sp"
+                color: 0.580, 0.639, 0.722, 1.0  # Slate 400
                 size_hint_y: None
                 height: "26dp"
 
@@ -142,14 +147,32 @@
             Button:
                 text: "RETURN TO MAIN MENU"
                 size_hint_y: None
-                height: "52dp"
+                height: "56dp"
                 font_size: "16sp"
+                letter_spacing: "2sp"
                 bold: True
                 background_normal: ""
-                background_color: 0, 0.8, 0, 1
+                background_color: 0, 0, 0, 0
                 color: 1, 1, 1, 1
                 on_release: root.on_return_pressed()
 
+                canvas.before:
+                    Color:
+                        # Blue 600 (#2563EB)
+                        rgba: 0.145, 0.388, 0.914, 0.9
+                    RoundedRectangle:
+                        pos: self.pos
+                        size: self.size
+                        radius: [12]
+
+                canvas.after:
+                    Color:
+                        # Blue 400 (#60A5FA)
+                        rgba: 0.376, 0.647, 0.980, 0.8
+                    Line:
+                        rounded_rectangle: (self.x, self.y, self.width, self.height, 12)
+                        width: 1.5
+
         Footer:
             pos_hint: {"y": 0}
-            version_text: "Version: 12.9.3"
+            version_text: "12.9.3"

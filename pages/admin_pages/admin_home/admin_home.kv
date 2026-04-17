@@ -11,10 +11,7 @@
         FloatLayout:
             size_hint_y: 1
 
-            # -------- BACKGROUND --------
-            GradientBackground:
-                pos: self.parent.pos
-                size: self.parent.size
+            # (GradientBackground removed - BaseScreen provides SolidBackground)
 
             # -------- CENTER PANEL --------
             BoxLayout:
@@ -28,7 +25,7 @@
                 Label:
                     text: "ADMIN SETTINGS"
                     font_size: "26sp"
-                    color: 0.75, 0.86, 0.94, 1
+                    color: 0.973, 0.980, 0.988, 1.0  # Slate 50
                     letter_spacing: "3sp"
                     size_hint_y: None
                     height: "50dp"
@@ -40,24 +37,26 @@
                     height: "90dp"
                     background_normal: ""
                     background_color: 0, 0, 0, 0
-                    color: 0.70, 0.82, 0.92, 1
+                    color: 0.973, 0.980, 0.988, 1.0  # Slate 50
                     font_size: "20sp"
                     letter_spacing: "2sp"
                     on_release: root.open_peg_registration()
 
                     canvas.before:
+                        # Blue 600 background (#2563EB)
                         Color:
-                            rgba: 0.06, 0.14, 0.22, 1
+                            rgba: 0.145, 0.388, 0.914, 0.9
                         RoundedRectangle:
                             pos: self.pos
                             size: self.size
-                            radius: [18]
+                            radius: [16]
 
                     canvas.after:
+                        # Bright border (#60A5FA - Blue 400)
                         Color:
-                            rgba: 0.18, 0.32, 0.48, 0.8
+                            rgba: 0.376, 0.647, 0.980, 0.8
                         Line:
-                            rounded_rectangle: (*self.pos, *self.size, 18)
+                            rounded_rectangle: (self.x, self.y, self.width, self.height, 16)
                             width: 1.5
 
                 # -------- CARD REGISTRATION --------
@@ -67,41 +66,44 @@
                     height: "90dp"
                     background_normal: ""
                     background_color: 0, 0, 0, 0
-                    color: 0.70, 0.82, 0.92, 1
+                    color: 0.973, 0.980, 0.988, 1.0  # Slate 50
                     font_size: "20sp"
                     letter_spacing: "2sp"
                     on_release: root.open_card_registration()
 
                     canvas.before:
+                        # Blue 600 background (#2563EB)
                         Color:
-                            rgba: 0.06, 0.14, 0.22, 1
+                            rgba: 0.145, 0.388, 0.914, 0.9
                         RoundedRectangle:
                             pos: self.pos
                             size: self.size
-                            radius: [18]
+                            radius: [16]
 
                     canvas.after:
+                        # Bright border (#60A5FA - Blue 400)
                         Color:
-                            rgba: 0.18, 0.32, 0.48, 0.8
+                            rgba: 0.376, 0.647, 0.980, 0.8
                         Line:
-                            rounded_rectangle: (*self.pos, *self.size, 18)
+                            rounded_rectangle: (self.x, self.y, self.width, self.height, 16)
                             width: 1.5
 
             # -------- BACK BUTTON (BOTTOM LEFT) --------
             Button:
-                text: "← Back"
+                text: "< Back"
                 size_hint: None, None
-                size: "110dp", "45dp"
-                pos_hint: {"x": 0.02, "y": 0.02}
+                size: "120dp", "48dp"
+                pos_hint: {"x": 0.03, "y": 0.03}
                 background_normal: ""
                 background_color: 0, 0, 0, 0
-                color: 0.65, 0.78, 0.88, 1
+                color: 0.580, 0.639, 0.722, 1.0  # Slate 400
                 font_size: "16sp"
+                bold: True
                 on_release: root.go_home()
 
                 canvas.before:
                     Color:
-                        rgba: 0.06, 0.14, 0.22, 1
+                        rgba: 0.118, 0.161, 0.231, 1.0  # Slate 800
                     RoundedRectangle:
                         pos: self.pos
                         size: self.size

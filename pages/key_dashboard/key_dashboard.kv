@@ -14,30 +14,32 @@
             # ================= HEADER =================
             Header:
                 size_hint_y: None
-                height: dp(56)
+                height: dp(64)
                 status_text: "BUSY"
 
             # ====== BACK BAR ======
             BoxLayout:
                 size_hint_y: None
-                height: dp(44)
-                padding: dp(14), 0
-                spacing: dp(8)
+                height: dp(48)
+                padding: dp(16), 0
+                spacing: dp(12)
                 canvas.before:
                     Color:
-                        rgba: 0.01, 0.05, 0.10, 0.90
+                        # Slate 800
+                        rgba: 0.118, 0.161, 0.231, 0.95
                     Rectangle:
                         pos: self.pos
                         size: self.size
 
                 Button:
-                    text: "<- Back"
+                    text: "< Back"
                     size_hint_x: None
-                    width: dp(90)
+                    width: dp(100)
                     background_normal: ""
                     background_color: 0, 0, 0, 0
-                    color: 0.60, 0.78, 0.92, 1
-                    font_size: "15sp"
+                    color: 0.580, 0.639, 0.722, 1.0  # Slate 400
+                    font_size: "16sp"
+                    bold: True
                     on_release: root.go_back()
 
                 Widget:
@@ -46,18 +48,23 @@
                 BoxLayout:
                     size_hint_x: None
                     width: dp(190)
-                    padding: dp(8), dp(4)
+                    padding: dp(12), dp(4)
+                    pos_hint: {"center_y": 0.5}
+                    size_hint_y: None
+                    height: dp(32)
                     canvas.before:
                         Color:
-                            rgba: 0.06, 0.14, 0.26, 1
+                            # Slate 700
+                            rgba: 0.200, 0.255, 0.333, 1.0
                         RoundedRectangle:
-                            radius: [12]
+                            radius: [16]
                             pos: self.pos
                             size: self.size
                     Label:
                         text: root.user_name
-                        color: 0.80, 0.90, 1, 1
+                        color: 0.973, 0.980, 0.988, 1.0  # Slate 50
                         font_size: "13sp"
+                        bold: True
                         halign: "center"
                         valign: "middle"
                         text_size: self.size
@@ -68,24 +75,25 @@
 
                 BoxLayout:
                     orientation: "vertical"
-                    size_hint: 0.92, 0.95
+                    size_hint: 0.94, 0.96
                     pos_hint: {"center_x": 0.5, "center_y": 0.5}
                     padding: dp(16)
-                    spacing: dp(12)
+                    spacing: dp(16)
 
                     # -------- ACTIVITY BLOCK --------
                     BoxLayout:
                         size_hint_y: None
-                        height: dp(68)
-                        spacing: dp(10)
+                        height: dp(76)
+                        spacing: dp(16)
 
                         # Activity code pill
                         BoxLayout:
-                            padding: dp(12), dp(6)
+                            padding: dp(16), dp(8)
                             size_hint_x: 0.45
                             canvas.before:
                                 Color:
-                                    rgba: 0.08, 0.38, 0.18, 1
+                                    # Blue 500 (Vibrant blue)
+                                    rgba: 0.231, 0.510, 0.965, 1.0
                                 RoundedRectangle:
                                     radius: [16]
                                     pos: self.pos
@@ -95,8 +103,8 @@
                                 spacing: dp(2)
                                 Label:
                                     text: "ACTIVITY CODE"
-                                    font_size: "10sp"
-                                    color: 0.55, 0.80, 0.60, 1
+                                    font_size: "11sp"
+                                    color: 0.85, 0.92, 1.0, 1.0
                                     bold: True
                                     halign: "left"
                                     text_size: self.size
@@ -105,18 +113,19 @@
                                     text: root.activity_code
                                     bold: True
                                     color: 1, 1, 1, 1
-                                    font_size: "22sp"
+                                    font_size: "24sp"
                                     halign: "left"
                                     text_size: self.size
                                     size_hint_y: 0.60
 
                         # Activity name + timer
                         BoxLayout:
-                            padding: dp(12), dp(6)
+                            padding: dp(16), dp(8)
                             size_hint_x: 0.55
                             canvas.before:
                                 Color:
-                                    rgba: 0.04, 0.10, 0.20, 1
+                                    # Slate 800
+                                    rgba: 0.118, 0.161, 0.231, 1.0
                                 RoundedRectangle:
                                     radius: [16]
                                     pos: self.pos
@@ -126,15 +135,16 @@
                                 spacing: dp(2)
                                 Label:
                                     text: root.activity_name
-                                    font_size: "12sp"
-                                    color: 0.75, 0.88, 1, 1
+                                    font_size: "13sp"
+                                    color: 0.973, 0.980, 0.988, 1.0  # Slate 50
                                     halign: "right"
                                     text_size: self.size
                                     size_hint_y: 0.45
                                 Label:
                                     text: root.time_remaining + "s remaining"
-                                    font_size: "15sp"
-                                    color: 0.65, 0.88, 1, 1
+                                    font_size: "16sp"
+                                    # Emerald 500
+                                    color: 0.063, 0.725, 0.506, 1.0
                                     bold: True
                                     halign: "right"
                                     text_size: self.size
@@ -143,12 +153,13 @@
                     # -------- PROGRESS BAR --------
                     BoxLayout:
                         size_hint_y: None
-                        height: dp(10)
+                        height: dp(8)
                         canvas.before:
                             Color:
-                                rgba: 0.08, 0.16, 0.28, 1
+                                # Slate 800
+                                rgba: 0.118, 0.161, 0.231, 1.0
                             RoundedRectangle:
-                                radius: [5]
+                                radius: [4]
                                 pos: self.pos
                                 size: self.size
 
@@ -157,22 +168,23 @@
                             size_hint_x: root.progress_value
                             canvas:
                                 Color:
-                                    rgba: 0.18, 0.70, 0.38, 1
+                                    # Emerald 500
+                                    rgba: 0.063, 0.725, 0.506, 1.0
                                 RoundedRectangle:
-                                    radius: [5]
+                                    radius: [4]
                                     pos: self.pos
                                     size: self.size
 
                     # -------- KEY COUNT --------
                     BoxLayout:
                         size_hint_y: None
-                        height: dp(26)
+                        height: dp(28)
 
                         Label:
                             text: "KEYS  ( " + str(len(root.keys_data)) + " )"
-                            font_size: "13sp"
+                            font_size: "14sp"
                             bold: True
-                            color: 0.55, 0.72, 0.88, 1
+                            color: 0.580, 0.639, 0.722, 1.0  # Slate 400
                             halign: "left"
                             text_size: self.size
 
@@ -180,8 +192,8 @@
 
                         Label:
                             text: "Tap a key to close session"
-                            font_size: "11sp"
-                            color: 0.35, 0.50, 0.65, 1
+                            font_size: "12sp"
+                            color: 0.580, 0.639, 0.722, 1.0  # Slate 400
                             halign: "right"
                             text_size: self.size
 
@@ -189,58 +201,67 @@
                     BoxLayout:
                         orientation: "vertical"
                         size_hint_y: 1
-                        padding: dp(10)
-                        spacing: dp(6)
+                        padding: dp(12)
+                        spacing: dp(8)
                         canvas.before:
                             Color:
-                                rgba: 0.02, 0.07, 0.14, 1
+                                # Very dark slate (Slate 950 essentially)
+                                rgba: 0.043, 0.067, 0.125, 1.0
                             RoundedRectangle:
-                                radius: [18]
+                                radius: [16]
                                 pos: self.pos
                                 size: self.size
 
                         ScrollView:
                             do_scroll_x: False
-                            bar_width: dp(4)
-                            bar_color: 0.20, 0.40, 0.62, 0.8
-                            bar_inactive_color: 0.15, 0.30, 0.48, 0.4
+                            bar_width: dp(6)
+                            bar_color: 0.200, 0.255, 0.333, 0.8
+                            bar_inactive_color: 0.118, 0.161, 0.231, 0.4
 
                             GridLayout:
                                 id: key_grid
                                 cols: 1
-                                spacing: dp(6)
+                                spacing: dp(8)
                                 padding: dp(4)
                                 size_hint_y: None
                                 height: self.minimum_height
                                 row_force_default: True
-                                row_default_height: dp(64)
+                                row_default_height: dp(72)
 
             # ================= FOOTER =================
             Footer:
                 size_hint_y: None
-                height: dp(32)
+                height: dp(36)
                 version: "12.9.3"
 
 
 <KeyItem>:
     size_hint_y: None
-    height: dp(64)
-    padding: dp(16), dp(6)
-    spacing: dp(12)
+    height: dp(72)
+    padding: dp(16), dp(8)
+    spacing: dp(16)
 
     canvas.before:
         Color:
-            rgba: 0.04, 0.18, 0.10, 1
+            # Slate 800 background for items
+            rgba: 0.118, 0.161, 0.231, 1.0
         RoundedRectangle:
-            radius: [14]
+            radius: [12]
             pos: self.pos
             size: self.size
+        # Left accent line using root.status_color from python
+        Color:
+            rgba: root.status_color
+        RoundedRectangle:
+            radius: [12, 0, 0, 12]
+            pos: self.x, self.y
+            size: dp(6), self.height
 
     # -------- KEY NAME --------
     Label:
         text: root.key_name
-        color: 0.90, 0.95, 1, 1
-        font_size: "17sp"
+        color: 0.973, 0.980, 0.988, 1.0  # Slate 50
+        font_size: "18sp"
         bold: True
         halign: "left"
         valign: "middle"
@@ -249,24 +270,25 @@
     # -------- STATUS INDICATOR --------
     BoxLayout:
         size_hint_x: None
-        width: dp(90)
-        spacing: dp(8)
-        padding: dp(6), 0
+        width: dp(100)
+        spacing: dp(10)
+        padding: dp(8), 0
+        pos_hint: {"center_y": 0.5}
 
         Widget:
             size_hint_x: None
-            width: dp(18)
+            width: dp(20)
             canvas:
                 Color:
                     rgba: root.status_color
                 Ellipse:
-                    pos: self.center_x - dp(7), self.center_y - dp(7)
-                    size: dp(14), dp(14)
+                    pos: self.center_x - dp(8), self.center_y - dp(8)
+                    size: dp(16), dp(16)
 
         Label:
             text: root.status_text
             color: root.status_color
-            font_size: "16sp"
+            font_size: "17sp"
             bold: True
             valign: "middle"
             halign: "center"

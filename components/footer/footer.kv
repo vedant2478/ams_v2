@@ -1,26 +1,28 @@
 <Footer>:
     size_hint_y: None
-    height: "32dp"
+    height: "36dp"
     orientation: "horizontal"
-    padding: "12dp", 0
+    padding: "16dp", "0dp"
 
     canvas.before:
+        # Background: #1E293B (Slate 800)
         Color:
-            rgba: 0.01, 0.04, 0.10, 0.70
+            rgba: 0.118, 0.161, 0.231, 1.0
         Rectangle:
             pos: self.pos
             size: self.size
-        # Top separator
+        
+        # Subtle Top Border: #334155 (Slate 700)
         Color:
-            rgba: 0.12, 0.25, 0.40, 0.40
+            rgba: 0.200, 0.255, 0.333, 1.0
         Rectangle:
             pos: self.x, self.top - 1
             size: self.width, 1
 
     Label:
         text: "v" + root.version
-        color: 0.45, 0.60, 0.75, 0.75
-        font_size: "11sp"
+        color: 0.392, 0.455, 0.541, 1.0  # #64748B (Slate 500)
+        font_size: "12sp"
         halign: "center"
         valign: "middle"
         text_size: self.size
