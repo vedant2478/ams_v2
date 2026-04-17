@@ -1,9 +1,9 @@
 # admin_screen.py
 
-from kivy.uix.screenmanager import Screen
+from components.base_screen import BaseScreen
 
 
-class AdminScreen(Screen):
+class AdminScreen(BaseScreen):
     """
     Admin Configuration Screen
     """
