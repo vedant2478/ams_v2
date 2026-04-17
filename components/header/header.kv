@@ -1,30 +1,62 @@
 <Header>:
     size_hint_y: None
-    height: "50dp"
-    padding: "12dp"
+    height: "56dp"
+    padding: "14dp", "6dp"
     spacing: "10dp"
     orientation: "horizontal"
-    
-    # No canvas.before - completely transparent, shows gradient behind
-    
-    Label:
-        text: root.status_text
-        color:
-            (0.29, 0.87, 0.5, 1) if root.status_text == "SYSTEM READY" else \
-            (1, 0.75, 0.2, 1) if root.status_text == "BUSY" else \
-            (1, 0.3, 0.3, 1)
-        halign: "left"
-        font_size: "13sp"
-        bold: True
-    
+
+    canvas.before:
+        Color:
+            rgba: 0.01, 0.05, 0.12, 0.90
+        Rectangle:
+            pos: self.pos
+            size: self.size
+        # Bottom separator
+        Color:
+            rgba: 0.15, 0.30, 0.50, 0.50
+        Rectangle:
+            pos: self.x, self.y
+            size: self.width, 1
+
+    # ---- Status pill (left) ----
+    BoxLayout:
+        size_hint_x: None
+        width: status_label.texture_size[0] + dp(20)
+        size_hint_y: None
+        height: "28dp"
+        pos_hint: {"center_y": 0.5}
+        canvas.before:
+            Color:
+                rgba: \
+                    (0.10, 0.55, 0.20, 0.85) if root.status_text == "SYSTEM READY" else \
+                    (0.70, 0.45, 0.05, 0.85) if root.status_text == "BUSY" else \
+                    (0.60, 0.10, 0.10, 0.85)
+            RoundedRectangle:
+                radius: [14]
+                pos: self.pos
+                size: self.size
+        Label:
+            id: status_label
+            text: root.status_text if root.status_text else "SYSTEM READY"
+            color: 1, 1, 1, 1
+            halign: "center"
+            font_size: "12sp"
+            bold: True
+
+    # ---- Site name (center) ----
     Label:
         text: root.site_text
         halign: "center"
-        color: 0.95, 0.98, 1, 1
-        font_size: "13sp"
-    
+        color: 0.85, 0.92, 1, 1
+        font_size: "14sp"
+        bold: True
+        letter_spacing: "1sp"
+
+    # ---- Time (right) ----
     Label:
         text: root.time_text
         halign: "right"
-        color: 0.95, 0.98, 1, 1
+        color: 0.70, 0.82, 0.90, 1
         font_size: "13sp"
+        size_hint_x: None
+        width: "88dp"

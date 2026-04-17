@@ -179,4 +179,4 @@ class PegScanScreen(BaseScreen):
     
     def go_back(self):
         """Go back to previous screen"""
-        self.manager.current = "admin"  # or wherever you came from
+        self.manager.current = "admin_home"

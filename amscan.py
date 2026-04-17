@@ -2,6 +2,7 @@ from time import sleep
 import can
 import ctypes
 import logging
+import threading
 
 CHANNEL_NAME = "can0"
 CAN_SOURCE_MASK = 0x0FF00000
@@ -64,7 +65,11 @@ class AMS_CAN(object):
         self._current_function_response = False
         self._current_function_response_data = None
 
-        # Key events
+        # Thread lock: serialises all send→sleep→response cycles
+        # so background threads cannot interleave CAN messages.
+        self._can_lock = threading.Lock()
+
+        # Key events (written by notifier thread, read by poll thread)
         self.key_inserted_event = False
         self.key_inserted_id = None          # peg id (int)
         self.key_taken_event = False
@@ -298,81 +303,75 @@ class AMS_CAN(object):
                 self.key_inserted_id = int(key_fob_id)
 
     def unlock_single_key(self, strip_id, position):
+        """Unlock one key position and turn its LED on."""
         print(f"AMS_CAN: unlocking strip {strip_id}, position {position}")
-        led_ok = self.set_single_LED_state(strip_id, position, CAN_LED_STATE_ON)
-        lock_ok = self.set_single_key_lock_state(strip_id, position, CAN_KEY_UNLOCKED)
+        with self._can_lock:
+            led_ok = self._set_single_LED_state_unlocked(strip_id, position, CAN_LED_STATE_ON)
+            lock_ok = self._set_single_key_lock_state_unlocked(strip_id, position, CAN_KEY_UNLOCKED)
         return bool(led_ok and lock_ok)
 
     def get_version_number(self, list_ID):
-        arb_id = self.create_arbitration_id(
-            self._can_controller_id, list_ID, CAN_MSG_TYPE_GET, CAN_FUNCTION_VERSION
-        )
-        msg = can.Message(arbitration_id=arb_id, data=[], is_extended_id=True)
-        self._current_function = CAN_FUNCTION_VERSION
-        self._current_function_list_id = list_ID
-        self._current_function_ack = False
-        self._current_function_response = False
-        self._current_function_response_data = ""
-        self.send_message(msg)
-        sleep(0.2)
-        print(
-            "Get Version no Response: "
-            + str(self._current_function_response)
-            + "   & Date = "
-            + str(self._current_function_response_data)
-        )
-        if self._current_function_response and self._current_function_response_data:
-            return list(self._current_function_response_data)
-        else:
-            return None
+        with self._can_lock:
+            arb_id = self.create_arbitration_id(
+                self._can_controller_id, list_ID, CAN_MSG_TYPE_GET, CAN_FUNCTION_VERSION
+            )
+            msg = can.Message(arbitration_id=arb_id, data=[], is_extended_id=True)
+            self._current_function = CAN_FUNCTION_VERSION
+            self._current_function_list_id = list_ID
+            self._current_function_ack = False
+            self._current_function_response = False
+            self._current_function_response_data = ""
+            self.send_message(msg)
+            sleep(0.2)
+            if self._current_function_response and self._current_function_response_data:
+                return list(self._current_function_response_data)
+            else:
+                return None
 
     def set_all_LED_ON(self, list_ID, blinking):
-        arb_id = self.create_arbitration_id(
-            self._can_controller_id, list_ID, CAN_MSG_TYPE_SET, CAN_FUNCTION_ALL_LEDS
-        )
-
-        if blinking:
-            data = [0x22] * 7
-        else:
-            data = [0x11] * 7
-
-        msg = can.Message(
-            arbitration_id=arb_id, data=data, is_extended_id=True
-        )
-        self._current_function = CAN_FUNCTION_ALL_LEDS
-        self._current_function_list_id = list_ID
-        self._current_function_ack = False
-        self._current_function_response = False
-        self._current_function_response_data = None
-        self.send_message(msg)
-        sleep(0.2)
-        return bool(self._current_function_response)
+        with self._can_lock:
+            arb_id = self.create_arbitration_id(
+                self._can_controller_id, list_ID, CAN_MSG_TYPE_SET, CAN_FUNCTION_ALL_LEDS
+            )
+            data = [0x22] * 7 if blinking else [0x11] * 7
+            msg = can.Message(arbitration_id=arb_id, data=data, is_extended_id=True)
+            self._current_function = CAN_FUNCTION_ALL_LEDS
+            self._current_function_list_id = list_ID
+            self._current_function_ack = False
+            self._current_function_response = False
+            self._current_function_response_data = None
+            self.send_message(msg)
+            sleep(0.2)
+            return bool(self._current_function_response)
 
     def set_all_LED_OFF(self, list_ID):
-        arb_id = self.create_arbitration_id(
-            self._can_controller_id, list_ID, CAN_MSG_TYPE_SET, CAN_FUNCTION_ALL_LEDS
-        )
-
-        msg = can.Message(
-            arbitration_id=arb_id,
-            data=[0x00] * 7,
-            is_extended_id=True,
-        )
-        self._current_function = CAN_FUNCTION_ALL_LEDS
-        self._current_function_list_id = list_ID
-        self._current_function_ack = False
-        self._current_function_response = False
-        self._current_function_response_data = None
-        self.send_message(msg)
-        sleep(0.2)
-        return bool(self._current_function_response)
+        with self._can_lock:
+            arb_id = self.create_arbitration_id(
+                self._can_controller_id, list_ID, CAN_MSG_TYPE_SET, CAN_FUNCTION_ALL_LEDS
+            )
+            msg = can.Message(
+                arbitration_id=arb_id, data=[0x00] * 7, is_extended_id=True,
+            )
+            self._current_function = CAN_FUNCTION_ALL_LEDS
+            self._current_function_list_id = list_ID
+            self._current_function_ack = False
+            self._current_function_response = False
+            self._current_function_response_data = None
+            self.send_message(msg)
+            sleep(0.2)
+            return bool(self._current_function_response)
 
     # Note that LED/POSITIONS range from 0 to 13
     def set_single_LED_state(self, list_ID, led_ID, led_state):
+        """Thread-safe single LED command."""
+        with self._can_lock:
+            return self._set_single_LED_state_unlocked(list_ID, led_ID, led_state)
+
+    def _set_single_LED_state_unlocked(self, list_ID, led_ID, led_state):
+        """Inner implementation — call only when _can_lock is held."""
         arb_id = self.create_arbitration_id(
             self._can_controller_id, list_ID, CAN_MSG_TYPE_SET, CAN_FUNCTION_SINGLE_LED
         )
-
         msg = can.Message(
             arbitration_id=arb_id, data=[led_ID, led_state], is_extended_id=True
         )
@@ -386,13 +385,18 @@ class AMS_CAN(object):
         return bool(self._current_function_response)
 
     def set_single_key_lock_state(self, list_ID, position, lock_status):
+        """Thread-safe single key lock command."""
+        with self._can_lock:
+            return self._set_single_key_lock_state_unlocked(list_ID, position, lock_status)
+
+    def _set_single_key_lock_state_unlocked(self, list_ID, position, lock_status):
+        """Inner implementation — call only when _can_lock is held."""
         arb_id = self.create_arbitration_id(
             self._can_controller_id,
             list_ID,
             CAN_MSG_TYPE_SET,
             CAN_FUNCTION_SINGLE_KEYLOCK,
         )
-
         msg = can.Message(
             arbitration_id=arb_id, data=[position, lock_status], is_extended_id=True
         )
@@ -406,48 +410,34 @@ class AMS_CAN(object):
         return bool(self._current_function_response)
 
     def lock_all_positions(self, list_ID):
-        arb_id = self.create_arbitration_id(
-            self._can_controller_id,
-            list_ID,
-            CAN_MSG_TYPE_SET,
-            CAN_FUNCTION_ALL_KEYLOCKS,
-        )
-
-        msg = can.Message(
-            arbitration_id=arb_id,
-            data=[0x00] * 7,
-            is_extended_id=True,
-        )
-        self._current_function = CAN_FUNCTION_ALL_KEYLOCKS
-        self._current_function_list_id = list_ID
-        self._current_function_ack = False
-        self._current_function_response = False
-        self._current_function_response_data = None
-        self.send_message(msg)
-        sleep(0.2)
-        return bool(self._current_function_response)
+        with self._can_lock:
+            arb_id = self.create_arbitration_id(
+                self._can_controller_id, list_ID, CAN_MSG_TYPE_SET, CAN_FUNCTION_ALL_KEYLOCKS,
+            )
+            msg = can.Message(arbitration_id=arb_id, data=[0x00] * 7, is_extended_id=True)
+            self._current_function = CAN_FUNCTION_ALL_KEYLOCKS
+            self._current_function_list_id = list_ID
+            self._current_function_ack = False
+            self._current_function_response = False
+            self._current_function_response_data = None
+            self.send_message(msg)
+            sleep(0.2)
+            return bool(self._current_function_response)
 
     def unlock_all_positions(self, list_ID):
-        arb_id = self.create_arbitration_id(
-            self._can_controller_id,
-            list_ID,
-            CAN_MSG_TYPE_SET,
-            CAN_FUNCTION_ALL_KEYLOCKS,
-        )
-
-        msg = can.Message(
-            arbitration_id=arb_id,
-            data=[0x11] * 7,
-            is_extended_id=True,
-        )
-        self._current_function = CAN_FUNCTION_ALL_KEYLOCKS
-        self._current_function_list_id = list_ID
-        self._current_function_ack = False
-        self._current_function_response = False
-        self._current_function_response_data = None
-        self.send_message(msg)
-        sleep(0.2)
-        return bool(self._current_function_response)
+        with self._can_lock:
+            arb_id = self.create_arbitration_id(
+                self._can_controller_id, list_ID, CAN_MSG_TYPE_SET, CAN_FUNCTION_ALL_KEYLOCKS,
+            )
+            msg = can.Message(arbitration_id=arb_id, data=[0x11] * 7, is_extended_id=True)
+            self._current_function = CAN_FUNCTION_ALL_KEYLOCKS
+            self._current_function_list_id = list_ID
+            self._current_function_ack = False
+            self._current_function_response = False
+            self._current_function_response_data = None
+            self.send_message(msg)
+            sleep(0.2)
+            return bool(self._current_function_response)
 
     def get_key_id(self, list_ID, key_position):
 

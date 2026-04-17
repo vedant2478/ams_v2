@@ -99,9 +99,9 @@ class MainApp(App):
             ams_can = AMS_CAN()
             
             def init_can():
-                for strip_id in range(1, 10):
+                for strip_id in range(1, 5):   # scan strips 1–4 only
                     ams_can.get_version_number(strip_id)
-                time.sleep(1)
+                time.sleep(0.5)
             
             threading.Thread(target=init_can, daemon=True).start()
         except Exception as e:

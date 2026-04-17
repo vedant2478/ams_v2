@@ -2,6 +2,10 @@
 """
 Base screen with automatic gradient background.
 All app screens should inherit from this class.
+
+PERFORMANCE: Gradient texture is created ONCE at class level and reused
+across all instances — avoids expensive 1024-pixel texture re-generation
+on every pos/size change.
 """
 
 from kivy.uix.screenmanager import Screen
@@ -14,23 +18,29 @@ class GradientBackground(Widget):
     """
     Reusable smooth gradient background widget.
     Creates a smooth blend from light blue (top) to dark blue (bottom).
+
+    The texture is generated once and cached at the class level.
+    Only the Rectangle position/size is updated on layout changes.
     """
-    
+
+    _cached_texture = None  # shared across all instances
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.bind(pos=self.update_gradient, size=self.update_gradient)
-        
-    def update_gradient(self, *args):
-        self.canvas.before.clear()
-        
-        # Create smooth vertical gradient texture
+        self._rect = None
+        self.bind(pos=self._redraw, size=self._redraw)
+
+    # ------------------------------------------------------------------
+    # Texture creation (called once)
+    # ------------------------------------------------------------------
+    @classmethod
+    def _build_texture(cls):
         texture = Texture.create(size=(1, 1024), colorfmt='rgb')
         gradient_data = []
-        
+
         for i in range(1024):
             pos = i / 1023.0
-            
-            # Light to dark gradient
+
             if pos < 0.30:
                 t = pos / 0.30
                 r = 0.20 - (0.20 - 0.08) * t
@@ -50,50 +60,62 @@ class GradientBackground(Widget):
                 r = 0.01
                 g = 0.04
                 b = 0.08
-            
+
             gradient_data.extend([
                 int(r * 255),
                 int(g * 255),
-                int(b * 255)
+                int(b * 255),
             ])
-        
+
         buf = bytes(gradient_data)
         texture.blit_buffer(buf, colorfmt='rgb', bufferfmt='ubyte')
-        
+        return texture
+
+    # ------------------------------------------------------------------
+    # Draw / redraw (cheap — just moves the Rectangle)
+    # ------------------------------------------------------------------
+    def _redraw(self, *args):
+        if GradientBackground._cached_texture is None:
+            GradientBackground._cached_texture = self._build_texture()
+
+        self.canvas.before.clear()
         with self.canvas.before:
-            Rectangle(texture=texture, pos=self.pos, size=self.size)
+            self._rect = Rectangle(
+                texture=GradientBackground._cached_texture,
+                pos=self.pos,
+                size=self.size,
+            )
 
 
 class BaseScreen(Screen):
     """
     Base screen class that ALL pages inherit from.
-    Automatically adds gradient background to every page.
-    
+    Automatically adds a gradient background to every page.
+
     Usage:
         from components.base_screen import BaseScreen
-        
+
         class HomeScreen(BaseScreen):
             pass
     """
-    
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        
-        # Add gradient background automatically
+
         gradient = GradientBackground()
         gradient.pos = self.pos
         gradient.size = self.size
-        
+
         self.bind(pos=self._update_gradient_pos, size=self._update_gradient_size)
-        
-        # Add as first child (bottom layer)
+
+        # Add as the bottom-most child so content renders on top
         self.add_widget(gradient, index=len(self.children))
         self._gradient_bg = gradient
-    
+
     def _update_gradient_pos(self, instance, value):
         if hasattr(self, '_gradient_bg'):
             self._gradient_bg.pos = value
-    
+
     def _update_gradient_size(self, instance, value):
         if hasattr(self, '_gradient_bg'):
             self._gradient_bg.size = value

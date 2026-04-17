@@ -1,12 +1,26 @@
 <Footer>:
     size_hint_y: None
-    height: "30dp"
+    height: "32dp"
     orientation: "horizontal"
-    
-    # No canvas.before - completely transparent, shows gradient behind
-    
+    padding: "12dp", 0
+
+    canvas.before:
+        Color:
+            rgba: 0.01, 0.04, 0.10, 0.70
+        Rectangle:
+            pos: self.pos
+            size: self.size
+        # Top separator
+        Color:
+            rgba: 0.12, 0.25, 0.40, 0.40
+        Rectangle:
+            pos: self.x, self.top - 1
+            size: self.width, 1
+
     Label:
-        text: "123.3.4"
-        color: 0.6, 0.75, 0.88, 0.6
+        text: "v" + root.version
+        color: 0.45, 0.60, 0.75, 0.75
         font_size: "11sp"
         halign: "center"
+        valign: "middle"
+        text_size: self.size

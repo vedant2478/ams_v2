@@ -1,10 +1,11 @@
 #:kivy 2.1.0
+#:import dp kivy.metrics.dp
 
 <KeyDashboardScreen>:
     FloatLayout:
 
         # =====================================================
-        # BASE SCREEN (UNCHANGED UI)
+        # FULL-SCREEN LAYOUT
         # =====================================================
         BoxLayout:
             orientation: "vertical"
@@ -13,114 +14,195 @@
             # ================= HEADER =================
             Header:
                 size_hint_y: None
-                height: dp(64)
+                height: dp(56)
+                status_text: "BUSY"
 
+            # ====== BACK BAR ======
             BoxLayout:
                 size_hint_y: None
-                height: dp(48)
-                padding: dp(16), 0
+                height: dp(44)
+                padding: dp(14), 0
+                spacing: dp(8)
+                canvas.before:
+                    Color:
+                        rgba: 0.01, 0.05, 0.10, 0.90
+                    Rectangle:
+                        pos: self.pos
+                        size: self.size
 
                 Button:
-                    text: "Back"
+                    text: "← Back"
                     size_hint_x: None
-                    width: dp(100)
+                    width: dp(90)
                     background_normal: ""
                     background_color: 0, 0, 0, 0
-                    color: 0.90, 0.95, 1, 1
-                    font_size: "16sp"
+                    color: 0.60, 0.78, 0.92, 1
+                    font_size: "15sp"
                     on_release: root.go_back()
 
                 Widget:
+
+                # User badge
+                BoxLayout:
+                    size_hint_x: None
+                    width: dp(180)
+                    padding: dp(8), dp(4)
+                    canvas.before:
+                        Color:
+                            rgba: 0.06, 0.14, 0.26, 1
+                        RoundedRectangle:
+                            radius: [12]
+                            pos: self.pos
+                            size: self.size
+                    Label:
+                        text: "👤  " + root.user_name
+                        color: 0.80, 0.90, 1, 1
+                        font_size: "13sp"
+                        halign: "center"
+                        valign: "middle"
+                        text_size: self.size
 
             # ================= BODY =================
             FloatLayout:
                 size_hint_y: 1
 
-                GradientBackground:
-                    pos: self.pos
-                    size: self.size
+
 
                 BoxLayout:
                     orientation: "vertical"
-                    size_hint: 0.9, 0.9
+                    size_hint: 0.92, 0.95
                     pos_hint: {"center_x": 0.5, "center_y": 0.5}
-                    padding: dp(20)
-                    spacing: dp(15)
+                    padding: dp(16)
+                    spacing: dp(12)
 
-                    # -------- TITLE --------
-                    Label:
-                        text: "KEY AUTHORIZATION\nDASHBOARD"
-                        font_size: "24sp"
-                        bold: True
-                        color: 0.92, 0.96, 0.99, 1
-                        halign: "center"
-                        valign: "middle"
-                        size_hint_y: None
-                        height: self.texture_size[1] + dp(20)
-                        text_size: self.width, None
-
-                    # -------- ACTIVITY INFO --------
+                    # -------- ACTIVITY BLOCK --------
                     BoxLayout:
                         size_hint_y: None
-                        height: dp(56)
-                        spacing: dp(12)
+                        height: dp(68)
+                        spacing: dp(10)
 
+                        # Activity code pill
                         BoxLayout:
-                            padding: dp(10)
-                            size_hint_x: 0.6
+                            padding: dp(12), dp(6)
+                            size_hint_x: 0.48
                             canvas.before:
                                 Color:
-                                    rgba: 0.18, 0.65, 0.31, 1
+                                    rgba: 0.08, 0.38, 0.18, 1
                                 RoundedRectangle:
-                                    radius: [20]
+                                    radius: [16]
                                     pos: self.pos
                                     size: self.size
-                            Label:
-                                text: "ACTIVITY CODE: " + root.activity_code
-                                bold: True
-                                color: 1, 1, 1, 1
-                                font_size: "17sp"
+                            BoxLayout:
+                                orientation: "vertical"
+                                spacing: dp(2)
+                                Label:
+                                    text: "ACTIVITY CODE"
+                                    font_size: "10sp"
+                                    color: 0.55, 0.80, 0.60, 1
+                                    bold: True
+                                    halign: "left"
+                                    text_size: self.size
+                                    size_hint_y: 0.40
+                                Label:
+                                    text: root.activity_code
+                                    bold: True
+                                    color: 1, 1, 1, 1
+                                    font_size: "22sp"
+                                    halign: "left"
+                                    text_size: self.size
+                                    size_hint_y: 0.60
 
-                        Label:
-                            size_hint_x: 0.4
-                            text: "Time: " + root.time_remaining + " sec"
-                            font_size: "17sp"
-                            color: 0.80, 0.90, 0.98, 1
-                            halign: "right"
-                            valign: "middle"
-                            text_size: self.size
+                        # Activity name + timer
+                        BoxLayout:
+                            padding: dp(12), dp(6)
+                            size_hint_x: 0.52
+                            canvas.before:
+                                Color:
+                                    rgba: 0.04, 0.10, 0.20, 1
+                                RoundedRectangle:
+                                    radius: [16]
+                                    pos: self.pos
+                                    size: self.size
+                            BoxLayout:
+                                orientation: "vertical"
+                                spacing: dp(2)
+                                Label:
+                                    text: root.activity_name
+                                    font_size: "12sp"
+                                    color: 0.75, 0.88, 1, 1
+                                    halign: "right"
+                                    text_size: self.size
+                                    size_hint_y: 0.45
+                                Label:
+                                    text: "⏱  " + root.time_remaining + "s remaining"
+                                    font_size: "15sp"
+                                    color: \
+                                        (1, 0.40, 0.20, 1) if int(root.time_remaining) <= 10 else \
+                                        (1, 0.75, 0.20, 1) if int(root.time_remaining) <= 20 else \
+                                        (0.65, 0.88, 1, 1)
+                                    bold: True
+                                    halign: "right"
+                                    text_size: self.size
+                                    size_hint_y: 0.55
 
                     # -------- PROGRESS BAR --------
                     BoxLayout:
                         size_hint_y: None
-                        height: dp(12)
-                        padding: dp(2)
+                        height: dp(10)
                         canvas.before:
                             Color:
-                                rgba: 0.12, 0.20, 0.30, 1
+                                rgba: 0.08, 0.16, 0.28, 1
                             RoundedRectangle:
-                                radius: [7]
+                                radius: [5]
                                 pos: self.pos
                                 size: self.size
-                        BoxLayout:
-                            size_hint_x: 0.6
-                            canvas.before:
+
+                        # Filled portion — bound to progress_value (0.0 → 1.0)
+                        Widget:
+                            size_hint_x: root.progress_value
+                            canvas:
                                 Color:
-                                    rgba: 0.95, 0.45, 0.05, 1
+                                    rgba: \
+                                        (0.90, 0.25, 0.10, 1) if root.progress_value > 0.80 else \
+                                        (0.90, 0.60, 0.10, 1) if root.progress_value > 0.55 else \
+                                        (0.18, 0.70, 0.38, 1)
                                 RoundedRectangle:
-                                    radius: [7]
+                                    radius: [5]
                                     pos: self.pos
                                     size: self.size
+
+                    # -------- KEY COUNT --------
+                    BoxLayout:
+                        size_hint_y: None
+                        height: dp(28)
+                        spacing: dp(8)
+
+                        Label:
+                            text: "KEYS  ( " + str(len(root.keys_data)) + " )"
+                            font_size: "13sp"
+                            bold: True
+                            color: 0.55, 0.72, 0.88, 1
+                            halign: "left"
+                            text_size: self.size
+
+                        Widget:
+
+                        Label:
+                            text: "Tap a key to close session"
+                            font_size: "11sp"
+                            color: 0.35, 0.50, 0.65, 1
+                            halign: "right"
+                            text_size: self.size
 
                     # -------- KEY LIST --------
                     BoxLayout:
                         orientation: "vertical"
                         size_hint_y: 1
-                        padding: dp(12)
-                        spacing: dp(8)
+                        padding: dp(10)
+                        spacing: dp(6)
                         canvas.before:
                             Color:
-                                rgba: 0.02, 0.08, 0.16, 1
+                                rgba: 0.02, 0.07, 0.14, 1
                             RoundedRectangle:
                                 radius: [18]
                                 pos: self.pos
@@ -128,68 +210,82 @@
 
                         ScrollView:
                             do_scroll_x: False
+                            bar_width: dp(4)
+                            bar_color: 0.20, 0.40, 0.62, 0.8
+                            bar_inactive_color: 0.15, 0.30, 0.48, 0.4
 
                             GridLayout:
                                 id: key_grid
                                 cols: 1
-                                spacing: dp(8)
-                                padding: dp(6)
+                                spacing: dp(6)
+                                padding: dp(4)
                                 size_hint_y: None
                                 height: self.minimum_height
                                 row_force_default: True
-                                row_default_height: dp(56)
+                                row_default_height: dp(64)
 
             # ================= FOOTER =================
             Footer:
                 size_hint_y: None
-                height: dp(48)
+                height: dp(32)
                 version: "12.9.3"
 
 
 <KeyItem>:
     size_hint_y: None
-    height: dp(56)
-    padding: dp(16), 0
-    spacing: dp(10)
-    
+    height: dp(64)
+    padding: dp(16), dp(6)
+    spacing: dp(12)
 
     canvas.before:
         Color:
-            rgba: 0.05, 0.12, 0.24, 1
+            rgba: \
+                (0.04, 0.18, 0.10, 1) if root.status_text == "IN" else \
+                (0.20, 0.06, 0.06, 1)
         RoundedRectangle:
             radius: [14]
             pos: self.pos
             size: self.size
+        Color:
+            rgba: \
+                (0.10, 0.42, 0.22, 0.60) if root.status_text == "IN" else \
+                (0.55, 0.12, 0.12, 0.60)
+        Line:
+            rounded_rectangle: (self.x, self.y, self.width, self.height, 14)
+            width: 1.2
 
     # -------- KEY NAME --------
     Label:
         text: root.key_name
         color: 0.90, 0.95, 1, 1
-        font_size: "16sp"
+        font_size: "17sp"
+        bold: True
         halign: "left"
         valign: "middle"
         text_size: self.size
 
-    # -------- STATUS --------
+    # -------- STATUS INDICATOR --------
     BoxLayout:
         size_hint_x: None
-        width: dp(110)
+        width: dp(90)
         spacing: dp(8)
+        padding: dp(6), 0
 
         Widget:
             size_hint_x: None
-            width: dp(20)
+            width: dp(18)
             canvas:
                 Color:
                     rgba: root.status_color
                 Ellipse:
-                    pos: self.center_x - dp(8), self.center_y - dp(8)
-                    size: dp(16), dp(16)
+                    pos: self.center_x - dp(7), self.center_y - dp(7)
+                    size: dp(14), dp(14)
 
         Label:
             text: root.status_text
             color: root.status_color
-            font_size: "14sp"
+            font_size: "16sp"
+            bold: True
             valign: "middle"
-            halign: "left"
+            halign: "center"
             text_size: self.size
